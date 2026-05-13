@@ -41,6 +41,8 @@ type session struct {
 
 	// Mutex for access to toSend.
 	sendMutex sync.Mutex
+	// Mutex for ordered writes to messageOut when queued sends drain outside sendMutex.
+	outboundWriteMutex sync.Mutex
 	// Mutex to prevent messages being sent when resendRequest is active
 	// Must be locked before sendMutex to prevent a potential deadlock
 	resendMutex sync.RWMutex
@@ -314,6 +316,11 @@ func (s *session) sendInReplyTo(msg *Message, inReplyTo *Message) error {
 	s.resendMutex.RLock()
 	defer s.resendMutex.RUnlock()
 
+	if !asyncSend {
+		s.outboundWriteMutex.Lock()
+		defer s.outboundWriteMutex.Unlock()
+	}
+
 	s.sendMutex.Lock()
 	defer s.sendMutex.Unlock()
 
@@ -352,6 +359,9 @@ func (s *session) dropAndSend(msg *Message) error {
 	return s.dropAndSendInReplyTo(msg, nil)
 }
 func (s *session) dropAndSendInReplyTo(msg *Message, inReplyTo *Message) error {
+	s.outboundWriteMutex.Lock()
+	defer s.outboundWriteMutex.Unlock()
+
 	s.sendMutex.Lock()
 	defer s.sendMutex.Unlock()
 
@@ -442,11 +452,53 @@ func (s *session) sendQueued(blockUntilSent bool) {
 	s.dropQueued()
 }
 
+func (s *session) sendQueuedNonBlocking() {
+	s.sendMutex.Lock()
+	if len(s.toSend) == 0 {
+		s.sendMutex.Unlock()
+		return
+	}
+
+	flushLimit := len(s.toSend)
+	if flushLimit > nonBlockingSendFlushBatchSize {
+		flushLimit = nonBlockingSendFlushBatchSize
+	}
+
+	batch := append([][]byte(nil), s.toSend[:flushLimit]...)
+	s.toSend = s.toSend[flushLimit:]
+	s.sendMutex.Unlock()
+
+	sent := 0
+	for ; sent < len(batch); sent++ {
+		if !s.sendBytes(batch[sent], false) {
+			break
+		}
+	}
+
+	s.sendMutex.Lock()
+	if sent < len(batch) {
+		remaining := append([][]byte(nil), batch[sent:]...)
+		s.toSend = append(remaining, s.toSend...)
+		s.sendMutex.Unlock()
+		s.notifyMessageOut()
+		return
+	}
+	moreQueued := len(s.toSend) > 0
+	s.sendMutex.Unlock()
+
+	if moreQueued {
+		s.notifyMessageOut()
+	}
+}
+
 func (s *session) dropQueued() {
 	s.toSend = s.toSend[:0]
 }
 
 func (s *session) EnqueueBytesAndSend(msg []byte) {
+	s.outboundWriteMutex.Lock()
+	defer s.outboundWriteMutex.Unlock()
+
 	s.sendMutex.Lock()
 	defer s.sendMutex.Unlock()
 

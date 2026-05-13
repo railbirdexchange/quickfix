@@ -109,14 +109,16 @@ func (sm *stateMachine) fixMsgIn(session *session, m *Message) {
 func (sm *stateMachine) SendAppMessages(session *session) {
 	sm.CheckSessionTime(session, time.Now())
 
+	if session.IsLoggedOn() {
+		session.outboundWriteMutex.Lock()
+		defer session.outboundWriteMutex.Unlock()
+		session.sendQueuedNonBlocking()
+		return
+	}
+
 	session.sendMutex.Lock()
 	defer session.sendMutex.Unlock()
-
-	if session.IsLoggedOn() {
-		session.sendQueued(false)
-	} else {
-		session.dropQueued()
-	}
+	session.dropQueued()
 }
 
 func (sm *stateMachine) Timeout(session *session, e internal.Event) {
