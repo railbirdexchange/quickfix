@@ -82,6 +82,8 @@ type connect struct {
 	err        chan<- error
 }
 
+const nonBlockingSendFlushBatchSize = 256
+
 func (s *session) connect(msgIn <-chan fixIn, msgOut chan<- []byte) error {
 	rep := make(chan error)
 	s.admin <- connect{
@@ -405,12 +407,24 @@ func (s *session) persist(seqNum int, msgBytes []byte) error {
 }
 
 func (s *session) sendQueued(blockUntilSent bool) {
-	for i, msgBytes := range s.toSend {
+	flushLimit := len(s.toSend)
+	if !blockUntilSent && flushLimit > nonBlockingSendFlushBatchSize {
+		flushLimit = nonBlockingSendFlushBatchSize
+	}
+
+	for i := 0; i < flushLimit; i++ {
+		msgBytes := s.toSend[i]
 		if !s.sendBytes(msgBytes, blockUntilSent) {
 			s.toSend = s.toSend[i:]
 			s.notifyMessageOut()
 			return
 		}
+	}
+
+	if flushLimit < len(s.toSend) {
+		s.toSend = s.toSend[flushLimit:]
+		s.notifyMessageOut()
+		return
 	}
 
 	s.dropQueued()

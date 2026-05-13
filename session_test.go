@@ -903,6 +903,26 @@ func (suite *SessionSendTestSuite) TestSendFlushesQueue() {
 	suite.NoMessageSent()
 }
 
+func (suite *SessionSendTestSuite) TestSendAppMessagesFlushesNonBlockingBatchBudget() {
+	suite.Receiver.sendChannel = make(chan []byte, nonBlockingSendFlushBatchSize+1)
+	suite.session.messageOut = suite.Receiver.sendChannel
+
+	suite.MockApp.On("ToApp").Return(nil)
+	for i := 0; i < nonBlockingSendFlushBatchSize+1; i++ {
+		require.Nil(suite.T(), suite.queueForSend(suite.NewOrderSingle()))
+	}
+	suite.MockApp.AssertExpectations(suite.T())
+	suite.Len(suite.session.toSend, nonBlockingSendFlushBatchSize+1)
+
+	suite.session.SendAppMessages(suite.session)
+	suite.Len(suite.session.toSend, 1)
+	suite.Len(suite.Receiver.sendChannel, nonBlockingSendFlushBatchSize)
+
+	suite.session.SendAppMessages(suite.session)
+	suite.Empty(suite.session.toSend)
+	suite.Len(suite.Receiver.sendChannel, nonBlockingSendFlushBatchSize+1)
+}
+
 func (suite *SessionSendTestSuite) TestSendNotLoggedOn() {
 	suite.MockApp.On("ToApp").Return(nil)
 	suite.MockApp.On("ToAdmin")
