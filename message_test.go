@@ -418,6 +418,44 @@ func (s *MessageSuite) TestReBuildWithRepeatingGroupForResend() {
 	s.True(bytes.Equal(expectedBytes, resendBytes), "Unexpected bytes,\n expected: %s\n  but was: %s", expectedBytes, resendBytes)
 }
 
+func (s *MessageSuite) TestBuildWithBodyBytesRecalculatesLengthFromRawBodyBytes() {
+	rawMsg := bytes.NewBufferString(
+		"8=FIXT.1.1\x019=448\x0135=D\x0134=22025\x01" +
+			"49=00952b47-9c2e-4741-98f8-a1392c21c9fa\x01" +
+			"50=971cbff7-f6da-4c5d-bda2-a610ec25f65c\x01" +
+			"52=20260513-13:19:52.754\x0156=RAILBIRD\x01" +
+			"1=DEV-FCM-0001\x0111=fixload-01-1778678392729571733-12766\x01" +
+			"22=8\x0138=1\x0140=2\x0144=50.00\x01" +
+			"48=MLB-MOVY-IT5-02L2BPNDHGTMKHG-CHOX000-GT-P00095\x01" +
+			"54=2\x0155=MLB-MOVY-IT5-02L2BPNDHGTMKHG-CHOX000-GT-P00095\x01" +
+			"59=1\x0160=20260513-13:19:52.750\x01453=2\x01" +
+			"448=00952b47-9c2e-4741-98f8-a1392c21c9fa\x01447=D\x01452=24\x01" +
+			"448=fixload-user-01-0222\x01447=D\x01452=3\x01528=I\x0110=042\x01")
+
+	s.Nil(ParseMessage(s.msg, rawMsg))
+	s.True(s.msg.Body.length() < len(s.msg.bodyBytes), "test setup should collapse duplicate party tags in parsed Body")
+
+	s.msg.Header.SetField(tagPossDupFlag, FIXBoolean(true))
+	s.msg.Header.SetField(tagOrigSendingTime, FIXString("20260513-13:19:52.754"))
+	s.msg.Header.SetField(tagSendingTime, FIXString("20260513-13:51:26.520"))
+
+	resendBytes := s.msg.buildWithBodyBytes(s.msg.bodyBytes)
+
+	s.Contains(string(resendBytes), "9=479\x01")
+	s.NotContains(string(resendBytes), "9=425\x01")
+	s.Contains(string(resendBytes), "43=Y\x01")
+	s.Contains(string(resendBytes), "122=20260513-13:19:52.754\x01")
+	s.Contains(string(resendBytes), "448=00952b47-9c2e-4741-98f8-a1392c21c9fa\x01447=D\x01452=24\x01448=fixload-user-01-0222\x01447=D\x01452=3\x01")
+
+	checkSumIndex := bytes.LastIndex(resendBytes, []byte("10="))
+	s.True(checkSumIndex > 0, "expected checksum field in rebuilt message")
+	expectedCheckSum := "10=" + formatCheckSum(byteTotal(resendBytes[:checkSumIndex])%256) + "\x01"
+	s.Equal(expectedCheckSum, string(resendBytes[checkSumIndex:]))
+
+	reparsedMsg := NewMessage()
+	s.Nil(ParseMessage(reparsedMsg, bytes.NewBuffer(resendBytes)))
+}
+
 func (s *MessageSuite) TestReverseRoute() {
 	s.Nil(ParseMessage(s.msg, bytes.NewBufferString("8=FIX.4.29=17135=D34=249=TW50=KK52=20060102-15:04:0556=ISLD57=AP144=BB115=JCD116=CS128=MG129=CB142=JV143=RY145=BH11=ID21=338=10040=w54=155=INTC60=20060102-15:04:0510=123")))
 
