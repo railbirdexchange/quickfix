@@ -82,7 +82,7 @@ type connect struct {
 	err        chan<- error
 }
 
-const nonBlockingSendFlushBatchSize = 256
+const nonBlockingSendFlushBatchSize = 32
 
 func (s *session) connect(msgIn <-chan fixIn, msgOut chan<- []byte) error {
 	rep := make(chan error)
