@@ -279,17 +279,23 @@ func (s *session) resend(msg *Message) bool {
 
 // queueForSend will validate, persist, and queue the message for send.
 func (s *session) queueForSend(msg *Message) error {
+	lockStartedAt := time.Now()
 	s.sendMutex.Lock()
+	observeSendTiming(s.sessionID, "queue_lock_wait", time.Since(lockStartedAt), nil)
 	defer s.sendMutex.Unlock()
 
+	prepStartedAt := time.Now()
 	msgBytes, err := s.prepMessageForSend(msg, nil)
+	observeSendTiming(s.sessionID, "prep_message", time.Since(prepStartedAt), err)
 	if err != nil {
 		return err
 	}
 
+	enqueueStartedAt := time.Now()
 	s.toSend = append(s.toSend, msgBytes)
 
 	s.notifyMessageOut()
+	observeSendTiming(s.sessionID, "enqueue_notify", time.Since(enqueueStartedAt), nil)
 
 	return nil
 }
@@ -321,10 +327,14 @@ func (s *session) sendInReplyTo(msg *Message, inReplyTo *Message) error {
 		defer s.outboundWriteMutex.Unlock()
 	}
 
+	lockStartedAt := time.Now()
 	s.sendMutex.Lock()
+	observeSendTiming(s.sessionID, "send_lock_wait", time.Since(lockStartedAt), nil)
 	defer s.sendMutex.Unlock()
 
+	prepStartedAt := time.Now()
 	msgBytes, err := s.prepMessageForSend(msg, inReplyTo)
+	observeSendTiming(s.sessionID, "prep_message", time.Since(prepStartedAt), err)
 	if err != nil {
 		return err
 	}
@@ -335,7 +345,9 @@ func (s *session) sendInReplyTo(msg *Message, inReplyTo *Message) error {
 		return nil
 	}
 
+	flushStartedAt := time.Now()
 	s.sendQueued(true)
+	observeSendTiming(s.sessionID, "flush_sync", time.Since(flushStartedAt), nil)
 
 	return nil
 }
@@ -378,29 +390,44 @@ func (s *session) dropAndSendInReplyTo(msg *Message, inReplyTo *Message) error {
 }
 
 func (s *session) prepMessageForSend(msg *Message, inReplyTo *Message) (msgBytes []byte, err error) {
+	stageStartedAt := time.Now()
 	s.fillDefaultHeader(msg, inReplyTo)
+	observeSendTiming(s.sessionID, "fill_default_header", time.Since(stageStartedAt), nil)
+
+	stageStartedAt = time.Now()
 	seqNum := s.store.NextSenderMsgSeqNum()
 	msg.Header.SetField(tagMsgSeqNum, FIXInt(seqNum))
+	observeSendTiming(s.sessionID, "next_sender_seq", time.Since(stageStartedAt), nil)
 
+	stageStartedAt = time.Now()
 	msgType, err := msg.Header.GetBytes(tagMsgType)
+	observeSendTiming(s.sessionID, "get_msg_type", time.Since(stageStartedAt), err)
 	if err != nil {
 		return
 	}
 
 	if isAdminMessageType(msgType) {
+		stageStartedAt = time.Now()
 		s.application.ToAdmin(msg, s.sessionID)
+		observeSendTiming(s.sessionID, "to_admin", time.Since(stageStartedAt), nil)
 		if bytes.Equal(msgType, msgTypeLogon) {
 			var resetSeqNumFlag FIXBoolean
 			if msg.Body.Has(tagResetSeqNumFlag) {
+				stageStartedAt = time.Now()
 				if err = msg.Body.GetField(tagResetSeqNumFlag, &resetSeqNumFlag); err != nil {
+					observeSendTiming(s.sessionID, "read_reset_seqnum_flag", time.Since(stageStartedAt), err)
 					return
 				}
+				observeSendTiming(s.sessionID, "read_reset_seqnum_flag", time.Since(stageStartedAt), nil)
 			}
 
 			if resetSeqNumFlag.Bool() {
+				stageStartedAt = time.Now()
 				if err = s.store.Reset(); err != nil {
+					observeSendTiming(s.sessionID, "store_reset", time.Since(stageStartedAt), err)
 					return
 				}
+				observeSendTiming(s.sessionID, "store_reset", time.Since(stageStartedAt), nil)
 
 				s.sentReset = true
 				seqNum = s.store.NextSenderMsgSeqNum()
@@ -408,14 +435,22 @@ func (s *session) prepMessageForSend(msg *Message, inReplyTo *Message) (msgBytes
 			}
 		}
 	} else {
+		stageStartedAt = time.Now()
 		if err = s.application.ToApp(msg, s.sessionID); err != nil {
+			observeSendTiming(s.sessionID, "to_app", time.Since(stageStartedAt), err)
 			return
 		}
+		observeSendTiming(s.sessionID, "to_app", time.Since(stageStartedAt), nil)
 	}
 
 	// Message converted to bytes here.
+	stageStartedAt = time.Now()
 	msgBytes = msg.build()
+	observeSendTiming(s.sessionID, "build_message", time.Since(stageStartedAt), nil)
+
+	stageStartedAt = time.Now()
 	err = s.persist(seqNum, msgBytes)
+	observeSendTiming(s.sessionID, "persist", time.Since(stageStartedAt), err)
 
 	return
 }

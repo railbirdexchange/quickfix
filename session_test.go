@@ -825,6 +825,33 @@ func (suite *SessionSendTestSuite) TestQueueForSendAppMessage() {
 	suite.NextSenderMsgSeqNum(2)
 }
 
+func (suite *SessionSendTestSuite) TestQueueForSendObservesSendTiming() {
+	stages := make(map[string]bool)
+	cleanup := RegisterSendTimingObserver(func(_ SessionID, stage string, duration time.Duration, err error) {
+		suite.GreaterOrEqual(duration, time.Duration(0))
+		suite.Nil(err)
+		stages[stage] = true
+	})
+	defer cleanup()
+
+	suite.MockApp.On("ToApp").Return(nil)
+	require.Nil(suite.T(), suite.queueForSend(suite.NewOrderSingle()))
+
+	for _, stage := range []string{
+		"queue_lock_wait",
+		"fill_default_header",
+		"next_sender_seq",
+		"get_msg_type",
+		"to_app",
+		"build_message",
+		"persist",
+		"prep_message",
+		"enqueue_notify",
+	} {
+		suite.True(stages[stage], "missing timing stage %s", stage)
+	}
+}
+
 func (suite *SessionSendTestSuite) TestQueueForSendDoNotSendAppMessage() {
 	suite.MockApp.On("ToApp").Return(ErrDoNotSend)
 	suite.Equal(ErrDoNotSend, suite.queueForSend(suite.NewOrderSingle()))
