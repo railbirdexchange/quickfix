@@ -859,6 +859,9 @@ func (suite *SessionSendTestSuite) TestSendAppMessage() {
 
 	suite.MockApp.AssertExpectations(suite.T())
 	suite.MessagePersisted(suite.MockApp.lastToApp)
+	suite.NoMessageSent()
+
+	suite.session.SendAppMessages(suite.session)
 	suite.LastToAppMessageSent()
 	suite.NextSenderMsgSeqNum(2)
 }
@@ -897,6 +900,10 @@ func (suite *SessionSendTestSuite) TestSendFlushesQueue() {
 	require.Nil(suite.T(), suite.send(suite.NewOrderSingle()))
 	suite.MockApp.AssertExpectations(suite.T())
 	order2 := suite.MockApp.lastToApp
+
+	suite.NoMessageSent()
+	suite.session.SendAppMessages(suite.session)
+
 	suite.MessageSentEquals(order1)
 	suite.MessageSentEquals(heartbeat)
 	suite.MessageSentEquals(order2)
@@ -952,6 +959,9 @@ func (suite *SessionSendTestSuite) TestSendEnableLastMsgSeqNumProcessed() {
 	suite.MockApp.On("ToApp").Return(nil)
 	require.Nil(suite.T(), suite.send(suite.NewOrderSingle()))
 	suite.MockApp.AssertExpectations(suite.T())
+	suite.NoMessageSent()
+
+	suite.session.SendAppMessages(suite.session)
 	suite.LastToAppMessageSent()
 
 	suite.FieldEquals(tagLastMsgSeqNumProcessed, 44, suite.MockApp.lastToApp.Header)
@@ -964,6 +974,9 @@ func (suite *SessionSendTestSuite) TestSendDisableMessagePersist() {
 	suite.MockApp.On("ToApp").Return(nil)
 	require.Nil(suite.T(), suite.send(suite.NewOrderSingle()))
 	suite.MockApp.AssertExpectations(suite.T())
+	suite.NoMessageSent()
+
+	suite.session.SendAppMessages(suite.session)
 	suite.LastToAppMessageSent()
 	suite.NoMessagePersisted(1)
 	suite.NextSenderMsgSeqNum(2)

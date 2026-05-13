@@ -277,6 +277,7 @@ func (s *InSessionTestSuite) TestFIXMsgInResendRequestAllAdminThenApp() {
 
 	s.MockApp.On("ToApp").Return(nil)
 	s.Require().Nil(s.session.send(s.NewOrderSingle()))
+	s.session.SendAppMessages(s.session)
 	s.LastToAppMessageSent()
 
 	s.MockApp.AssertNumberOfCalls(s.T(), "ToAdmin", 2)
@@ -312,6 +313,7 @@ func (s *InSessionTestSuite) TestFIXMsgInResendRequestNoMessagePersist() {
 
 	s.MockApp.On("ToApp").Return(nil)
 	s.Require().Nil(s.session.send(s.NewOrderSingle()))
+	s.session.SendAppMessages(s.session)
 	s.LastToAppMessageSent()
 
 	s.MockApp.AssertNumberOfCalls(s.T(), "ToApp", 1)
@@ -342,6 +344,7 @@ func (s *InSessionTestSuite) TestFIXMsgInResendRequestDoNotSendApp() {
 
 	s.MockApp.On("ToApp").Return(nil)
 	s.Require().Nil(s.session.send(s.NewOrderSingle()))
+	s.session.SendAppMessages(s.session)
 	s.LastToAppMessageSent()
 
 	s.session.Timeout(s.session, internal.NeedHeartbeat)
@@ -377,6 +380,7 @@ func (s *InSessionTestSuite) TestFIXMsgInResendRequestDoNotSendApp() {
 func (s *InSessionTestSuite) TestFIXMsgInResendRequestBlocksSend() {
 	s.MockApp.On("ToApp").Return(nil)
 	s.Require().Nil(s.session.send(s.NewOrderSingle()))
+	s.session.SendAppMessages(s.session)
 	s.LastToAppMessageSent()
 	s.MockApp.AssertNumberOfCalls(s.T(), "ToApp", 1)
 	s.NextSenderMsgSeqNum(2)

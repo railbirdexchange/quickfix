@@ -308,6 +308,8 @@ func (s *session) sendInReplyTo(msg *Message, inReplyTo *Message) error {
 		return s.queueForSend(msg)
 	}
 
+	asyncSend := shouldDrainAsync(msg)
+
 	// resendMutex must always be locked before sendMutex to prevent a potential deadlock
 	s.resendMutex.RLock()
 	defer s.resendMutex.RUnlock()
@@ -321,9 +323,19 @@ func (s *session) sendInReplyTo(msg *Message, inReplyTo *Message) error {
 	}
 
 	s.toSend = append(s.toSend, msgBytes)
+	if asyncSend {
+		s.notifyMessageOut()
+		return nil
+	}
+
 	s.sendQueued(true)
 
 	return nil
+}
+
+func shouldDrainAsync(msg *Message) bool {
+	msgType, err := msg.Header.GetBytes(tagMsgType)
+	return err == nil && !isAdminMessageType(msgType)
 }
 
 // dropAndReset will drop the send queue and reset the message store.
