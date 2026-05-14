@@ -588,7 +588,7 @@ func formatCheckSum(value int) string {
 
 // Build constructs a []byte from a Message instance.
 func (m *Message) build() []byte {
-	m.cook()
+	m.cook(m.Body.length(), m.Body.total())
 
 	var b bytes.Buffer
 	m.Header.write(&b)
@@ -603,10 +603,7 @@ func (m *Message) build() []byte {
 // This func lets us pull the Message from the Store, parse it, update the Header, and then build it back into bytes using the original Body.
 // Note: The only standard non-Body group is NoHops.  If that is used in the Header, this workaround may fail.
 func (m *Message) buildWithBodyBytes(bodyBytes []byte) []byte {
-	bodyLength := m.Header.length() + len(bodyBytes) + m.Trailer.length()
-	m.Header.SetInt(tagBodyLength, bodyLength)
-	checkSum := (m.Header.total() + bytesTotal(bodyBytes) + m.Trailer.total()) % 256
-	m.Trailer.SetString(tagCheckSum, formatCheckSum(checkSum))
+	m.cook(len(bodyBytes), bytesTotal(bodyBytes))
 
 	var b bytes.Buffer
 	m.Header.write(&b)
@@ -615,17 +612,9 @@ func (m *Message) buildWithBodyBytes(bodyBytes []byte) []byte {
 	return b.Bytes()
 }
 
-func bytesTotal(raw []byte) int {
-	total := 0
-	for _, b := range raw {
-		total += int(b)
-	}
-	return total
-}
-
-func (m *Message) cook() {
-	bodyLength := m.Header.length() + m.Body.length() + m.Trailer.length()
+func (m *Message) cook(bodyLen, bodyTotal int) {
+	bodyLength := m.Header.length() + bodyLen + m.Trailer.length()
 	m.Header.SetInt(tagBodyLength, bodyLength)
-	checkSum := (m.Header.total() + m.Body.total() + m.Trailer.total()) % 256
+	checkSum := (m.Header.total() + bodyTotal + m.Trailer.total()) % 256
 	m.Trailer.SetString(tagCheckSum, formatCheckSum(checkSum))
 }

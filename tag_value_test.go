@@ -86,4 +86,5 @@ func TestTagValue_total(t *testing.T) {
 	var tv TagValue
 	require.Nil(t, tv.parse([]byte(stringField)))
 	assert.Equal(t, 643, tv.total(), "Total is the summation of the ascii byte values of the field string")
+	assert.Equal(t, 643, bytesTotal([]byte(stringField)))
 }

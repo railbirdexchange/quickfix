@@ -86,14 +86,15 @@ func (tv TagValue) String() string {
 	return string(tv.bytes)
 }
 
-func (tv TagValue) total() int {
-	total := 0
-
-	for _, b := range []byte(tv.bytes) {
+func bytesTotal(bytes []byte) (total int) {
+	for _, b := range bytes {
 		total += int(b)
 	}
+	return
+}
 
-	return total
+func (tv TagValue) total() int {
+	return bytesTotal(tv.bytes)
 }
 
 func (tv TagValue) length() int {

@@ -60,7 +60,7 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v2
       - name: Start MongoDB
-        uses: supercharge/mongodb-github-action@1.8.0
+        uses: supercharge/mongodb-github-action@1.12.1
         with:
           mongodb-replica-set: replicaset
       - name: Unit test
@@ -173,7 +173,7 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v2
       - name: Start MongoDB
-        uses: supercharge/mongodb-github-action@1.8.0
+        uses: supercharge/mongodb-github-action@1.12.1
         with:
           mongodb-replica-set: replicaset
       - name: Install ruby
