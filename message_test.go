@@ -17,7 +17,9 @@ package quickfix
 
 import (
 	"bytes"
+	"fmt"
 	"reflect"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -416,6 +418,87 @@ func (s *MessageSuite) TestReBuildWithRepeatingGroupForResend() {
 
 	// Then the reparsed, rebuilt message will retain the correct ordering of repeating group tags during resend
 	s.True(bytes.Equal(expectedBytes, resendBytes), "Unexpected bytes,\n expected: %s\n  but was: %s", expectedBytes, resendBytes)
+}
+
+func (s *MessageSuite) TestReBuildFIX50SP2NewOrderSingleWithPartiesForResendCalculatesWireLengthAndChecksumFromBodyBytes() {
+	appDict, err := datadictionary.Parse("spec/FIX50SP2.xml")
+	s.Nil(err)
+
+	origHeader := "35=D34=280849=RAILBIRD52=20260514-18:10:00.00056=2ace818c-d763-42c3-aa4d-db785604882a"
+	origBody := "1=82e8fb5b-1f9d-420e-bf3d-6c3adfb0545911=51785122-c081-45bf-bfdc-a8f54c12c4e021=138=1040=244=0.5054=155=CL60=20260514-18:10:00.000453=2448=82e8fb5b-1f9d-420e-bf3d-6c3adfb05459447=D452=24448=sub-order-firm-2447=D452=3528=I"
+	rawMsg := buildFIXT11Wire(origHeader, origBody)
+
+	s.Nil(ParseMessageWithDataDictionary(s.msg, bytes.NewBuffer(rawMsg), appDict, appDict))
+	s.msg.Header.SetField(tagOrigSendingTime, FIXString("20260514-18:10:00.000"))
+	s.msg.Header.SetField(tagSendingTime, FIXString("20260514-18:15:31.193"))
+	s.msg.Header.SetField(tagPossDupFlag, FIXBoolean(true))
+
+	// Simulate the resend bug shape observed in staging: the preserved raw body
+	// still contains the Parties group, while the parsed body map used for cook()
+	// can diverge from those bytes.
+	s.msg.Body.Remove(Tag(453))
+
+	resendBytes := s.msg.buildWithBodyBytes(s.msg.bodyBytes)
+
+	s.Nil(validateFIXWireBodyLengthAndCheckSum(resendBytes))
+	reparsed := NewMessage()
+	s.Nil(ParseMessage(reparsed, bytes.NewBuffer(resendBytes)))
+}
+
+func buildFIXT11Wire(headerRest, body string) []byte {
+	begin := []byte("8=FIXT.1.1")
+	bodyLength := []byte("9=" + strconv.Itoa(len(headerRest)+len(body)) + "")
+	raw := append([]byte{}, begin...)
+	raw = append(raw, bodyLength...)
+	raw = append(raw, []byte(headerRest)...)
+	raw = append(raw, []byte(body)...)
+	checkSum := formatCheckSum(bytesTotal(raw) % 256)
+	raw = append(raw, []byte("10="+checkSum+"")...)
+	return raw
+}
+
+func validateFIXWireBodyLengthAndCheckSum(raw []byte) error {
+	bodyLengthPrefixStart := bytes.Index(raw, []byte("9="))
+	if bodyLengthPrefixStart == -1 {
+		return fmt.Errorf("BodyLength tag not found in %s", raw)
+	}
+	bodyLengthValueStart := bodyLengthPrefixStart + len("9=")
+	bodyLengthValueEndRelative := bytes.IndexByte(raw[bodyLengthValueStart:], '\001')
+	if bodyLengthValueEndRelative == -1 {
+		return fmt.Errorf("BodyLength value terminator not found in %s", raw)
+	}
+	bodyLengthValueEnd := bodyLengthValueStart + bodyLengthValueEndRelative
+	expectedBodyLength, err := strconv.Atoi(string(raw[bodyLengthValueStart:bodyLengthValueEnd]))
+	if err != nil {
+		return fmt.Errorf("invalid BodyLength in %s: %w", raw, err)
+	}
+
+	checkSumPrefixStart := bytes.LastIndex(raw, []byte("10="))
+	if checkSumPrefixStart == -1 {
+		return fmt.Errorf("CheckSum tag not found in %s", raw)
+	}
+	bodyStart := bodyLengthValueEnd + 1
+	actualBodyLength := checkSumPrefixStart + 1 - bodyStart
+	if actualBodyLength != expectedBodyLength {
+		return fmt.Errorf("unexpected BodyLength for %s: got %d want %d", raw, actualBodyLength, expectedBodyLength)
+	}
+
+	checkSumValueStart := checkSumPrefixStart + len("10=")
+	checkSumValueEndRelative := bytes.IndexByte(raw[checkSumValueStart:], '\001')
+	if checkSumValueEndRelative == -1 {
+		return fmt.Errorf("CheckSum value terminator not found in %s", raw)
+	}
+	checkSumValueEnd := checkSumValueStart + checkSumValueEndRelative
+	expectedCheckSum, err := strconv.Atoi(string(raw[checkSumValueStart:checkSumValueEnd]))
+	if err != nil {
+		return fmt.Errorf("invalid CheckSum in %s: %w", raw, err)
+	}
+	actualCheckSum := bytesTotal(raw[:checkSumPrefixStart+1]) % 256
+	if actualCheckSum != expectedCheckSum {
+		return fmt.Errorf("unexpected CheckSum for %s: got %03d want %03d", raw, actualCheckSum, expectedCheckSum)
+	}
+
+	return nil
 }
 
 func (s *MessageSuite) TestReverseRoute() {
