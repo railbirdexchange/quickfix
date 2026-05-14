@@ -127,6 +127,38 @@ func TestAcceptor_SetTLSConfig(t *testing.T) {
 	defer conn.Close()
 }
 
+func TestAcceptorSocketOutboundBufferSize(t *testing.T) {
+	sessionID := SessionID{BeginString: BeginStringFIX42, SenderCompID: "sender", TargetCompID: "target"}
+	sessionSettings := NewSessionSettings()
+	sessionSettings.Set(config.BeginString, sessionID.BeginString)
+	sessionSettings.Set(config.SenderCompID, sessionID.SenderCompID)
+	sessionSettings.Set(config.TargetCompID, sessionID.TargetCompID)
+
+	settings := NewSettings()
+	settings.GlobalSettings().Set(config.SocketOutboundBufferSize, "128")
+	_, err := settings.AddSession(sessionSettings)
+	require.NoError(t, err)
+
+	acceptor := &Acceptor{settings: settings}
+	got, err := acceptor.socketOutboundBufferSize(sessionID)
+	require.NoError(t, err)
+	assert.Equal(t, 128, got)
+
+	sessionSettings.Set(config.SocketOutboundBufferSize, "256")
+	got, err = acceptor.socketOutboundBufferSize(sessionID)
+	require.NoError(t, err)
+	assert.Equal(t, 256, got)
+}
+
+func TestAcceptorSocketOutboundBufferSizeRejectsNegativeValue(t *testing.T) {
+	settings := NewSettings()
+	settings.GlobalSettings().Set(config.SocketOutboundBufferSize, "-1")
+
+	acceptor := &Acceptor{settings: settings}
+	_, err := acceptor.socketOutboundBufferSize(SessionID{})
+	require.Error(t, err)
+}
+
 func TestAcceptor_SetCallback(t *testing.T) {
 	sessionSettings := NewSessionSettings()
 	sessionSettings.Set(config.BeginString, BeginStringFIX42)

@@ -16,6 +16,7 @@
 package quickfix
 
 import (
+	"bytes"
 	"testing"
 	"time"
 
@@ -305,6 +306,31 @@ func (s *InSessionTestSuite) TestFIXMsgInResendRequestAllAdminThenApp() {
 
 	s.NextSenderMsgSeqNum(4)
 	s.State(inSession{})
+}
+
+func (s *InSessionTestSuite) TestFIXMsgInResendRequestReplaysFIXT11NewOrderWithPartiesOnValidWire() {
+	origHeader := "35=D34=149=RAILBIRD52=20260514-18:10:00.00056=2ace818c-d763-42c3-aa4d-db785604882a"
+	origBody := "1=82e8fb5b-1f9d-420e-bf3d-6c3adfb0545911=51785122-c081-45bf-bfdc-a8f54c12c4e021=138=1040=244=0.5054=155=CL60=20260514-18:10:00.000453=2448=82e8fb5b-1f9d-420e-bf3d-6c3adfb05459447=D452=24448=sub-order-firm-2447=D452=3528=I"
+	rawMsg := buildFIXT11Wire(origHeader, origBody)
+
+	s.Require().NoError(s.session.store.SaveMessageAndIncrNextSenderMsgSeqNum(1, rawMsg))
+	s.NextSenderMsgSeqNum(2)
+
+	s.MockApp.On("FromAdmin").Return(nil)
+	s.MockApp.On("ToApp").Return(nil)
+	s.fixMsgIn(s.session, s.ResendRequest(1))
+
+	resentBytes, ok := s.Receiver.LastMessage()
+	s.True(ok, "session should remain connected")
+	s.NotNil(resentBytes, "resend should emit the stored NewOrderSingle")
+	s.NoError(validateFIXWireBodyLengthAndCheckSum(resentBytes))
+	s.Contains(string(resentBytes), "35=D")
+	s.Contains(string(resentBytes), "43=Y")
+	s.Contains(string(resentBytes), "122=20260514-18:10:00.000")
+	s.Contains(string(resentBytes), "453=2448=82e8fb5b-1f9d-420e-bf3d-6c3adfb05459447=D452=24448=sub-order-firm-2447=D452=3")
+
+	reparsed := NewMessage()
+	s.NoError(ParseMessage(reparsed, bytes.NewBuffer(resentBytes)))
 }
 
 func (s *InSessionTestSuite) TestFIXMsgInResendRequestNoMessagePersist() {
