@@ -68,6 +68,17 @@ func (s *SessionFactorySuite) TestDefaults() {
 	s.Equal(120*time.Second, session.MaxLatency)
 	s.False(session.DisableMessagePersist)
 	s.False(session.HeartBtIntOverride)
+	s.Equal(0, session.maxQueuedSends)
+	s.NotNil(session.sendQueueCond)
+}
+
+func (s *SessionFactorySuite) TestSocketOutboundBufferSizeBoundsQueuedSends() {
+	s.SessionSettings.Set(config.SocketOutboundBufferSize, "256")
+
+	session, err := s.newSession(s.SessionID, s.MessageStoreFactory, s.SessionSettings, s.LogFactory, s.App)
+
+	s.Nil(err)
+	s.Equal(256, session.maxQueuedSends)
 }
 
 func (s *SessionFactorySuite) TestResetOnLogon() {

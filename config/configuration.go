@@ -656,7 +656,8 @@ const (
 	SocketAcceptPort string = "SocketAcceptPort"
 
 	// SocketOutboundBufferSize sets the per-connection outbound message channel
-	// buffer size used between a FIX session and the socket writer.
+	// buffer size used between a FIX session and the socket writer. It also
+	// bounds the session's pending outbound application message queue.
 	// Used for acceptors only.
 	//
 	// Required: No

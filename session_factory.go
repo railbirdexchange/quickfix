@@ -91,6 +91,7 @@ func (f sessionFactory) newSession(
 		sessionID: sessionID,
 		stopOnce:  sync.Once{},
 	}
+	s.sendQueueCond = sync.NewCond(&s.sendMutex)
 
 	var validatorSettings = defaultValidatorSettings
 	if settings.HasSetting(config.ValidateFieldsOutOfOrder) {
@@ -235,6 +236,12 @@ func (f sessionFactory) newSession(
 
 	if settings.HasSetting(config.ResendRequestChunkSize) {
 		if s.ResendRequestChunkSize, err = settings.IntSetting(config.ResendRequestChunkSize); err != nil {
+			return
+		}
+	}
+
+	if settings.HasSetting(config.SocketOutboundBufferSize) {
+		if s.maxQueuedSends, err = nonNegativeIntSetting(settings, config.SocketOutboundBufferSize); err != nil {
 			return
 		}
 	}

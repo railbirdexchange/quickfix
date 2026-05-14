@@ -41,6 +41,11 @@ type session struct {
 
 	// Mutex for access to toSend.
 	sendMutex sync.Mutex
+	// Condition signaled when space may be available in toSend.
+	sendQueueCond *sync.Cond
+	// Maximum queued application messages waiting for the socket writer.
+	// Zero preserves historical unbounded behavior.
+	maxQueuedSends int
 	// Mutex for ordered writes to messageOut when queued sends drain outside sendMutex.
 	outboundWriteMutex sync.Mutex
 	// Mutex to prevent messages being sent when resendRequest is active
@@ -284,6 +289,10 @@ func (s *session) queueForSend(msg *Message) error {
 	observeSendTiming(s.sessionID, "queue_lock_wait", time.Since(lockStartedAt), nil)
 	defer s.sendMutex.Unlock()
 
+	if s.IsLoggedOn() && shouldDrainAsync(msg) {
+		s.waitForQueuedSendSlotLocked()
+	}
+
 	prepStartedAt := time.Now()
 	msgBytes, err := s.prepMessageForSend(msg, nil)
 	observeSendTiming(s.sessionID, "prep_message", time.Since(prepStartedAt), err)
@@ -331,6 +340,10 @@ func (s *session) sendInReplyTo(msg *Message, inReplyTo *Message) error {
 	s.sendMutex.Lock()
 	observeSendTiming(s.sessionID, "send_lock_wait", time.Since(lockStartedAt), nil)
 	defer s.sendMutex.Unlock()
+
+	if asyncSend {
+		s.waitForQueuedSendSlotLocked()
+	}
 
 	prepStartedAt := time.Now()
 	msgBytes, err := s.prepMessageForSend(msg, inReplyTo)
@@ -473,6 +486,7 @@ func (s *session) sendQueued(blockUntilSent bool) {
 		msgBytes := s.toSend[i]
 		if !s.sendBytes(msgBytes, blockUntilSent) {
 			s.toSend = s.toSend[i:]
+			s.notifySendQueueSpaceLocked()
 			s.notifyMessageOut()
 			return
 		}
@@ -480,6 +494,7 @@ func (s *session) sendQueued(blockUntilSent bool) {
 
 	if flushLimit < len(s.toSend) {
 		s.toSend = s.toSend[flushLimit:]
+		s.notifySendQueueSpaceLocked()
 		s.notifyMessageOut()
 		return
 	}
@@ -514,11 +529,15 @@ func (s *session) sendQueuedNonBlocking() {
 	if sent < len(batch) {
 		remaining := append([][]byte(nil), batch[sent:]...)
 		s.toSend = append(remaining, s.toSend...)
+		if sent > 0 {
+			s.notifySendQueueSpaceLocked()
+		}
 		s.sendMutex.Unlock()
 		s.notifyMessageOut()
 		return
 	}
 	moreQueued := len(s.toSend) > 0
+	s.notifySendQueueSpaceLocked()
 	s.sendMutex.Unlock()
 
 	if moreQueued {
@@ -528,6 +547,30 @@ func (s *session) sendQueuedNonBlocking() {
 
 func (s *session) dropQueued() {
 	s.toSend = s.toSend[:0]
+	s.notifySendQueueSpaceLocked()
+}
+
+func (s *session) waitForQueuedSendSlotLocked() {
+	if s.maxQueuedSends <= 0 {
+		return
+	}
+
+	for len(s.toSend) >= s.maxQueuedSends {
+		s.sendQueueConditionLocked().Wait()
+	}
+}
+
+func (s *session) notifySendQueueSpaceLocked() {
+	if s.sendQueueCond != nil {
+		s.sendQueueCond.Broadcast()
+	}
+}
+
+func (s *session) sendQueueConditionLocked() *sync.Cond {
+	if s.sendQueueCond == nil {
+		s.sendQueueCond = sync.NewCond(&s.sendMutex)
+	}
+	return s.sendQueueCond
 }
 
 func (s *session) EnqueueBytesAndSend(msg []byte) {

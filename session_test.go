@@ -17,6 +17,7 @@ package quickfix
 
 import (
 	"bytes"
+	"sync"
 	"testing"
 	"time"
 
@@ -37,6 +38,87 @@ type SessionSuite struct {
 
 func TestSessionSuite(t *testing.T) {
 	suite.Run(t, new(SessionSuite))
+}
+
+func TestWaitForQueuedSendSlotBlocksUntilQueueDrains(t *testing.T) {
+	s := &session{
+		maxQueuedSends: 1,
+		toSend:         [][]byte{[]byte("full")},
+	}
+	s.sendQueueCond = sync.NewCond(&s.sendMutex)
+
+	waiting := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		s.sendMutex.Lock()
+		defer s.sendMutex.Unlock()
+		close(waiting)
+		s.waitForQueuedSendSlotLocked()
+		s.toSend = append(s.toSend, []byte("next"))
+		close(done)
+	}()
+
+	<-waiting
+	select {
+	case <-done:
+		t.Fatal("waitForQueuedSendSlotLocked returned while the queue was full")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	s.sendMutex.Lock()
+	s.dropQueued()
+	s.sendMutex.Unlock()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("waitForQueuedSendSlotLocked did not unblock after queue space was available")
+	}
+
+	s.sendMutex.Lock()
+	require.Len(t, s.toSend, 1)
+	s.sendMutex.Unlock()
+}
+
+func TestSendQueuedNonBlockingOnlyReleasesSlotAfterSocketEnqueue(t *testing.T) {
+	messageOut := make(chan []byte, 1)
+	s := &session{
+		maxQueuedSends: 1,
+		toSend:         [][]byte{[]byte("queued")},
+		messageOut:     messageOut,
+		log:            nullLog{},
+		stateTimer:     internal.NewEventTimer(func() {}),
+	}
+	s.sendQueueCond = sync.NewCond(&s.sendMutex)
+	messageOut <- []byte("socket-buffer-full")
+
+	waiting := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		s.sendMutex.Lock()
+		defer s.sendMutex.Unlock()
+		close(waiting)
+		s.waitForQueuedSendSlotLocked()
+		close(done)
+	}()
+
+	<-waiting
+	s.sendQueuedNonBlocking()
+
+	select {
+	case <-done:
+		t.Fatal("sendQueuedNonBlocking released a queue slot without enqueueing to the socket writer")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	<-messageOut
+	s.sendQueuedNonBlocking()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("sendQueuedNonBlocking did not release a queue slot after enqueueing to the socket writer")
+	}
 }
 
 func (s *SessionSuite) SetupTest() {
