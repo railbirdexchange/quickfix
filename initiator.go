@@ -23,6 +23,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/quickfixgo/quickfix/config"
 	"golang.org/x/net/proxy"
 )
 
@@ -179,6 +180,7 @@ func (i *Initiator) handleConnection(session *session, tlsConfig *tls.Config, di
 		var disconnected chan interface{}
 		var msgIn chan fixIn
 		var msgOut chan []byte
+		var outboundBufferSize int
 
 		address := session.SocketConnectAddress[connectionAttempt%len(session.SocketConnectAddress)]
 		session.log.OnEventf("Connecting to: %v", address)
@@ -205,8 +207,13 @@ func (i *Initiator) handleConnection(session *session, tlsConfig *tls.Config, di
 			netConn = tlsConn
 		}
 
+		outboundBufferSize, err = i.socketOutboundBufferSize(session.sessionID)
+		if err != nil {
+			session.log.OnEventf("Invalid outbound buffer size for session %v: %v", session.sessionID, err)
+			goto reconnect
+		}
 		msgIn = make(chan fixIn, session.InChanCapacity)
-		msgOut = make(chan []byte)
+		msgOut = make(chan []byte, outboundBufferSize)
 		if err := session.connect(msgIn, msgOut); err != nil {
 			session.log.OnEventf("Failed to initiate: %v", err)
 			goto reconnect
@@ -241,4 +248,22 @@ func (i *Initiator) handleConnection(session *session, tlsConfig *tls.Config, di
 			return
 		}
 	}
+}
+
+func (i *Initiator) socketOutboundBufferSize(sessionID SessionID) (int, error) {
+	if i == nil || i.settings == nil {
+		return 0, nil
+	}
+
+	settings, ok := i.settings.SessionSettings()[sessionID]
+	if ok && settings.HasSetting(config.SocketOutboundBufferSize) {
+		return nonNegativeIntSetting(settings, config.SocketOutboundBufferSize)
+	}
+
+	global := i.settings.GlobalSettings()
+	if global.HasSetting(config.SocketOutboundBufferSize) {
+		return nonNegativeIntSetting(global, config.SocketOutboundBufferSize)
+	}
+
+	return 0, nil
 }
