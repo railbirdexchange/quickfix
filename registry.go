@@ -30,6 +30,29 @@ type Messagable interface {
 	ToMessage() *Message
 }
 
+// SessionTarget sends through the exact session that was active when it was
+// bound. It never resolves the SessionID again.
+type SessionTarget struct {
+	boundSession *session
+}
+
+// BindSessionTarget binds a target to the currently registered session.
+func BindSessionTarget(sessionID SessionID) (*SessionTarget, error) {
+	boundSession, ok := lookupSession(sessionID)
+	if !ok {
+		return nil, errUnknownSession
+	}
+	return &SessionTarget{boundSession: boundSession}, nil
+}
+
+// Send sends a message through the bound session.
+func (target *SessionTarget) Send(message Messagable) error {
+	if target == nil || target.boundSession == nil {
+		return errUnknownSession
+	}
+	return target.boundSession.send(message.ToMessage())
+}
+
 // Send determines the session to send Messagable using header fields BeginString, TargetCompID, SenderCompID.
 func Send(m Messagable) (err error) {
 	msg := m.ToMessage()

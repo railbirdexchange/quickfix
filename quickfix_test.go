@@ -353,3 +353,31 @@ func TestDynamicSessionCleanupDoesNotDeleteReplacement(t *testing.T) {
 	require.True(t, ok)
 	require.Same(t, replacementAddress, remoteAddress)
 }
+
+func TestBoundSessionTargetDoesNotRedirectToReplacement(t *testing.T) {
+	sessionID := SessionID{BeginString: BeginStringFIX42, SenderCompID: "SENDER", TargetCompID: "TARGET"}
+	oldSession := SessionSuiteRig{}
+	oldSession.Init()
+	oldSession.sessionID = sessionID
+	replacement := SessionSuiteRig{}
+	replacement.Init()
+	replacement.sessionID = sessionID
+
+	sessionsLock.Lock()
+	sessions[sessionID] = oldSession.session
+	sessionsLock.Unlock()
+	t.Cleanup(func() { _ = UnregisterSession(sessionID) })
+
+	target, err := BindSessionTarget(sessionID)
+	require.NoError(t, err)
+	sessionsLock.Lock()
+	sessions[sessionID] = replacement.session
+	sessionsLock.Unlock()
+	oldSession.setApplicationSendingEnabled(false)
+
+	require.ErrorIs(t, target.Send(oldSession.NewOrderSingle()), errSessionDisconnected)
+	oldMessage, _ := oldSession.Receiver.LastMessage()
+	replacementMessage, _ := replacement.Receiver.LastMessage()
+	require.Nil(t, oldMessage)
+	require.Nil(t, replacementMessage)
+}
