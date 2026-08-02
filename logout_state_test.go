@@ -105,7 +105,7 @@ func (s *LogoutStateTestSuite) TestFixMsgInLogout() {
 func (s *LogoutStateTestSuite) TestFixMsgInLogoutResetOnLogout() {
 	s.session.ResetOnLogout = true
 
-	s.Nil(s.send(s.NewOrderSingle()))
+	s.ErrorIs(s.send(s.NewOrderSingle()), errSessionDisconnected)
 	s.MockApp.AssertExpectations(s.T())
 	s.MockApp.AssertNotCalled(s.T(), "ToApp")
 

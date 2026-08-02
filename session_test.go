@@ -872,11 +872,11 @@ func (suite *SessionSendTestSuite) TestSendHonorsSocketWriteTimeout() {
 	suite.State(latentState{})
 }
 
-func (suite *SessionSendTestSuite) TestSendNotLoggedOnWithoutPersistenceIsNoOp() {
+func (suite *SessionSendTestSuite) TestSendNotLoggedOnWithoutPersistenceReturnsDisconnected() {
 	suite.session.setApplicationSendingEnabled(false)
 	suite.DisableMessagePersist = true
 
-	suite.Require().NoError(suite.send(suite.NewOrderSingle()))
+	suite.ErrorIs(suite.send(suite.NewOrderSingle()), errSessionDisconnected)
 
 	suite.NoMessageSent()
 	suite.NoMessagePersisted(1)
@@ -910,7 +910,7 @@ func (suite *SessionSendTestSuite) TestSendNotLoggedOn() {
 		suite.session.setApplicationSendingEnabled(false)
 		nextSeqNum := suite.store.NextSenderMsgSeqNum()
 		message := suite.NewOrderSingle()
-		require.Nil(suite.T(), suite.send(message))
+		suite.ErrorIs(suite.send(message), errSessionDisconnected)
 		suite.NoMessageSent()
 		suite.NoMessagePersisted(nextSeqNum)
 		suite.NextSenderMsgSeqNum(nextSeqNum)
@@ -923,7 +923,7 @@ func (suite *SessionSendTestSuite) TestApplicationSendAfterLogoutIsNoOp() {
 	suite.Require().NoError(suite.sendLogout("test logout"))
 	suite.LastToAdminMessageSent()
 
-	suite.Require().NoError(suite.send(suite.NewOrderSingle()))
+	suite.ErrorIs(suite.send(suite.NewOrderSingle()), errSessionDisconnected)
 	suite.NoMessageSent()
 	suite.MockApp.AssertNotCalled(suite.T(), "ToApp")
 }
@@ -956,7 +956,7 @@ func (suite *SessionSendTestSuite) TestSendOutsideSessionTimeIsNoOp() {
 	suite.Require().NoError(err)
 	suite.SessionTime = sessionTime
 
-	suite.Require().NoError(suite.send(suite.NewOrderSingle()))
+	suite.ErrorIs(suite.send(suite.NewOrderSingle()), errSessionDisconnected)
 
 	suite.NoMessageSent()
 	suite.NoMessagePersisted(1)
@@ -975,7 +975,7 @@ func (suite *SessionSendTestSuite) TestSendAcrossSessionBoundaryIsNoOp() {
 	suite.SessionTime = sessionTime
 	suite.store.SetCreationTime(now.AddDate(0, 0, -1))
 
-	suite.Require().NoError(suite.send(suite.NewOrderSingle()))
+	suite.ErrorIs(suite.send(suite.NewOrderSingle()), errSessionDisconnected)
 
 	suite.NoMessageSent()
 	suite.NoMessagePersisted(1)

@@ -19,6 +19,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"testing"
 	"time"
 
 	"github.com/stretchr/testify/mock"
@@ -327,4 +328,28 @@ func (s *SessionSuiteRig) MessagePersisted(msg *Message) {
 	s.Nil(err)
 	s.Len(persistedMessages, 1, "a message should be stored at %v", seqNum)
 	s.MessageEqualsBytes(persistedMessages[0], msg)
+}
+
+func TestDynamicSessionCleanupDoesNotDeleteReplacement(t *testing.T) {
+	sessionID := SessionID{BeginString: BeginStringFIX42, SenderCompID: "CURRENT", TargetCompID: "REPLACEMENT"}
+	oldSession := &session{sessionID: sessionID}
+	replacement := &session{sessionID: sessionID}
+	replacementAddress := &net.TCPAddr{Port: 1234}
+	acceptor := &Acceptor{}
+	acceptor.sessionAddr.Store(oldSession, &net.TCPAddr{Port: 4321})
+	acceptor.sessionAddr.Store(replacement, replacementAddress)
+
+	sessionsLock.Lock()
+	sessions[sessionID] = replacement
+	sessionsLock.Unlock()
+	t.Cleanup(func() { _ = UnregisterSession(sessionID) })
+
+	unregisterSessionIfCurrent(oldSession)
+	acceptor.sessionAddr.Delete(oldSession)
+	registered, ok := lookupSession(sessionID)
+	require.True(t, ok)
+	require.Same(t, replacement, registered)
+	remoteAddress, ok := acceptor.RemoteAddr(sessionID)
+	require.True(t, ok)
+	require.Same(t, replacementAddress, remoteAddress)
 }

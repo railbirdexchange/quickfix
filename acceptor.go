@@ -169,7 +169,11 @@ func (a *Acceptor) Stop() {
 
 // RemoteAddr gets remote IP address for a given session.
 func (a *Acceptor) RemoteAddr(sessionID SessionID) (net.Addr, bool) {
-	addr, ok := a.sessionAddr.Load(sessionID)
+	session, ok := lookupSession(sessionID)
+	if !ok {
+		return nil, false
+	}
+	addr, ok := a.sessionAddr.Load(session)
 	if !ok || addr == nil {
 		return nil, false
 	}
@@ -359,7 +363,7 @@ func (a *Acceptor) handleConnection(netConn net.Conn) {
 		defer session.stop()
 	}
 
-	a.sessionAddr.Store(sessID, netConn.RemoteAddr())
+	a.sessionAddr.Store(session, netConn.RemoteAddr())
 	msgIn := make(chan fixIn, session.InChanCapacity)
 	connectionDone := make(chan struct{})
 
@@ -393,17 +397,13 @@ LOOP:
 			sessions[sessionID] = session
 			go func() {
 				session.run()
-				err := UnregisterSession(session.sessionID)
-				if err != nil {
-					a.globalLog.OnEventf("Unregister dynamic session %v failed: %v", session.sessionID, err)
-					return
-				}
+				unregisterSessionIfCurrent(session)
 				complete <- sessionID
 			}()
 		case id := <-complete:
 			session, ok := sessions[id]
 			if ok {
-				a.sessionAddr.Delete(session.sessionID)
+				a.sessionAddr.Delete(session)
 				delete(sessions, id)
 			} else {
 				a.globalLog.OnEventf("Missing dynamic session %v!", id)

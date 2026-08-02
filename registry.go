@@ -93,6 +93,17 @@ func UnregisterSession(sessionID SessionID) error {
 	return errUnknownSession
 }
 
+func unregisterSessionIfCurrent(current *session) {
+	if current == nil {
+		return
+	}
+	sessionsLock.Lock()
+	defer sessionsLock.Unlock()
+	if sessions[current.sessionID] == current {
+		delete(sessions, current.sessionID)
+	}
+}
+
 // SetNextTargetMsgSeqNum set the next expected target message sequence number for the session matching the session id.
 func SetNextTargetMsgSeqNum(sessionID SessionID, seqNum int) error {
 	session, ok := lookupSession(sessionID)

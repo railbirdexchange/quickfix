@@ -333,7 +333,7 @@ func (s *session) prepareAndWrite(msg *Message, inReplyTo *Message, force bool) 
 		if !s.applicationSendingEnabled ||
 			!s.SessionTime.IsInRange(now) ||
 			!s.SessionTime.IsInSameRange(s.store.CreationTime(), now) {
-			return socketWriteResult{}, nil
+			return socketWriteResult{}, errSessionDisconnected
 		}
 	}
 
@@ -446,7 +446,9 @@ func (s *session) writeLocked(msg []byte) (socketWriteResult, error) {
 
 func (s *session) finishSocketWrite(result socketWriteResult, err error) error {
 	if err != nil {
-		s.logError(err)
+		if !errors.Is(err, errSessionDisconnected) {
+			s.logError(err)
+		}
 		if result.connection != nil {
 			_ = result.connection.Close()
 		}
@@ -835,7 +837,11 @@ func (s *session) doReject(msg *Message, rej MessageRejectError) error {
 	}
 
 	s.log.OnEventf("Message Rejected: %v", rej.Error())
-	return s.sendInReplyTo(reply, msg)
+	err := s.sendInReplyTo(reply, msg)
+	if errors.Is(err, errSessionDisconnected) {
+		return nil
+	}
+	return err
 }
 
 type fixIn struct {
