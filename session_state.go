@@ -36,36 +36,34 @@ func (sm *stateMachine) Start(s *session) {
 	sm.CheckSessionTime(s, time.Now())
 }
 
-func (sm *stateMachine) Connect(session *session) {
+func (sm *stateMachine) Connect(session *session) error {
 	// No special logon logic needed for FIX Acceptors.
 	if !session.InitiateLogon {
 		sm.setState(session, logonState{})
-		return
+		return nil
 	}
 
 	if session.RefreshOnLogon {
 		if err := session.store.Refresh(); err != nil {
-			session.logError(err)
-			return
+			return err
 		}
 	}
 
 	if session.ResetOnLogon {
 		if err := session.store.Reset(); err != nil {
-			session.logError(err)
-			return
+			return err
 		}
 	}
 
 	session.log.OnEvent("Sending logon request")
 	if err := session.sendLogon(); err != nil {
-		session.logError(err)
-		return
+		return err
 	}
 
 	sm.setState(session, logonState{})
 	// Fire logon timeout event after the pre-configured delay period.
 	time.AfterFunc(session.LogonTimeout, func() { session.sessionEvent <- internal.LogonTimeout })
+	return nil
 }
 
 func (sm *stateMachine) Stop(session *session) {
@@ -104,19 +102,6 @@ func (sm *stateMachine) Incoming(session *session, m fixIn) {
 
 func (sm *stateMachine) fixMsgIn(session *session, m *Message) {
 	sm.setState(session, sm.State.FixMsgIn(session, m))
-}
-
-func (sm *stateMachine) SendAppMessages(session *session) {
-	sm.CheckSessionTime(session, time.Now())
-
-	session.sendMutex.Lock()
-	defer session.sendMutex.Unlock()
-
-	if session.IsLoggedOn() {
-		session.sendQueued(false)
-	} else {
-		session.dropQueued()
-	}
 }
 
 func (sm *stateMachine) Timeout(session *session, e internal.Event) {
@@ -180,9 +165,14 @@ func (sm *stateMachine) CheckResetTime(session *session, now time.Time) {
 }
 
 func (sm *stateMachine) setState(session *session, nextState sessionState) {
+	if !nextState.IsLoggedOn() {
+		session.setApplicationSendingEnabled(false)
+	}
+
+	var connectionDone chan struct{}
 	if !nextState.IsConnected() {
 		if sm.IsConnected() {
-			sm.handleDisconnectState(session)
+			connectionDone = sm.handleDisconnectState(session)
 		}
 
 		if sm.pendingStop {
@@ -192,6 +182,12 @@ func (sm *stateMachine) setState(session *session, nextState sessionState) {
 	}
 
 	sm.State = nextState
+	if nextState.IsLoggedOn() {
+		session.setApplicationSendingEnabled(true)
+	}
+	if connectionDone != nil {
+		close(connectionDone)
+	}
 }
 
 func (sm *stateMachine) notifyInSessionTime() {
@@ -201,7 +197,7 @@ func (sm *stateMachine) notifyInSessionTime() {
 	sm.notifyOnInSessionTime = nil
 }
 
-func (sm *stateMachine) handleDisconnectState(s *session) {
+func (sm *stateMachine) handleDisconnectState(s *session) chan struct{} {
 	doOnLogout := s.IsLoggedOn()
 
 	switch s.State.(type) {
@@ -217,7 +213,7 @@ func (sm *stateMachine) handleDisconnectState(s *session) {
 		s.application.OnLogout(s.sessionID)
 	}
 
-	s.onDisconnect()
+	return s.onDisconnect()
 }
 
 func (sm *stateMachine) IsLoggedOn() bool {

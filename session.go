@@ -19,6 +19,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"sync"
 	"time"
 
@@ -33,20 +35,20 @@ type session struct {
 	log       Log
 	sessionID SessionID
 
-	messageOut chan<- []byte
+	connection net.Conn
 	messageIn  <-chan fixIn
+	// Closed after the session has detached the active connection.
+	connectionDone chan struct{}
 
-	// Application messages are queued up for send here.
-	toSend [][]byte
-
-	// Mutex for access to toSend.
+	// Mutex for sender sequence numbers, persistence, and socket writes.
 	sendMutex sync.Mutex
+	// Protected by sendMutex. Application messages may only be written after Logon.
+	applicationSendingEnabled bool
 	// Mutex to prevent messages being sent when resendRequest is active
 	// Must be locked before sendMutex to prevent a potential deadlock
 	resendMutex sync.RWMutex
 
 	sessionEvent chan internal.Event
-	messageEvent chan bool
 	application  Application
 	Validator
 	stateMachine
@@ -77,23 +79,27 @@ func (s *session) TargetDefaultApplicationVersionID() string {
 }
 
 type connect struct {
-	messageOut chan<- []byte
-	messageIn  <-chan fixIn
-	err        chan<- error
+	connection     net.Conn
+	messageIn      <-chan fixIn
+	connectionDone chan struct{}
+	err            chan<- error
 }
 
-func (s *session) connect(msgIn <-chan fixIn, msgOut chan<- []byte) error {
+func (s *session) connect(msgIn <-chan fixIn, connection net.Conn, connectionDone chan struct{}) error {
 	rep := make(chan error)
 	s.admin <- connect{
-		messageOut: msgOut,
-		messageIn:  msgIn,
-		err:        rep,
+		connection:     connection,
+		messageIn:      msgIn,
+		connectionDone: connectionDone,
+		err:            rep,
 	}
 
 	return <-rep
 }
 
 type stopReq struct{}
+
+var errSessionDisconnected = errors.New("session disconnected")
 
 func (s *session) stop() {
 	// Stop once.
@@ -232,7 +238,12 @@ func (s *session) generateSequenceReset(beginSeqNo int, endSeqNo int, inReplyTo 
 
 	msgBytes := sequenceReset.build()
 
-	s.EnqueueBytesAndSend(msgBytes)
+	s.resendMutex.RLock()
+	if err = s.sendRaw(msgBytes); err != nil {
+		s.resendMutex.RUnlock()
+		return
+	}
+	s.resendMutex.RUnlock()
 	s.log.OnEventf("Sent SequenceReset TO: %v", endSeqNo)
 
 	return
@@ -257,7 +268,7 @@ func (s *session) sendLogout(reason string) error {
 
 func (s *session) sendLogoutInReplyTo(reason string, inReplyTo *Message) error {
 	logout := s.buildLogout(reason)
-	return s.sendInReplyTo(logout, inReplyTo)
+	return s.dropAndSendInReplyTo(logout, inReplyTo)
 }
 
 func (s *session) resend(msg *Message) bool {
@@ -273,91 +284,64 @@ func (s *session) resend(msg *Message) bool {
 	return s.application.ToApp(msg, s.sessionID) == nil
 }
 
-// queueForSend will validate, persist, and queue the message for send.
-func (s *session) queueForSend(msg *Message) error {
-	// resendMutex must always be locked before sendMutex to prevent a potential deadlock.
-	// Makes sure that live traffic cannot interleave with replayed messages while processing a ResendRequest.
-	s.resendMutex.RLock()
-	defer s.resendMutex.RUnlock()
-
-	s.sendMutex.Lock()
-	defer s.sendMutex.Unlock()
-
-	msgBytes, err := s.prepMessageForSend(msg, nil)
-	if err != nil {
-		return err
-	}
-
-	s.toSend = append(s.toSend, msgBytes)
-
-	s.notifyMessageOut()
-
-	return nil
-}
-
-func (s *session) notifyMessageOut() {
-	select {
-	case s.messageEvent <- true:
-	default:
-	}
-}
-
-// send will validate, persist, queue the message. If the session is logged on, send all messages in the queue.
+// send validates and persists the message, then writes it if the session is logged on.
 func (s *session) send(msg *Message) error {
 	return s.sendInReplyTo(msg, nil)
 }
-func (s *session) sendInReplyTo(msg *Message, inReplyTo *Message) error {
-	if !s.IsLoggedOn() {
-		return s.queueForSend(msg)
-	}
 
+func (s *session) sendInReplyTo(msg *Message, inReplyTo *Message) error {
 	// resendMutex must always be locked before sendMutex to prevent a potential deadlock
 	s.resendMutex.RLock()
-	defer s.resendMutex.RUnlock()
-
-	lockStartedAt := time.Now()
-	s.sendMutex.Lock()
-	s.observeSendStage("send_mutex_wait", "", time.Since(lockStartedAt), true)
-	defer s.sendMutex.Unlock()
-
-	msgBytes, err := s.prepMessageForSend(msg, inReplyTo)
-	if err != nil {
-		return err
-	}
-
-	s.toSend = append(s.toSend, msgBytes)
-	s.sendQueued(true)
-
-	return nil
+	writeResult, err := s.prepareAndWrite(msg, inReplyTo, false)
+	s.resendMutex.RUnlock()
+	return s.finishSocketWrite(writeResult, err)
 }
 
-// dropAndReset will drop the send queue and reset the message store.
+// dropAndReset resets the message store.
 func (s *session) dropAndReset() error {
 	s.sendMutex.Lock()
 	defer s.sendMutex.Unlock()
 
-	s.dropQueued()
 	return s.store.Reset()
 }
 
-// dropAndSend will validate and persist the message, then drops the send queue and sends the message.
+// dropAndSend validates, persists, and writes an administrative message before Logon completes.
 func (s *session) dropAndSend(msg *Message) error {
 	return s.dropAndSendInReplyTo(msg, nil)
 }
+
 func (s *session) dropAndSendInReplyTo(msg *Message, inReplyTo *Message) error {
+	s.resendMutex.RLock()
+	writeResult, err := s.prepareAndWrite(msg, inReplyTo, true)
+	s.resendMutex.RUnlock()
+	return s.finishSocketWrite(writeResult, err)
+}
+
+type socketWriteResult struct {
+	connection net.Conn
+	event      SendStageEvent
+	attempted  bool
+}
+
+func (s *session) prepareAndWrite(msg *Message, inReplyTo *Message, force bool) (socketWriteResult, error) {
 	s.sendMutex.Lock()
 	defer s.sendMutex.Unlock()
 
-	msgBytes, err := s.prepMessageForSend(msg, inReplyTo)
-	if err != nil {
-		return err
+	if !force {
+		now := time.Now()
+		if !s.applicationSendingEnabled ||
+			!s.SessionTime.IsInRange(now) ||
+			!s.SessionTime.IsInSameRange(s.store.CreationTime(), now) {
+			return socketWriteResult{}, nil
+		}
 	}
 
-	s.dropQueued()
-	s.toSend = append(s.toSend, msgBytes)
-	s.sendQueued(true)
+	msgBytes, err := s.prepMessageForSend(msg, inReplyTo)
+	if err != nil {
+		return socketWriteResult{}, err
+	}
 
-	return nil
+	return s.writeLocked(msgBytes)
 }
 
 func (s *session) prepMessageForSend(msg *Message, inReplyTo *Message) (msgBytes []byte, err error) {
@@ -371,9 +355,7 @@ func (s *session) prepMessageForSend(msg *Message, inReplyTo *Message) (msgBytes
 	}
 
 	if isAdminMessageType(msgType) {
-		toAdminStartedAt := time.Now()
 		s.application.ToAdmin(msg, s.sessionID)
-		s.observeSendStage("to_admin", string(msgType), time.Since(toAdminStartedAt), true)
 		if bytes.Equal(msgType, msgTypeLogon) {
 			var resetSeqNumFlag FIXBoolean
 			if msg.Body.Has(tagResetSeqNumFlag) {
@@ -393,21 +375,14 @@ func (s *session) prepMessageForSend(msg *Message, inReplyTo *Message) (msgBytes
 			}
 		}
 	} else {
-		toAppStartedAt := time.Now()
 		if err = s.application.ToApp(msg, s.sessionID); err != nil {
-			s.observeSendStage("to_app", string(msgType), time.Since(toAppStartedAt), false)
 			return
 		}
-		s.observeSendStage("to_app", string(msgType), time.Since(toAppStartedAt), true)
 	}
 
 	// Message converted to bytes here.
-	buildStartedAt := time.Now()
 	msgBytes = msg.build()
-	s.observeSendStage("build_message", string(msgType), time.Since(buildStartedAt), true)
-	persistStartedAt := time.Now()
 	err = s.persist(seqNum, msgBytes)
-	s.observeSendStage("persist", string(msgType), time.Since(persistStartedAt), err == nil)
 
 	return
 }
@@ -420,66 +395,71 @@ func (s *session) persist(seqNum int, msgBytes []byte) error {
 	return s.store.IncrNextSenderMsgSeqNum()
 }
 
-func (s *session) sendQueued(blockUntilSent bool) {
-	for i, msgBytes := range s.toSend {
-		if !s.sendBytes(msgBytes, blockUntilSent) {
-			s.toSend = s.toSend[i:]
-			s.notifyMessageOut()
-			return
+// sendRaw writes stored FIX bytes without changing sequence or persistence.
+// The caller must hold resendMutex before calling it.
+func (s *session) sendRaw(msg []byte) error {
+	s.sendMutex.Lock()
+	writeResult, err := s.writeLocked(msg)
+	s.sendMutex.Unlock()
+	return s.finishSocketWrite(writeResult, err)
+}
+
+// writeLocked writes one complete FIX message while sendMutex is held.
+func (s *session) writeLocked(msg []byte) (socketWriteResult, error) {
+	if s.connection == nil {
+		return socketWriteResult{}, errSessionDisconnected
+	}
+
+	result := socketWriteResult{connection: s.connection}
+	if s.SocketWriteTimeout > 0 {
+		if err := s.connection.SetWriteDeadline(time.Now().Add(s.SocketWriteTimeout)); err != nil {
+			s.connection = nil
+			s.applicationSendingEnabled = false
+			return result, err
 		}
 	}
 
-	s.dropQueued()
-}
-
-func (s *session) dropQueued() {
-	s.toSend = s.toSend[:0]
-}
-
-func (s *session) EnqueueBytesAndSend(msg []byte) {
-	s.sendMutex.Lock()
-	defer s.sendMutex.Unlock()
-
-	s.toSend = append(s.toSend, msg)
-	s.sendQueued(true)
-}
-
-func (s *session) sendBytes(msg []byte, blockUntilSent bool) bool {
-	if s.messageOut == nil {
-		s.log.OnEventf("Failed to send: disconnected")
-		return false
-	}
-
-	if blockUntilSent {
-		channelStartedAt := time.Now()
-		s.messageOut <- msg
-		s.observeSendStage("outbound_channel_wait", fixMsgTypeFromRaw(msg), time.Since(channelStartedAt), true)
-		s.log.OnOutgoing(msg)
-		s.stateTimer.Reset(s.HeartBtInt)
-		return true
-	}
-
-	channelStartedAt := time.Now()
-	select {
-	case s.messageOut <- msg:
-		s.observeSendStage("outbound_channel_wait", fixMsgTypeFromRaw(msg), time.Since(channelStartedAt), true)
-		s.log.OnOutgoing(msg)
-		s.stateTimer.Reset(s.HeartBtInt)
-		return true
-	default:
-		s.observeSendStage("outbound_channel_wait", fixMsgTypeFromRaw(msg), time.Since(channelStartedAt), false)
-		return false
-	}
-}
-
-func (s *session) observeSendStage(stage, msgType string, duration time.Duration, success bool) {
-	observeSendStage(SendStageEvent{
+	writeStartedAt := time.Now()
+	written, err := s.connection.Write(msg)
+	result.attempted = true
+	result.event = SendStageEvent{
 		SessionID: s.sessionID,
-		MsgType:   msgType,
-		Stage:     stage,
-		Duration:  duration,
-		Success:   success,
-	})
+		MsgType:   fixMsgTypeFromRaw(msg),
+		Stage:     "socket_write",
+		Duration:  time.Since(writeStartedAt),
+		Success:   err == nil && written == len(msg),
+	}
+	if err == nil && written != len(msg) {
+		err = io.ErrShortWrite
+	}
+	if err != nil {
+		s.connection = nil
+		s.applicationSendingEnabled = false
+		return result, err
+	}
+
+	s.log.OnOutgoing(msg)
+	s.stateTimer.Reset(s.HeartBtInt)
+	return result, nil
+}
+
+func (s *session) finishSocketWrite(result socketWriteResult, err error) error {
+	if err != nil {
+		s.logError(err)
+		if result.connection != nil {
+			_ = result.connection.Close()
+		}
+	}
+	if result.attempted {
+		observeSendStage(result.event)
+	}
+	return err
+}
+
+func (s *session) setApplicationSendingEnabled(enabled bool) {
+	s.sendMutex.Lock()
+	s.applicationSendingEnabled = enabled && s.connection != nil
+	s.sendMutex.Unlock()
 }
 
 func (s *session) doTargetTooHigh(reject targetTooHigh) (nextState resendState, err error) {
@@ -512,7 +492,7 @@ func (s *session) sendResendRequest(beginSeq, endSeq int) (nextState resendState
 	}
 	resend.Body.SetField(tagEndSeqNo, FIXInt(endSeqNo))
 
-	if err = s.send(resend); err != nil {
+	if err = s.dropAndSend(resend); err != nil {
 		return
 	}
 	s.log.OnEventf("Sent ResendRequest FROM: %v TO: %v", beginSeq, endSeqNo)
@@ -591,7 +571,6 @@ func (s *session) handleLogon(msg *Message) error {
 	s.sentReset = false
 
 	s.peerTimer.Reset(time.Duration(float64(1.2) * float64(s.HeartBtInt)))
-	s.application.OnLogon(s.sessionID)
 
 	// Evaluate tag 789 to see if we end up with an implied gapfill/resend.
 	if s.EnableNextExpectedMsgSeqNum && !msg.Body.Has(tagResetSeqNumFlag) {
@@ -614,7 +593,13 @@ func (s *session) handleLogon(msg *Message) error {
 		return err
 	}
 
-	return s.store.IncrNextTargetMsgSeqNum()
+	if err := s.store.IncrNextTargetMsgSeqNum(); err != nil {
+		return err
+	}
+
+	s.setApplicationSendingEnabled(true)
+	s.application.OnLogon(s.sessionID)
+	return nil
 }
 
 func (s *session) initiateLogout(reason string) (err error) {
@@ -857,23 +842,36 @@ type fixIn struct {
 	receiveTime time.Time
 }
 
-func (s *session) onDisconnect() {
+func (s *session) onDisconnect() chan struct{} {
 	s.log.OnEvent("Disconnected")
+	s.setApplicationSendingEnabled(false)
 	if s.ResetOnDisconnect {
 		if err := s.dropAndReset(); err != nil {
 			s.logError(err)
 		}
 	}
 
-	if s.messageOut != nil {
-		close(s.messageOut)
-		s.messageOut = nil
-	}
+	connectionDone := s.detachConnection()
 
 	// s.messageIn is buffered so we need to drain it before disconnection
 	s.drainMessageIn()
 
 	s.messageIn = nil
+	return connectionDone
+}
+
+func (s *session) detachConnection() chan struct{} {
+	s.sendMutex.Lock()
+	connection := s.connection
+	connectionDone := s.connectionDone
+	s.connection = nil
+	s.connectionDone = nil
+	s.applicationSendingEnabled = false
+	s.sendMutex.Unlock()
+	if connection != nil {
+		_ = connection.Close()
+	}
+	return connectionDone
 }
 
 func (s *session) onAdmin(msg interface{}) {
@@ -890,7 +888,9 @@ func (s *session) onAdmin(msg interface{}) {
 		}
 
 		if !s.IsSessionTime() {
-			s.handleDisconnectState(s)
+			if connectionDone := s.handleDisconnectState(s); connectionDone != nil {
+				close(connectionDone)
+			}
 			if msg.err != nil {
 				msg.err <- errors.New("Connection outside of session time")
 				close(msg.err)
@@ -898,15 +898,29 @@ func (s *session) onAdmin(msg interface{}) {
 			return
 		}
 
+		s.messageIn = msg.messageIn
+		s.sendMutex.Lock()
+		s.connection = msg.connection
+		s.connectionDone = msg.connectionDone
+		s.applicationSendingEnabled = false
+		s.sendMutex.Unlock()
+		s.sentReset = false
+
+		if err := s.Connect(s); err != nil {
+			connectionDone := s.detachConnection()
+			s.messageIn = nil
+			if connectionDone != nil {
+				close(connectionDone)
+			}
+			if msg.err != nil {
+				msg.err <- err
+				close(msg.err)
+			}
+			return
+		}
 		if msg.err != nil {
 			close(msg.err)
 		}
-
-		s.messageIn = msg.messageIn
-		s.messageOut = msg.messageOut
-		s.sentReset = false
-
-		s.Connect(s)
 
 	case stopReq:
 		s.Stop(s)
@@ -959,9 +973,6 @@ func (s *session) run() {
 
 		case msg := <-s.admin:
 			s.onAdmin(msg)
-
-		case <-s.messageEvent:
-			s.SendAppMessages(s)
 
 		case fixIn, ok := <-s.messageIn:
 			if !ok {

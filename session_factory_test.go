@@ -68,6 +68,18 @@ func (s *SessionFactorySuite) TestDefaults() {
 	s.Equal(120*time.Second, session.MaxLatency)
 	s.False(session.DisableMessagePersist)
 	s.False(session.HeartBtIntOverride)
+	s.Equal(30*time.Second, session.SocketWriteTimeout)
+}
+
+func (s *SessionFactorySuite) TestSocketWriteTimeout() {
+	s.SessionSettings.Set(config.SocketWriteTimeout, "5s")
+	session, err := s.newSession(s.SessionID, s.MessageStoreFactory, s.SessionSettings, s.LogFactory, s.App)
+	s.Require().NoError(err)
+	s.Equal(5*time.Second, session.SocketWriteTimeout)
+
+	s.SessionSettings.Set(config.SocketWriteTimeout, "0s")
+	_, err = s.newSession(s.SessionID, s.MessageStoreFactory, s.SessionSettings, s.LogFactory, s.App)
+	s.Error(err)
 }
 
 func (s *SessionFactorySuite) TestResetOnLogon() {

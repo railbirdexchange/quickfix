@@ -50,6 +50,8 @@ func (s logonState) FixMsgIn(session *session, msg *Message) (nextState sessionS
 				return shutdownWithReason(session, msg, false, tooHighErr.Error())
 			}
 
+			session.setApplicationSendingEnabled(true)
+			session.application.OnLogon(session.sessionID)
 			return
 
 		default:

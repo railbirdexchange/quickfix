@@ -36,6 +36,7 @@ func TestLogonStateTestSuite(t *testing.T) {
 func (s *LogonStateTestSuite) SetupTest() {
 	s.Init()
 	s.session.stateMachine.State = logonState{}
+	s.session.setApplicationSendingEnabled(false)
 }
 
 func (s *LogonStateTestSuite) TestPreliminary() {
@@ -107,6 +108,32 @@ func (s *LogonStateTestSuite) TestFixMsgInLogon() {
 
 	s.NextTargetMsgSeqNum(3)
 	s.NextSenderMsgSeqNum(3)
+}
+
+func (s *LogonStateTestSuite) TestFixMsgInLogonSendsFromOnLogonAfterLogon() {
+	s.IncrNextSenderMsgSeqNum()
+	s.MessageFactory.seqNum = 1
+	s.IncrNextTargetMsgSeqNum()
+
+	logon := s.Logon()
+	logon.Body.SetField(tagHeartBtInt, FIXInt(32))
+
+	var sendErr error
+	s.MockApp.onLogon = func() {
+		sendErr = s.send(s.NewOrderSingle())
+	}
+	s.MockApp.On("FromAdmin").Return(nil)
+	s.MockApp.On("ToAdmin")
+	s.MockApp.On("OnLogon")
+	s.MockApp.On("ToApp").Return(nil)
+
+	s.fixMsgIn(s.session, logon)
+
+	s.Require().NoError(sendErr)
+	s.LastToAdminMessageSent()
+	s.LastToAppMessageSent()
+	s.NextTargetMsgSeqNum(3)
+	s.NextSenderMsgSeqNum(4)
 }
 
 func (s *LogonStateTestSuite) TestFixMsgInLogonHeartBtIntOverride() {
@@ -345,7 +372,7 @@ func (s *LogonStateTestSuite) TestFixMsgInLogonSeqNumTooHigh() {
 	s.State(resendState{})
 	s.NextTargetMsgSeqNum(1)
 
-	// Session should send logon, and then queues resend request for send.
+	// Session should send logon, then the resend request.
 	s.MockApp.AssertNumberOfCalls(s.T(), "ToAdmin", 2)
 	msgBytesSent, ok := s.Receiver.LastMessage()
 	s.Require().True(ok)
@@ -354,7 +381,7 @@ func (s *LogonStateTestSuite) TestFixMsgInLogonSeqNumTooHigh() {
 	s.Require().Nil(err)
 	s.MessageType(string(msgTypeLogon), sentMessage)
 
-	s.session.sendQueued(true)
+	s.LastToAdminMessageSent()
 	s.MessageType(string(msgTypeResendRequest), s.MockApp.lastToAdmin)
 	s.FieldEquals(tagBeginSeqNo, 1, s.MockApp.lastToAdmin.Body)
 
@@ -395,7 +422,6 @@ func (s *LogonStateTestSuite) TestFixMsgInLogonSeqNumTooLow() {
 	s.Require().Nil(err)
 	s.MessageType(string(msgTypeLogout), sentMessage)
 
-	s.session.sendQueued(true)
 	s.MessageType(string(msgTypeLogout), s.MockApp.lastToAdmin)
 	s.FieldEquals(tagText, "MsgSeqNum too low, expecting 2 but received 1", s.MockApp.lastToAdmin.Body)
 }

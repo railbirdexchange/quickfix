@@ -23,7 +23,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/quickfixgo/quickfix/config"
 	"golang.org/x/net/proxy"
 )
 
@@ -177,10 +176,8 @@ func (i *Initiator) handleConnection(session *session, tlsConfig *tls.Config, di
 			}
 		}()
 
-		var disconnected chan interface{}
+		var connectionDone chan struct{}
 		var msgIn chan fixIn
-		var msgOut chan []byte
-		var outboundBufferSize int
 
 		address := session.SocketConnectAddress[connectionAttempt%len(session.SocketConnectAddress)]
 		session.log.OnEventf("Connecting to: %v", address)
@@ -207,34 +204,23 @@ func (i *Initiator) handleConnection(session *session, tlsConfig *tls.Config, di
 			netConn = tlsConn
 		}
 
-		outboundBufferSize, err = i.socketOutboundBufferSize(session.sessionID)
-		if err != nil {
-			session.log.OnEventf("Invalid outbound buffer size for session %v: %v", session.sessionID, err)
-			goto reconnect
-		}
 		msgIn = make(chan fixIn, session.InChanCapacity)
-		msgOut = make(chan []byte, outboundBufferSize)
-		if err := session.connect(msgIn, msgOut); err != nil {
+		connectionDone = make(chan struct{})
+		if err := session.connect(msgIn, netConn, connectionDone); err != nil {
 			session.log.OnEventf("Failed to initiate: %v", err)
 			goto reconnect
 		}
 
-		go readLoop(newParser(bufio.NewReader(netConn)), msgIn, session.log)
-		disconnected = make(chan interface{})
-		go func() {
-			writeLoop(netConn, msgOut, session.log)
-			if err := netConn.Close(); err != nil {
-				session.log.OnEvent(err.Error())
-			}
-			close(disconnected)
-		}()
+		go func(parser *parser, inbound chan fixIn) {
+			readLoop(parser, inbound, session.log)
+		}(newParser(bufio.NewReader(netConn)), msgIn)
 
 		// This ensures we properly cleanup the goroutine and context used for
 		// dial cancelation after successful connection.
 		cancel()
 
 		select {
-		case <-disconnected:
+		case <-connectionDone:
 		case <-i.stopChan:
 			return
 		}
@@ -248,22 +234,4 @@ func (i *Initiator) handleConnection(session *session, tlsConfig *tls.Config, di
 			return
 		}
 	}
-}
-
-func (i *Initiator) socketOutboundBufferSize(sessionID SessionID) (int, error) {
-	if i == nil || i.settings == nil {
-		return 0, nil
-	}
-
-	settings, ok := i.settings.SessionSettings()[sessionID]
-	if ok && settings.HasSetting(config.SocketOutboundBufferSize) {
-		return nonNegativeIntSetting(settings, config.SocketOutboundBufferSize)
-	}
-
-	global := i.settings.GlobalSettings()
-	if global.HasSetting(config.SocketOutboundBufferSize) {
-		return nonNegativeIntSetting(global, config.SocketOutboundBufferSize)
-	}
-
-	return 0, nil
 }

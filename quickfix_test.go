@@ -16,6 +16,9 @@
 package quickfix
 
 import (
+	"io"
+	"net"
+	"sync"
 	"time"
 
 	"github.com/stretchr/testify/mock"
@@ -81,6 +84,7 @@ type MockApp struct {
 	mock.Mock
 
 	decorateToAdmin func(*Message)
+	onLogon         func()
 	lastToAdmin     *Message
 	lastToApp       *Message
 }
@@ -90,6 +94,9 @@ func (e *MockApp) OnCreate(_ SessionID) {
 
 func (e *MockApp) OnLogon(_ SessionID) {
 	e.Called()
+	if e.onLogon != nil {
+		e.onLogon()
+	}
 }
 
 func (e *MockApp) OnLogout(_ SessionID) {
@@ -181,6 +188,7 @@ func (m *MessageFactory) SequenceReset(seqNo int) *Message {
 
 type MockSessionReceiver struct {
 	sendChannel chan []byte
+	closeOnce   sync.Once
 }
 
 func newMockSessionReceiver() MockSessionReceiver {
@@ -188,6 +196,25 @@ func newMockSessionReceiver() MockSessionReceiver {
 		sendChannel: make(chan []byte, 10),
 	}
 }
+
+func (p *MockSessionReceiver) Read([]byte) (int, error) { return 0, io.EOF }
+
+func (p *MockSessionReceiver) Write(msg []byte) (int, error) {
+	msgCopy := append([]byte(nil), msg...)
+	p.sendChannel <- msgCopy
+	return len(msg), nil
+}
+
+func (p *MockSessionReceiver) Close() error {
+	p.closeOnce.Do(func() { close(p.sendChannel) })
+	return nil
+}
+
+func (p *MockSessionReceiver) LocalAddr() net.Addr              { return &net.TCPAddr{} }
+func (p *MockSessionReceiver) RemoteAddr() net.Addr             { return &net.TCPAddr{} }
+func (p *MockSessionReceiver) SetDeadline(time.Time) error      { return nil }
+func (p *MockSessionReceiver) SetReadDeadline(time.Time) error  { return nil }
+func (p *MockSessionReceiver) SetWriteDeadline(time.Time) error { return nil }
 
 func (p *MockSessionReceiver) LastMessage() (msg []byte, ok bool) {
 	select {
@@ -214,12 +241,13 @@ func (s *SessionSuiteRig) Init() {
 	s.MessageFactory = MessageFactory{}
 	s.Receiver = newMockSessionReceiver()
 	s.session = &session{
-		sessionID:    SessionID{BeginString: "FIX.4.2", TargetCompID: "TW", SenderCompID: "ISLD"},
-		store:        &s.MockStore,
-		application:  &s.MockApp,
-		log:          nullLog{},
-		messageOut:   s.Receiver.sendChannel,
-		sessionEvent: make(chan internal.Event),
+		sessionID:                 SessionID{BeginString: "FIX.4.2", TargetCompID: "TW", SenderCompID: "ISLD"},
+		store:                     &s.MockStore,
+		application:               &s.MockApp,
+		log:                       nullLog{},
+		connection:                &s.Receiver,
+		applicationSendingEnabled: true,
+		sessionEvent:              make(chan internal.Event),
 	}
 	s.MaxLatency = 120 * time.Second
 }
@@ -261,10 +289,6 @@ func (s *SessionSuiteRig) Disconnected() {
 func (s *SessionSuiteRig) NoMessageSent() {
 	msg, _ := s.Receiver.LastMessage()
 	s.Nil(msg, "no message should be sent but got %s", msg)
-}
-
-func (s *SessionSuiteRig) NoMessageQueued() {
-	s.Empty(s.session.toSend, "no messages should be queueud")
 }
 
 func (s *SessionSuiteRig) ExpectStoreReset() {

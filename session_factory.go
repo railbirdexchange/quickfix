@@ -443,6 +443,17 @@ func (f sessionFactory) newSession(
 		s.InChanCapacity = 1
 	}
 
+	s.SocketWriteTimeout = 30 * time.Second
+	if settings.HasSetting(config.SocketWriteTimeout) {
+		if s.SocketWriteTimeout, err = settings.DurationSetting(config.SocketWriteTimeout); err != nil {
+			return
+		}
+		if s.SocketWriteTimeout <= 0 {
+			err = errors.New("SocketWriteTimeout must be greater than zero")
+			return
+		}
+	}
+
 	if f.BuildInitiators {
 		if err = f.buildInitiatorSettings(s, settings); err != nil {
 			return
@@ -460,7 +471,6 @@ func (f sessionFactory) newSession(
 	}
 
 	s.sessionEvent = make(chan internal.Event)
-	s.messageEvent = make(chan bool, 1)
 	s.admin = make(chan interface{})
 	s.application = application
 	return

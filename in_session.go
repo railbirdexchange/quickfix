@@ -226,14 +226,14 @@ func (state inSession) handleResendRequest(session *session, msg *Message) (next
 }
 
 func (state inSession) resendMessages(session *session, beginSeqNo, endSeqNo int, inReplyTo Message) error {
+	// resendMutex must always be locked before sendMutex to prevent a potential deadlock.
+	// sendMutex is locked below in session.sendRaw().
+	session.resendMutex.Lock()
+	defer session.resendMutex.Unlock()
+
 	if session.DisableMessagePersist {
 		return state.generateSequenceReset(session, beginSeqNo, endSeqNo+1, inReplyTo)
 	}
-
-	// resendMutex must always be locked before sendMutex to prevent a potential deadlock
-	// sendMutex is locked below in session.EnqueueBytesAndSend()
-	session.resendMutex.Lock()
-	defer session.resendMutex.Unlock()
 
 	seqNum := beginSeqNo
 	nextSeqNum := seqNum
@@ -265,7 +265,9 @@ func (state inSession) resendMessages(session *session, beginSeqNo, endSeqNo int
 
 		session.log.OnEventf("Resending Message: %v", sentMessageSeqNum)
 		msgBytes = msg.buildWithBodyBytes(msg.bodyBytes) // workaround for maintaining repeating group field order
-		session.EnqueueBytesAndSend(msgBytes)
+		if err = session.sendRaw(msgBytes); err != nil {
+			return err
+		}
 
 		seqNum = sentMessageSeqNum + 1
 		nextSeqNum = seqNum
@@ -411,7 +413,9 @@ func (state *inSession) generateSequenceReset(session *session, beginSeqNo int, 
 
 	msgBytes := sequenceReset.build()
 
-	session.EnqueueBytesAndSend(msgBytes)
+	if err = session.sendRaw(msgBytes); err != nil {
+		return
+	}
 	session.log.OnEventf("Sent SequenceReset TO: %v", endSeqNo)
 
 	return

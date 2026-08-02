@@ -78,7 +78,7 @@ func (s *InSessionTestSuite) TestLogoutResetOnLogout() {
 	s.session.ResetOnLogout = true
 
 	s.MockApp.On("ToApp").Return(nil)
-	s.Nil(s.queueForSend(s.NewOrderSingle()))
+	s.Nil(s.send(s.NewOrderSingle()))
 	s.MockApp.AssertExpectations(s.T())
 
 	s.MockApp.On("FromAdmin").Return(nil)
@@ -94,7 +94,6 @@ func (s *InSessionTestSuite) TestLogoutResetOnLogout() {
 
 	s.NextTargetMsgSeqNum(1)
 	s.NextSenderMsgSeqNum(1)
-	s.NoMessageQueued()
 }
 
 func (s *InSessionTestSuite) TestLogoutTargetTooHigh() {
@@ -437,7 +436,7 @@ func (s *InSessionTestSuite) TestFIXMsgInResendRequestLiveMessagesDoNotInterleav
 		MessageStore: &s.MockStore,
 		afterFirstMsg: func() {
 			go func() {
-				liveSent <- s.session.queueForSend(s.NewOrderSingle())
+				liveSent <- s.session.send(s.NewOrderSingle())
 			}()
 			select {
 			case err := <-liveSent:
@@ -466,11 +465,6 @@ func (s *InSessionTestSuite) TestFIXMsgInResendRequestLiveMessagesDoNotInterleav
 		s.FieldEquals(tagPossDupFlag, true, msg.Header)
 	}
 	msgBytes, _ := s.Receiver.LastMessage()
-	s.Nil(msgBytes, "live message must not be sent during the replay")
-
-	// The live message stays queued and goes out once the event loop resumes.
-	s.session.SendAppMessages(s.session)
-	msgBytes, _ = s.Receiver.LastMessage()
 	s.Require().NotNil(msgBytes)
 	msg := NewMessage()
 	s.Require().Nil(ParseMessage(msg, bytes.NewBuffer(msgBytes)))

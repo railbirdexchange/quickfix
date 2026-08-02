@@ -61,7 +61,7 @@ func SendToTarget(m Messagable, sessionID SessionID) error {
 		return errUnknownSession
 	}
 
-	return session.queueForSend(msg)
+	return session.send(msg)
 }
 
 // ResetSession resets session's sequence numbers.

@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// SendStageEvent reports timing for one stage of sending a FIX message.
+// SendStageEvent reports timing for a FIX socket write.
 type SendStageEvent struct {
 	SessionID SessionID
 	MsgType   string
@@ -15,7 +15,9 @@ type SendStageEvent struct {
 	Success   bool
 }
 
-// SendStageObserver receives synchronous send-stage timing events.
+// SendStageObserver receives synchronous socket-write timing events after the
+// session send lock has been released. Observers must not call session send APIs;
+// replay observations still occur while the resend lock preserves wire order.
 type SendStageObserver func(SendStageEvent)
 
 var sendStageObserverState struct {
@@ -23,7 +25,7 @@ var sendStageObserverState struct {
 	observer SendStageObserver
 }
 
-// SetSendStageObserver installs a process-wide observer for FIX send-stage
+// SetSendStageObserver installs a process-wide observer for FIX socket-write
 // timings. Passing nil disables observation.
 func SetSendStageObserver(observer SendStageObserver) {
 	sendStageObserverState.Lock()

@@ -16,7 +16,7 @@ func TestSendStageObserver(t *testing.T) {
 	event := SendStageEvent{
 		SessionID: SessionID{BeginString: BeginStringFIXT11, SenderCompID: "SENDER", TargetCompID: "TARGET"},
 		MsgType:   "8",
-		Stage:     "to_app",
+		Stage:     "socket_write",
 		Duration:  time.Millisecond,
 		Success:   true,
 	}

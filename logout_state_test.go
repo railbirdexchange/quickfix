@@ -34,6 +34,7 @@ func TestLogoutStateTestSuite(t *testing.T) {
 func (s *LogoutStateTestSuite) SetupTest() {
 	s.Init()
 	s.session.State = logoutState{}
+	s.session.setApplicationSendingEnabled(false)
 }
 
 func (s *LogoutStateTestSuite) TestPreliminary() {
@@ -78,13 +79,13 @@ func (s *LogoutStateTestSuite) TestFixMsgInNotLogout() {
 
 func (s *LogoutStateTestSuite) TestFixMsgInNotLogoutReject() {
 	s.MockApp.On("FromApp").Return(ConditionallyRequiredFieldMissing(Tag(11)))
-	s.MockApp.On("ToApp").Return(nil)
 	s.fixMsgIn(s.session, s.NewOrderSingle())
 
 	s.MockApp.AssertExpectations(s.T())
+	s.MockApp.AssertNotCalled(s.T(), "ToApp")
 	s.State(logoutState{})
 	s.NextTargetMsgSeqNum(2)
-	s.NextSenderMsgSeqNum(2)
+	s.NextSenderMsgSeqNum(1)
 
 	s.NoMessageSent()
 }
@@ -104,9 +105,9 @@ func (s *LogoutStateTestSuite) TestFixMsgInLogout() {
 func (s *LogoutStateTestSuite) TestFixMsgInLogoutResetOnLogout() {
 	s.session.ResetOnLogout = true
 
-	s.MockApp.On("ToApp").Return(nil)
-	s.Nil(s.queueForSend(s.NewOrderSingle()))
+	s.Nil(s.send(s.NewOrderSingle()))
 	s.MockApp.AssertExpectations(s.T())
+	s.MockApp.AssertNotCalled(s.T(), "ToApp")
 
 	s.MockApp.On("FromAdmin").Return(nil)
 	s.MockApp.On("OnLogout").Return(nil)
@@ -118,7 +119,6 @@ func (s *LogoutStateTestSuite) TestFixMsgInLogoutResetOnLogout() {
 	s.NextSenderMsgSeqNum(1)
 
 	s.NoMessageSent()
-	s.NoMessageQueued()
 }
 
 func (s *LogoutStateTestSuite) TestStop() {

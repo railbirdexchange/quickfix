@@ -593,6 +593,21 @@ const (
 	//  - A valid go time.Duration
 	SocketTimeout string = "SocketTimeout"
 
+	// SocketWriteTimeout bounds each FIX socket write.
+	// Used for initiators and acceptors.
+	//
+	// Example Values:
+	//  - SocketWriteTimeout=5s
+	//  - SocketWriteTimeout=1m
+	//
+	// Required: No
+	//
+	// Default: 30s
+	//
+	// Valid Values:
+	//  - A positive go time.Duration
+	SocketWriteTimeout string = "SocketWriteTimeout"
+
 	// ProxyType sets the type of proxy server to connect to.
 	// Only used for initiators.
 	//
@@ -677,18 +692,6 @@ const (
 	// Valid Values:
 	//  - A positive integer, representing a valid open socket port
 	SocketAcceptPort string = "SocketAcceptPort"
-
-	// SocketOutboundBufferSize sets the per-connection outbound message channel
-	// buffer size used between a FIX session and the socket writer.
-	// Used for acceptors only.
-	//
-	// Required: No
-	//
-	// Default: 0, which preserves the historical unbuffered channel behavior.
-	//
-	// Valid Values:
-	//  - A non-negative integer.
-	SocketOutboundBufferSize string = "SocketOutboundBufferSize"
 
 	// HeartBtIntOverride if set to Y, will use the HeartBtInt value in the acceptor's config file for the heartbeat interval rather than what the initiator dictates.
 	// Used for acceptors only.

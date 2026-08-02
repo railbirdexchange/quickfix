@@ -16,29 +16,9 @@
 package quickfix
 
 import (
-	"bytes"
 	"strings"
 	"testing"
 )
-
-func TestWriteLoop(t *testing.T) {
-	writer := bytes.NewBufferString("")
-	msgOut := make(chan []byte)
-
-	go func() {
-		msgOut <- []byte("test msg 1 ")
-		msgOut <- []byte("test msg 2 ")
-		msgOut <- []byte("test msg 3")
-		close(msgOut)
-	}()
-	writeLoop(writer, msgOut, nullLog{})
-
-	expected := "test msg 1 test msg 2 test msg 3"
-
-	if writer.String() != expected {
-		t.Errorf("expected %v got %v", expected, writer.String())
-	}
-}
 
 func TestReadLoop(t *testing.T) {
 	msgIn := make(chan fixIn)

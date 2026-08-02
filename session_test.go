@@ -17,6 +17,8 @@ package quickfix
 
 import (
 	"bytes"
+	"errors"
+	"net"
 	"testing"
 	"time"
 
@@ -544,56 +546,6 @@ func (s *SessionSuite) TestIncomingNotInSessionTime() {
 	}
 }
 
-func (s *SessionSuite) TestSendAppMessagesNotInSessionTime() {
-	var tests = []struct {
-		before           sessionState
-		initiateLogon    bool
-		expectOnLogout   bool
-		expectSendLogout bool
-	}{
-		{before: logonState{}},
-		{before: logonState{}, initiateLogon: true, expectOnLogout: true},
-		{before: logoutState{}, expectOnLogout: true},
-		{before: inSession{}, expectOnLogout: true, expectSendLogout: true},
-		{before: resendState{}, expectOnLogout: true, expectSendLogout: true},
-		{before: pendingTimeout{resendState{}}, expectOnLogout: true, expectSendLogout: true},
-		{before: pendingTimeout{inSession{}}, expectOnLogout: true, expectSendLogout: true},
-	}
-
-	for _, test := range tests {
-		s.SetupTest()
-
-		s.session.State = test.before
-		s.session.InitiateLogon = test.initiateLogon
-		s.IncrNextSenderMsgSeqNum()
-		s.IncrNextTargetMsgSeqNum()
-
-		s.MockApp.On("ToApp").Return(nil)
-		s.Require().Nil(s.queueForSend(s.NewOrderSingle()))
-		s.MockApp.AssertExpectations(s.T())
-
-		now := time.Now().UTC()
-		sessionTime, err := internal.NewUTCTimeRange(
-			internal.NewTimeOfDay(now.Add(time.Hour).Clock()),
-			internal.NewTimeOfDay(now.Add(time.Duration(2)*time.Hour).Clock()),
-			[]time.Weekday{},
-		)
-		s.Nil(err)
-
-		s.session.SessionTime = sessionTime
-		if test.expectOnLogout {
-			s.MockApp.On("OnLogout")
-		}
-		if test.expectSendLogout {
-			s.MockApp.On("ToAdmin")
-		}
-
-		s.session.SendAppMessages(s.session)
-		s.MockApp.AssertExpectations(s.T())
-		s.State(notSessionTime{})
-	}
-}
-
 func (s *SessionSuite) TestTimeoutNotInSessionTime() {
 	var tests = []struct {
 		before           sessionState
@@ -646,7 +598,7 @@ func (s *SessionSuite) TestTimeoutNotInSessionTime() {
 
 func (s *SessionSuite) TestOnAdminConnectInitiateLogon() {
 	adminMsg := connect{
-		messageOut: s.Receiver.sendChannel,
+		connection: &s.Receiver,
 	}
 	s.session.State = latentState{}
 	s.session.HeartBtInt = time.Duration(45) * time.Second
@@ -669,7 +621,7 @@ func (s *SessionSuite) TestOnAdminConnectInitiateLogon() {
 
 func (s *SessionSuite) TestInitiateLogonResetSeqNumFlag() {
 	adminMsg := connect{
-		messageOut: s.Receiver.sendChannel,
+		connection: &s.Receiver,
 	}
 	s.session.State = latentState{}
 	s.session.HeartBtInt = time.Duration(45) * time.Second
@@ -705,7 +657,7 @@ func (s *SessionSuite) TestOnAdminConnectInitiateLogonFIXT11() {
 	s.session.InitiateLogon = true
 
 	adminMsg := connect{
-		messageOut: s.Receiver.sendChannel,
+		connection: &s.Receiver,
 	}
 	s.session.State = latentState{}
 
@@ -728,7 +680,7 @@ func (s *SessionSuite) TestOnAdminConnectRefreshOnLogon() {
 		s.session.RefreshOnLogon = doRefresh
 
 		adminMsg := connect{
-			messageOut: s.Receiver.sendChannel,
+			connection: &s.Receiver,
 		}
 		s.session.State = latentState{}
 		s.session.InitiateLogon = true
@@ -743,9 +695,39 @@ func (s *SessionSuite) TestOnAdminConnectRefreshOnLogon() {
 	}
 }
 
+func (s *SessionSuite) TestOnAdminConnectInitiatorSetupFailureDetachesConnection() {
+	expectedErr := errors.New("refresh failed")
+	connectionDone := make(chan struct{})
+	connectErr := make(chan error, 1)
+	s.session.State = latentState{}
+	s.session.InitiateLogon = true
+	s.session.RefreshOnLogon = true
+	s.MockStore.On("Refresh").Return(expectedErr)
+
+	s.session.onAdmin(connect{
+		connection:     &s.Receiver,
+		messageIn:      make(chan fixIn),
+		connectionDone: connectionDone,
+		err:            connectErr,
+	})
+
+	s.ErrorIs(<-connectErr, expectedErr)
+	_, ok := <-connectErr
+	s.False(ok, "connect error channel should be closed")
+	s.Nil(s.session.connection)
+	s.Nil(s.session.messageIn)
+	s.State(latentState{})
+	s.MockStore.AssertExpectations(s.T())
+	select {
+	case <-connectionDone:
+	default:
+		s.Fail("failed connection setup did not signal teardown")
+	}
+}
+
 func (s *SessionSuite) TestOnAdminConnectAccept() {
 	adminMsg := connect{
-		messageOut: s.Receiver.sendChannel,
+		connection: &s.Receiver,
 	}
 	s.session.State = latentState{}
 	s.IncrNextSenderMsgSeqNum()
@@ -767,7 +749,7 @@ func (s *SessionSuite) TestOnAdminConnectNotInSession() {
 		s.session.InitiateLogon = doInitiateLogon
 
 		adminMsg := connect{
-			messageOut: s.Receiver.sendChannel,
+			connection: &s.Receiver,
 		}
 
 		s.session.onAdmin(adminMsg)
@@ -801,6 +783,22 @@ func (s *SessionSuite) TestResetOnDisconnect() {
 	s.ExpectStoreReset()
 }
 
+func (s *SessionSuite) TestOnDisconnectSignalsConnectionDone() {
+	connectionDone := make(chan struct{})
+	s.session.connectionDone = connectionDone
+	s.session.State = inSession{}
+	s.MockApp.On("OnLogout")
+
+	s.session.Disconnected(s.session)
+
+	select {
+	case <-connectionDone:
+	default:
+		s.Fail("connection completion was not signaled")
+	}
+	s.State(latentState{})
+}
+
 type SessionSendTestSuite struct {
 	SessionSuiteRig
 }
@@ -814,45 +812,6 @@ func (suite *SessionSendTestSuite) SetupTest() {
 	suite.session.State = inSession{}
 }
 
-func (suite *SessionSendTestSuite) TestQueueForSendAppMessage() {
-	suite.MockApp.On("ToApp").Return(nil)
-	require.Nil(suite.T(), suite.queueForSend(suite.NewOrderSingle()))
-
-	suite.MockApp.AssertExpectations(suite.T())
-	suite.NoMessageSent()
-	suite.MessagePersisted(suite.MockApp.lastToApp)
-	suite.FieldEquals(tagMsgSeqNum, 1, suite.MockApp.lastToApp.Header)
-	suite.NextSenderMsgSeqNum(2)
-}
-
-func (suite *SessionSendTestSuite) TestQueueForSendDoNotSendAppMessage() {
-	suite.MockApp.On("ToApp").Return(ErrDoNotSend)
-	suite.Equal(ErrDoNotSend, suite.queueForSend(suite.NewOrderSingle()))
-
-	suite.MockApp.AssertExpectations(suite.T())
-	suite.NoMessagePersisted(1)
-	suite.NoMessageSent()
-	suite.NextSenderMsgSeqNum(1)
-
-	suite.MockApp.On("ToAdmin")
-	require.Nil(suite.T(), suite.send(suite.Heartbeat()))
-
-	suite.MockApp.AssertExpectations(suite.T())
-	suite.LastToAdminMessageSent()
-	suite.MessagePersisted(suite.MockApp.lastToAdmin)
-	suite.NextSenderMsgSeqNum(2)
-}
-
-func (suite *SessionSendTestSuite) TestQueueForSendAdminMessage() {
-	suite.MockApp.On("ToAdmin")
-	require.Nil(suite.T(), suite.queueForSend(suite.Heartbeat()))
-
-	suite.MockApp.AssertExpectations(suite.T())
-	suite.MessagePersisted(suite.MockApp.lastToAdmin)
-	suite.NoMessageSent()
-	suite.NextSenderMsgSeqNum(2)
-}
-
 func (suite *SessionSendTestSuite) TestSendAppMessage() {
 	suite.MockApp.On("ToApp").Return(nil)
 	require.Nil(suite.T(), suite.send(suite.NewOrderSingle()))
@@ -861,6 +820,68 @@ func (suite *SessionSendTestSuite) TestSendAppMessage() {
 	suite.MessagePersisted(suite.MockApp.lastToApp)
 	suite.LastToAppMessageSent()
 	suite.NextSenderMsgSeqNum(2)
+}
+
+func (suite *SessionSendTestSuite) TestSendObservesSocketWriteAfterUnlock() {
+	defer SetSendStageObserver(nil)
+
+	var observed []SendStageEvent
+	SetSendStageObserver(func(event SendStageEvent) {
+		suite.Require().True(suite.sendMutex.TryLock(), "observer called while sendMutex was held")
+		suite.sendMutex.Unlock()
+		observed = append(observed, event)
+	})
+
+	suite.MockApp.On("ToApp").Return(nil)
+	suite.Require().NoError(suite.send(suite.NewOrderSingle()))
+	suite.Require().Len(observed, 1)
+	suite.Equal("socket_write", observed[0].Stage)
+	suite.Equal("D", observed[0].MsgType)
+	suite.True(observed[0].Success)
+}
+
+func (suite *SessionSendTestSuite) TestSendHonorsSocketWriteTimeout() {
+	connection, peer := net.Pipe()
+	defer peer.Close()
+	connectionDone := make(chan struct{})
+	suite.connection = connection
+	suite.connectionDone = connectionDone
+	suite.SocketWriteTimeout = 20 * time.Millisecond
+
+	suite.MockApp.On("ToApp").Return(nil)
+	startedAt := time.Now()
+	err := suite.send(suite.NewOrderSingle())
+
+	suite.Error(err)
+	suite.Less(time.Since(startedAt), time.Second)
+	suite.Nil(suite.connection)
+	select {
+	case <-connectionDone:
+		suite.Fail("connection completion was signaled before session teardown")
+	default:
+	}
+
+	suite.MockApp.On("OnLogout")
+	suite.session.Disconnected(suite.session)
+	select {
+	case <-connectionDone:
+	default:
+		suite.Fail("connection completion was not signaled after write failure teardown")
+	}
+	suite.session.Disconnected(suite.session)
+	suite.State(latentState{})
+}
+
+func (suite *SessionSendTestSuite) TestSendNotLoggedOnWithoutPersistenceIsNoOp() {
+	suite.session.setApplicationSendingEnabled(false)
+	suite.DisableMessagePersist = true
+
+	suite.Require().NoError(suite.send(suite.NewOrderSingle()))
+
+	suite.NoMessageSent()
+	suite.NoMessagePersisted(1)
+	suite.NextSenderMsgSeqNum(1)
+	suite.MockApp.AssertNotCalled(suite.T(), "ToApp")
 }
 
 func (suite *SessionSendTestSuite) TestSendAppDoNotSendMessage() {
@@ -881,46 +902,57 @@ func (suite *SessionSendTestSuite) TestSendAdminMessage() {
 	suite.MessagePersisted(suite.MockApp.lastToAdmin)
 }
 
-func (suite *SessionSendTestSuite) TestSendFlushesQueue() {
-	suite.MockApp.On("ToApp").Return(nil)
-	suite.MockApp.On("ToAdmin")
-	require.Nil(suite.T(), suite.queueForSend(suite.NewOrderSingle()))
-	require.Nil(suite.T(), suite.queueForSend(suite.Heartbeat()))
-
-	order1 := suite.MockApp.lastToApp
-	heartbeat := suite.MockApp.lastToAdmin
-
-	suite.MockApp.AssertExpectations(suite.T())
-	suite.NoMessageSent()
-
-	suite.MockApp.On("ToApp").Return(nil)
-	require.Nil(suite.T(), suite.send(suite.NewOrderSingle()))
-	suite.MockApp.AssertExpectations(suite.T())
-	order2 := suite.MockApp.lastToApp
-	suite.MessageSentEquals(order1)
-	suite.MessageSentEquals(heartbeat)
-	suite.MessageSentEquals(order2)
-	suite.NoMessageSent()
-}
-
 func (suite *SessionSendTestSuite) TestSendNotLoggedOn() {
-	suite.MockApp.On("ToApp").Return(nil)
-	suite.MockApp.On("ToAdmin")
-	require.Nil(suite.T(), suite.queueForSend(suite.NewOrderSingle()))
-	require.Nil(suite.T(), suite.queueForSend(suite.Heartbeat()))
-
-	suite.MockApp.AssertExpectations(suite.T())
-	suite.NoMessageSent()
-
 	var tests = []sessionState{logoutState{}, latentState{}, logonState{}}
 
 	for _, test := range tests {
-		suite.MockApp.On("ToApp").Return(nil)
 		suite.session.State = test
-		require.Nil(suite.T(), suite.send(suite.NewOrderSingle()))
-		suite.MockApp.AssertExpectations(suite.T())
+		suite.session.setApplicationSendingEnabled(false)
+		nextSeqNum := suite.store.NextSenderMsgSeqNum()
+		message := suite.NewOrderSingle()
+		require.Nil(suite.T(), suite.send(message))
 		suite.NoMessageSent()
+		suite.NoMessagePersisted(nextSeqNum)
+		suite.NextSenderMsgSeqNum(nextSeqNum)
+		suite.MockApp.AssertNotCalled(suite.T(), "ToApp")
 	}
+}
+
+func (suite *SessionSendTestSuite) TestSendOutsideSessionTimeIsNoOp() {
+	now := time.Now().UTC()
+	sessionTime, err := internal.NewUTCTimeRange(
+		internal.NewTimeOfDay(0, 0, 0),
+		internal.NewTimeOfDay(23, 59, 59),
+		[]time.Weekday{(now.Weekday() + 1) % 7},
+	)
+	suite.Require().NoError(err)
+	suite.SessionTime = sessionTime
+
+	suite.Require().NoError(suite.send(suite.NewOrderSingle()))
+
+	suite.NoMessageSent()
+	suite.NoMessagePersisted(1)
+	suite.NextSenderMsgSeqNum(1)
+	suite.MockApp.AssertNotCalled(suite.T(), "ToApp")
+}
+
+func (suite *SessionSendTestSuite) TestSendAcrossSessionBoundaryIsNoOp() {
+	now := time.Now().UTC()
+	sessionTime, err := internal.NewUTCTimeRange(
+		internal.NewTimeOfDay(now.Add(-time.Hour).Clock()),
+		internal.NewTimeOfDay(now.Add(time.Hour).Clock()),
+		[]time.Weekday{},
+	)
+	suite.Require().NoError(err)
+	suite.SessionTime = sessionTime
+	suite.store.SetCreationTime(now.AddDate(0, 0, -1))
+
+	suite.Require().NoError(suite.send(suite.NewOrderSingle()))
+
+	suite.NoMessageSent()
+	suite.NoMessagePersisted(1)
+	suite.NextSenderMsgSeqNum(1)
+	suite.MockApp.AssertNotCalled(suite.T(), "ToApp")
 }
 
 func (suite *SessionSendTestSuite) TestSendEnableLastMsgSeqNumProcessed() {
@@ -958,48 +990,16 @@ func (suite *SessionSendTestSuite) TestDropAndSendAdminMessage() {
 	suite.LastToAdminMessageSent()
 }
 
-func (suite *SessionSendTestSuite) TestDropAndSendDropsQueue() {
-	suite.MockApp.On("ToApp").Return(nil)
+func (suite *SessionSendTestSuite) TestProtocolSendsFailWhenDisconnected() {
+	suite.connection = nil
 	suite.MockApp.On("ToAdmin")
-	require.Nil(suite.T(), suite.queueForSend(suite.NewOrderSingle()))
-	require.Nil(suite.T(), suite.queueForSend(suite.Heartbeat()))
-	suite.MockApp.AssertExpectations(suite.T())
 
-	suite.NoMessageSent()
+	suite.ErrorIs(suite.dropAndSend(suite.Heartbeat()), errSessionDisconnected)
 
-	suite.MockApp.On("ToAdmin")
-	require.Nil(suite.T(), suite.dropAndSend(suite.Logon()))
-	suite.MockApp.AssertExpectations(suite.T())
-
-	msg := suite.MockApp.lastToAdmin
-	suite.MessageType(string(msgTypeLogon), msg)
-	suite.FieldEquals(tagMsgSeqNum, 3, msg.Header)
-
-	// Only one message sent.
-	suite.LastToAdminMessageSent()
-	suite.NoMessageSent()
-}
-
-func (suite *SessionSendTestSuite) TestDropAndSendDropsQueueWithReset() {
-	suite.MockApp.On("ToApp").Return(nil)
-	suite.MockApp.On("ToAdmin")
-	require.Nil(suite.T(), suite.queueForSend(suite.NewOrderSingle()))
-	require.Nil(suite.T(), suite.queueForSend(suite.Heartbeat()))
-	suite.MockApp.AssertExpectations(suite.T())
-	suite.NoMessageSent()
-
-	suite.MockApp.On("ToAdmin")
-	suite.Require().Nil(suite.MockStore.Reset())
-	require.Nil(suite.T(), suite.dropAndSend(suite.Logon()))
-	suite.MockApp.AssertExpectations(suite.T())
-	msg := suite.MockApp.lastToAdmin
-
-	suite.MessageType(string(msgTypeLogon), msg)
-	suite.FieldEquals(tagMsgSeqNum, 1, msg.Header)
-
-	// Only one message sent.
-	suite.LastToAdminMessageSent()
-	suite.NoMessageSent()
+	suite.resendMutex.RLock()
+	err := suite.sendRaw([]byte("8=FIX.4.2\x0135=D\x01"))
+	suite.resendMutex.RUnlock()
+	suite.ErrorIs(err, errSessionDisconnected)
 }
 
 func (s *SessionSuite) TestSeqNumResetTime() {

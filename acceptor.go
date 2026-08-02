@@ -19,6 +19,7 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/tls"
+	"errors"
 	"io"
 	"net"
 	"runtime/debug"
@@ -244,7 +245,7 @@ func (a *Acceptor) handleConnection(netConn net.Conn) {
 			a.globalLog.OnEventf("Connection Terminated with Panic: %s", debug.Stack())
 		}
 
-		if err := netConn.Close(); err != nil {
+		if err := netConn.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
 			a.globalLog.OnEvent(err.Error())
 		}
 	}()
@@ -359,54 +360,17 @@ func (a *Acceptor) handleConnection(netConn net.Conn) {
 	}
 
 	a.sessionAddr.Store(sessID, netConn.RemoteAddr())
-	outboundBufferSize, err := a.socketOutboundBufferSize(sessID)
-	if err != nil {
-		a.globalLog.OnEventf("Invalid outbound buffer size for session %v: %v", sessID, err)
-		return
-	}
 	msgIn := make(chan fixIn, session.InChanCapacity)
-	msgOut := make(chan []byte, outboundBufferSize)
+	connectionDone := make(chan struct{})
 
-	if err := session.connect(msgIn, msgOut); err != nil {
+	if err := session.connect(msgIn, netConn, connectionDone); err != nil {
 		a.globalLog.OnEventf("Unable to accept session %v connection: %v", sessID, err.Error())
 		return
 	}
 
-	go func() {
-		msgIn <- fixIn{msgBytes, parser.lastRead}
-		readLoop(parser, msgIn, a.globalLog)
-	}()
-
-	writeLoop(netConn, msgOut, a.globalLog)
-}
-
-func (a *Acceptor) socketOutboundBufferSize(sessionID SessionID) (int, error) {
-	if a == nil || a.settings == nil {
-		return 0, nil
-	}
-
-	settings, ok := a.settings.SessionSettings()[sessionID]
-	if ok && settings.HasSetting(config.SocketOutboundBufferSize) {
-		return nonNegativeIntSetting(settings, config.SocketOutboundBufferSize)
-	}
-
-	global := a.settings.GlobalSettings()
-	if global.HasSetting(config.SocketOutboundBufferSize) {
-		return nonNegativeIntSetting(global, config.SocketOutboundBufferSize)
-	}
-
-	return 0, nil
-}
-
-func nonNegativeIntSetting(settings *SessionSettings, key string) (int, error) {
-	value, err := settings.IntSetting(key)
-	if err != nil {
-		return 0, err
-	}
-	if value < 0 {
-		return 0, IncorrectFormatForSetting{Setting: key, Value: []byte(strconv.Itoa(value))}
-	}
-	return value, nil
+	msgIn <- fixIn{msgBytes, parser.lastRead}
+	readLoop(parser, msgIn, a.globalLog)
+	<-connectionDone
 }
 
 func (a *Acceptor) dynamicSessionsLoop() {
