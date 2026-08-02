@@ -2,7 +2,7 @@ package quickfix
 
 import (
 	"bytes"
-	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -20,25 +20,22 @@ type SendStageEvent struct {
 // replay observations still occur while the resend lock preserves wire order.
 type SendStageObserver func(SendStageEvent)
 
-var sendStageObserverState struct {
-	sync.RWMutex
-	observer SendStageObserver
-}
+var sendStageObserver atomic.Pointer[SendStageObserver]
 
 // SetSendStageObserver installs a process-wide observer for FIX socket-write
 // timings. Passing nil disables observation.
 func SetSendStageObserver(observer SendStageObserver) {
-	sendStageObserverState.Lock()
-	defer sendStageObserverState.Unlock()
-	sendStageObserverState.observer = observer
+	if observer == nil {
+		sendStageObserver.Store(nil)
+		return
+	}
+	sendStageObserver.Store(&observer)
 }
 
 func observeSendStage(event SendStageEvent) {
-	sendStageObserverState.RLock()
-	observer := sendStageObserverState.observer
-	sendStageObserverState.RUnlock()
+	observer := sendStageObserver.Load()
 	if observer != nil {
-		observer(event)
+		(*observer)(event)
 	}
 }
 
