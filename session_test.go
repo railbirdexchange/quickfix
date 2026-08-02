@@ -918,6 +918,34 @@ func (suite *SessionSendTestSuite) TestSendNotLoggedOn() {
 	}
 }
 
+func (suite *SessionSendTestSuite) TestApplicationSendAfterLogoutIsNoOp() {
+	suite.MockApp.On("ToAdmin")
+	suite.Require().NoError(suite.sendLogout("test logout"))
+	suite.LastToAdminMessageSent()
+
+	suite.Require().NoError(suite.send(suite.NewOrderSingle()))
+	suite.NoMessageSent()
+	suite.MockApp.AssertNotCalled(suite.T(), "ToApp")
+}
+
+func (suite *SessionSendTestSuite) TestLoggedOnStateTransitionDoesNotWaitForSendLock() {
+	suite.sendMutex.Lock()
+	done := make(chan struct{})
+	go func() {
+		suite.stateMachine.setState(suite.session, inSession{})
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		suite.sendMutex.Unlock()
+	case <-time.After(time.Second):
+		suite.sendMutex.Unlock()
+		<-done
+		suite.Fail("in-session state transition waited for sendMutex")
+	}
+}
+
 func (suite *SessionSendTestSuite) TestSendOutsideSessionTimeIsNoOp() {
 	now := time.Now().UTC()
 	sessionTime, err := internal.NewUTCTimeRange(

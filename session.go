@@ -267,6 +267,7 @@ func (s *session) sendLogout(reason string) error {
 }
 
 func (s *session) sendLogoutInReplyTo(reason string, inReplyTo *Message) error {
+	s.setApplicationSendingEnabled(false)
 	logout := s.buildLogout(reason)
 	return s.dropAndSendInReplyTo(logout, inReplyTo)
 }

@@ -165,7 +165,9 @@ func (sm *stateMachine) CheckResetTime(session *session, now time.Time) {
 }
 
 func (sm *stateMachine) setState(session *session, nextState sessionState) {
-	if !nextState.IsLoggedOn() {
+	wasLoggedOn := sm.IsLoggedOn()
+	willBeLoggedOn := nextState.IsLoggedOn()
+	if wasLoggedOn && !willBeLoggedOn {
 		session.setApplicationSendingEnabled(false)
 	}
 
@@ -182,7 +184,7 @@ func (sm *stateMachine) setState(session *session, nextState sessionState) {
 	}
 
 	sm.State = nextState
-	if nextState.IsLoggedOn() {
+	if !wasLoggedOn && willBeLoggedOn {
 		session.setApplicationSendingEnabled(true)
 	}
 	if connectionDone != nil {
