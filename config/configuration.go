@@ -608,6 +608,10 @@ const (
 	//  - A positive go time.Duration
 	SocketWriteTimeout string = "SocketWriteTimeout"
 
+	// SocketOutboundBufferSize is retained for source compatibility.
+	// Deprecated: outbound sends no longer use a channel, so this setting is ignored.
+	SocketOutboundBufferSize string = "SocketOutboundBufferSize"
+
 	// ProxyType sets the type of proxy server to connect to.
 	// Only used for initiators.
 	//
