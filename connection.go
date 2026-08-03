@@ -15,7 +15,7 @@
 
 package quickfix
 
-func readLoop(parser *parser, msgIn chan fixIn, log Log) {
+func readLoop(parser *parser, msgIn chan fixIn, connectionDone <-chan struct{}, log Log) {
 	defer close(msgIn)
 
 	for {
@@ -24,6 +24,10 @@ func readLoop(parser *parser, msgIn chan fixIn, log Log) {
 			log.OnEvent(err.Error())
 			return
 		}
-		msgIn <- fixIn{msg, parser.lastRead}
+		select {
+		case msgIn <- fixIn{msg, parser.lastRead}:
+		case <-connectionDone:
+			return
+		}
 	}
 }

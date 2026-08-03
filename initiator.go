@@ -211,9 +211,9 @@ func (i *Initiator) handleConnection(session *session, tlsConfig *tls.Config, di
 			goto reconnect
 		}
 
-		go func(parser *parser, inbound chan fixIn) {
-			readLoop(parser, inbound, session.log)
-		}(newParser(bufio.NewReader(netConn)), msgIn)
+		go func(parser *parser, inbound chan fixIn, done <-chan struct{}) {
+			readLoop(parser, inbound, done, session.log)
+		}(newParser(bufio.NewReader(netConn)), msgIn, connectionDone)
 
 		// This ensures we properly cleanup the goroutine and context used for
 		// dial cancelation after successful connection.
