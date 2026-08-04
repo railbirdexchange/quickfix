@@ -74,7 +74,10 @@ func (c MessageRouter) tryRoute(beginString string, msgType string, msg *Message
 	if beginString == BeginStringFIXT11 && !isAdminMsg {
 		var applVerID FIXString
 		if err := msg.Header.GetField(tagApplVerID, &applVerID); err != nil {
-			session, _ := lookupSession(sessionID)
+			session, ok := lookupSession(sessionID)
+			if !ok {
+				return NewMessageRejectError(errUnknownSession.Error(), rejectReasonCompIDProblem, nil)
+			}
 			applVerID = FIXString(session.TargetDefaultApplicationVersionID())
 		}
 
