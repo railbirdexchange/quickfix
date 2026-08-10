@@ -59,6 +59,23 @@ func (s *InSessionTestSuite) TestLogout() {
 	s.NextSenderMsgSeqNum(2)
 }
 
+func (s *InSessionTestSuite) TestLogoutDropsBufferedInboundMessage() {
+	logout := s.Logout()
+	bufferedMessage := s.NewOrderSingle()
+	messageIn := make(chan fixIn, 1)
+	messageIn <- fixIn{bytes: bytes.NewBuffer(bufferedMessage.build())}
+	s.session.messageIn = messageIn
+
+	s.MockApp.On("FromAdmin").Return(nil)
+	s.MockApp.On("ToAdmin")
+	s.MockApp.On("OnLogout")
+	s.session.fixMsgIn(s.session, logout)
+
+	s.MockApp.AssertExpectations(s.T())
+	s.MockApp.AssertNotCalled(s.T(), "FromApp")
+	s.State(latentState{})
+}
+
 func (s *InSessionTestSuite) TestLogoutEnableLastMsgSeqNumProcessed() {
 	s.session.EnableLastMsgSeqNumProcessed = true
 

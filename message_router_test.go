@@ -205,3 +205,11 @@ func (suite *MessageRouterTestSuite) TestRouteFIXTAppWithDefaultApplVerID() {
 	suite.verifyMessageRoutedBy(ApplVerIDFIX50SP1, "D")
 	suite.Nil(rej)
 }
+
+func (suite *MessageRouterTestSuite) TestRouteFIXTAppWithoutRegisteredSession() {
+	suite.givenTheMessage([]byte("8=FIXT.1.19=8235=D49=TW34=356=ISLD52=20160424-16:48:2640=160=20160424-16:48:2611=id21=310=120"))
+
+	rej := suite.Route(suite.msg, suite.sessionID)
+	suite.verifyMessageNotRouted()
+	suite.Equal(NewMessageRejectError(errUnknownSession.Error(), rejectReasonCompIDProblem, nil), rej)
+}
