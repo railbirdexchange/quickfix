@@ -15,7 +15,7 @@ type SendStageEvent struct {
 	Success   bool
 }
 
-// SendStageObserver receives synchronous send-stage timing events.
+// SendStageObserver receives send-stage timing events.
 type SendStageObserver func(SendStageEvent)
 
 var sendStageObserverState struct {

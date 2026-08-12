@@ -281,16 +281,17 @@ func (s *session) queueForSend(msg *Message) error {
 	defer s.resendMutex.RUnlock()
 
 	s.sendMutex.Lock()
-	defer s.sendMutex.Unlock()
-
-	msgBytes, err := s.prepMessageForSend(msg, nil)
+	msgBytes, sendTimings, err := s.prepMessageForSend(msg, nil)
 	if err != nil {
+		s.sendMutex.Unlock()
+		observeSendStages(sendTimings)
 		return err
 	}
 
 	s.toSend = append(s.toSend, msgBytes)
-
 	s.notifyMessageOut()
+	s.sendMutex.Unlock()
+	observeSendStages(sendTimings)
 
 	return nil
 }
@@ -317,16 +318,20 @@ func (s *session) sendInReplyTo(msg *Message, inReplyTo *Message) error {
 
 	lockStartedAt := time.Now()
 	s.sendMutex.Lock()
-	s.observeSendStage("send_mutex_wait", "", time.Since(lockStartedAt), true)
-	defer s.sendMutex.Unlock()
+	sendTimings := []SendStageEvent{s.sendStageEvent("send_mutex_wait", "", time.Since(lockStartedAt), true)}
 
-	msgBytes, err := s.prepMessageForSend(msg, inReplyTo)
+	msgBytes, prepTimings, err := s.prepMessageForSend(msg, inReplyTo)
+	sendTimings = append(sendTimings, prepTimings...)
 	if err != nil {
+		s.sendMutex.Unlock()
+		observeSendStages(sendTimings)
 		return err
 	}
 
 	s.toSend = append(s.toSend, msgBytes)
-	s.sendQueued(true)
+	s.sendQueued(true, &sendTimings)
+	s.sendMutex.Unlock()
+	observeSendStages(sendTimings)
 
 	return nil
 }
@@ -346,21 +351,23 @@ func (s *session) dropAndSend(msg *Message) error {
 }
 func (s *session) dropAndSendInReplyTo(msg *Message, inReplyTo *Message) error {
 	s.sendMutex.Lock()
-	defer s.sendMutex.Unlock()
-
-	msgBytes, err := s.prepMessageForSend(msg, inReplyTo)
+	msgBytes, sendTimings, err := s.prepMessageForSend(msg, inReplyTo)
 	if err != nil {
+		s.sendMutex.Unlock()
+		observeSendStages(sendTimings)
 		return err
 	}
 
 	s.dropQueued()
 	s.toSend = append(s.toSend, msgBytes)
-	s.sendQueued(true)
+	s.sendQueued(true, &sendTimings)
+	s.sendMutex.Unlock()
+	observeSendStages(sendTimings)
 
 	return nil
 }
 
-func (s *session) prepMessageForSend(msg *Message, inReplyTo *Message) (msgBytes []byte, err error) {
+func (s *session) prepMessageForSend(msg *Message, inReplyTo *Message) (msgBytes []byte, timings []SendStageEvent, err error) {
 	s.fillDefaultHeader(msg, inReplyTo)
 	seqNum := s.store.NextSenderMsgSeqNum()
 	msg.Header.SetField(tagMsgSeqNum, FIXInt(seqNum))
@@ -373,7 +380,7 @@ func (s *session) prepMessageForSend(msg *Message, inReplyTo *Message) (msgBytes
 	if isAdminMessageType(msgType) {
 		toAdminStartedAt := time.Now()
 		s.application.ToAdmin(msg, s.sessionID)
-		s.observeSendStage("to_admin", string(msgType), time.Since(toAdminStartedAt), true)
+		timings = append(timings, s.sendStageEvent("to_admin", string(msgType), time.Since(toAdminStartedAt), true))
 		if bytes.Equal(msgType, msgTypeLogon) {
 			var resetSeqNumFlag FIXBoolean
 			if msg.Body.Has(tagResetSeqNumFlag) {
@@ -395,19 +402,19 @@ func (s *session) prepMessageForSend(msg *Message, inReplyTo *Message) (msgBytes
 	} else {
 		toAppStartedAt := time.Now()
 		if err = s.application.ToApp(msg, s.sessionID); err != nil {
-			s.observeSendStage("to_app", string(msgType), time.Since(toAppStartedAt), false)
+			timings = append(timings, s.sendStageEvent("to_app", string(msgType), time.Since(toAppStartedAt), false))
 			return
 		}
-		s.observeSendStage("to_app", string(msgType), time.Since(toAppStartedAt), true)
+		timings = append(timings, s.sendStageEvent("to_app", string(msgType), time.Since(toAppStartedAt), true))
 	}
 
 	// Message converted to bytes here.
 	buildStartedAt := time.Now()
 	msgBytes = msg.build()
-	s.observeSendStage("build_message", string(msgType), time.Since(buildStartedAt), true)
+	timings = append(timings, s.sendStageEvent("build_message", string(msgType), time.Since(buildStartedAt), true))
 	persistStartedAt := time.Now()
 	err = s.persist(seqNum, msgBytes)
-	s.observeSendStage("persist", string(msgType), time.Since(persistStartedAt), err == nil)
+	timings = append(timings, s.sendStageEvent("persist", string(msgType), time.Since(persistStartedAt), err == nil))
 
 	return
 }
@@ -420,9 +427,9 @@ func (s *session) persist(seqNum int, msgBytes []byte) error {
 	return s.store.IncrNextSenderMsgSeqNum()
 }
 
-func (s *session) sendQueued(blockUntilSent bool) {
+func (s *session) sendQueued(blockUntilSent bool, timings *[]SendStageEvent) {
 	for i, msgBytes := range s.toSend {
-		if !s.sendBytes(msgBytes, blockUntilSent) {
+		if !s.sendBytes(msgBytes, blockUntilSent, timings) {
 			s.toSend = s.toSend[i:]
 			s.notifyMessageOut()
 			return
@@ -438,13 +445,14 @@ func (s *session) dropQueued() {
 
 func (s *session) EnqueueBytesAndSend(msg []byte) {
 	s.sendMutex.Lock()
-	defer s.sendMutex.Unlock()
-
 	s.toSend = append(s.toSend, msg)
-	s.sendQueued(true)
+	sendTimings := make([]SendStageEvent, 0, 1)
+	s.sendQueued(true, &sendTimings)
+	s.sendMutex.Unlock()
+	observeSendStages(sendTimings)
 }
 
-func (s *session) sendBytes(msg []byte, blockUntilSent bool) bool {
+func (s *session) sendBytes(msg []byte, blockUntilSent bool, timings *[]SendStageEvent) bool {
 	if s.messageOut == nil {
 		s.log.OnEventf("Failed to send: disconnected")
 		return false
@@ -453,7 +461,7 @@ func (s *session) sendBytes(msg []byte, blockUntilSent bool) bool {
 	if blockUntilSent {
 		channelStartedAt := time.Now()
 		s.messageOut <- msg
-		s.observeSendStage("outbound_channel_wait", fixMsgTypeFromRaw(msg), time.Since(channelStartedAt), true)
+		*timings = append(*timings, s.sendStageEvent("outbound_channel_wait", fixMsgTypeFromRaw(msg), time.Since(channelStartedAt), true))
 		s.log.OnOutgoing(msg)
 		s.stateTimer.Reset(s.HeartBtInt)
 		return true
@@ -462,24 +470,30 @@ func (s *session) sendBytes(msg []byte, blockUntilSent bool) bool {
 	channelStartedAt := time.Now()
 	select {
 	case s.messageOut <- msg:
-		s.observeSendStage("outbound_channel_wait", fixMsgTypeFromRaw(msg), time.Since(channelStartedAt), true)
+		*timings = append(*timings, s.sendStageEvent("outbound_channel_wait", fixMsgTypeFromRaw(msg), time.Since(channelStartedAt), true))
 		s.log.OnOutgoing(msg)
 		s.stateTimer.Reset(s.HeartBtInt)
 		return true
 	default:
-		s.observeSendStage("outbound_channel_wait", fixMsgTypeFromRaw(msg), time.Since(channelStartedAt), false)
+		*timings = append(*timings, s.sendStageEvent("outbound_channel_wait", fixMsgTypeFromRaw(msg), time.Since(channelStartedAt), false))
 		return false
 	}
 }
 
-func (s *session) observeSendStage(stage, msgType string, duration time.Duration, success bool) {
-	observeSendStage(SendStageEvent{
+func (s *session) sendStageEvent(stage, msgType string, duration time.Duration, success bool) SendStageEvent {
+	return SendStageEvent{
 		SessionID: s.sessionID,
 		MsgType:   msgType,
 		Stage:     stage,
 		Duration:  duration,
 		Success:   success,
-	})
+	}
+}
+
+func observeSendStages(events []SendStageEvent) {
+	for _, event := range events {
+		observeSendStage(event)
+	}
 }
 
 func (s *session) doTargetTooHigh(reject targetTooHigh) (nextState resendState, err error) {
