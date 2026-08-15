@@ -78,6 +78,7 @@ type Group struct{ FieldMap }
 type RepeatingGroup struct {
 	tag      Tag
 	template GroupTemplate
+	ordering tagOrder
 	groups   []*Group
 }
 
@@ -86,6 +87,7 @@ func NewRepeatingGroup(tag Tag, template GroupTemplate) *RepeatingGroup {
 	return &RepeatingGroup{
 		tag:      tag,
 		template: template,
+		ordering: newGroupTagOrder(template),
 	}
 }
 
@@ -96,10 +98,8 @@ func (f RepeatingGroup) Tag() Tag {
 
 // Clone makes a copy of this RepeatingGroup (tag, template).
 func (f RepeatingGroup) Clone() GroupItem {
-	return &RepeatingGroup{
-		tag:      f.tag,
-		template: f.template.Clone(),
-	}
+	template := f.template.Clone()
+	return &RepeatingGroup{tag: f.tag, template: template, ordering: newGroupTagOrder(template)}
 }
 
 // Len returns the number of Groups in this RepeatingGroup.
@@ -124,7 +124,10 @@ func (f *RepeatingGroup) Add() *Group {
 // Write returns tagValues for all Items in the repeating group ordered by
 // Group sequence and Group template order.
 func (f RepeatingGroup) Write() []TagValue {
-	tvs := make([]TagValue, 1)
+	// Generated messages commonly populate most of the declared template.
+	// Reserving that shape avoids repeatedly growing and copying the flattened
+	// wire-field slice; sparse groups merely retain a small amount of capacity.
+	tvs := make([]TagValue, 1, 1+len(f.groups)*len(f.template))
 	tvs[0].init(f.tag, []byte(strconv.Itoa(len(f.groups))))
 
 	for _, group := range f.groups {
@@ -154,8 +157,15 @@ func (f RepeatingGroup) findItemInGroupTemplate(t Tag) (item GroupItem, ok bool)
 }
 
 func (f RepeatingGroup) groupTagOrder() tagOrder {
+	if f.ordering != nil {
+		return f.ordering
+	}
+	return newGroupTagOrder(f.template)
+}
+
+func newGroupTagOrder(template GroupTemplate) tagOrder {
 	tagMap := make(map[Tag]int)
-	for i, f := range f.template {
+	for i, f := range template {
 		tagMap[f.Tag()] = i
 	}
 

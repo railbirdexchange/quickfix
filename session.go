@@ -315,9 +315,9 @@ func (s *session) sendInReplyTo(msg *Message, inReplyTo *Message) error {
 	s.resendMutex.RLock()
 	defer s.resendMutex.RUnlock()
 
-	lockStartedAt := time.Now()
+	lockStartedAt := sendStageStartedAt()
 	s.sendMutex.Lock()
-	s.observeSendStage("send_mutex_wait", "", time.Since(lockStartedAt), true)
+	s.observeSendStageSince("send_mutex_wait", "", lockStartedAt, true)
 	defer s.sendMutex.Unlock()
 
 	msgBytes, err := s.prepMessageForSend(msg, inReplyTo)
@@ -371,9 +371,9 @@ func (s *session) prepMessageForSend(msg *Message, inReplyTo *Message) (msgBytes
 	}
 
 	if isAdminMessageType(msgType) {
-		toAdminStartedAt := time.Now()
+		toAdminStartedAt := sendStageStartedAt()
 		s.application.ToAdmin(msg, s.sessionID)
-		s.observeSendStage("to_admin", string(msgType), time.Since(toAdminStartedAt), true)
+		s.observeSendStageSince("to_admin", string(msgType), toAdminStartedAt, true)
 		if bytes.Equal(msgType, msgTypeLogon) {
 			var resetSeqNumFlag FIXBoolean
 			if msg.Body.Has(tagResetSeqNumFlag) {
@@ -393,21 +393,21 @@ func (s *session) prepMessageForSend(msg *Message, inReplyTo *Message) (msgBytes
 			}
 		}
 	} else {
-		toAppStartedAt := time.Now()
+		toAppStartedAt := sendStageStartedAt()
 		if err = s.application.ToApp(msg, s.sessionID); err != nil {
-			s.observeSendStage("to_app", string(msgType), time.Since(toAppStartedAt), false)
+			s.observeSendStageSince("to_app", string(msgType), toAppStartedAt, false)
 			return
 		}
-		s.observeSendStage("to_app", string(msgType), time.Since(toAppStartedAt), true)
+		s.observeSendStageSince("to_app", string(msgType), toAppStartedAt, true)
 	}
 
 	// Message converted to bytes here.
-	buildStartedAt := time.Now()
+	buildStartedAt := sendStageStartedAt()
 	msgBytes = msg.build()
-	s.observeSendStage("build_message", string(msgType), time.Since(buildStartedAt), true)
-	persistStartedAt := time.Now()
+	s.observeSendStageSince("build_message", string(msgType), buildStartedAt, true)
+	persistStartedAt := sendStageStartedAt()
 	err = s.persist(seqNum, msgBytes)
-	s.observeSendStage("persist", string(msgType), time.Since(persistStartedAt), err == nil)
+	s.observeSendStageSince("persist", string(msgType), persistStartedAt, err == nil)
 
 	return
 }
@@ -451,23 +451,23 @@ func (s *session) sendBytes(msg []byte, blockUntilSent bool) bool {
 	}
 
 	if blockUntilSent {
-		channelStartedAt := time.Now()
+		channelStartedAt := sendStageStartedAt()
 		s.messageOut <- msg
-		s.observeSendStage("outbound_channel_wait", fixMsgTypeFromRaw(msg), time.Since(channelStartedAt), true)
+		s.observeSendStageSince("outbound_channel_wait", fixMsgTypeFromRaw(msg), channelStartedAt, true)
 		s.log.OnOutgoing(msg)
 		s.stateTimer.Reset(s.HeartBtInt)
 		return true
 	}
 
-	channelStartedAt := time.Now()
+	channelStartedAt := sendStageStartedAt()
 	select {
 	case s.messageOut <- msg:
-		s.observeSendStage("outbound_channel_wait", fixMsgTypeFromRaw(msg), time.Since(channelStartedAt), true)
+		s.observeSendStageSince("outbound_channel_wait", fixMsgTypeFromRaw(msg), channelStartedAt, true)
 		s.log.OnOutgoing(msg)
 		s.stateTimer.Reset(s.HeartBtInt)
 		return true
 	default:
-		s.observeSendStage("outbound_channel_wait", fixMsgTypeFromRaw(msg), time.Since(channelStartedAt), false)
+		s.observeSendStageSince("outbound_channel_wait", fixMsgTypeFromRaw(msg), channelStartedAt, false)
 		return false
 	}
 }
@@ -480,6 +480,13 @@ func (s *session) observeSendStage(stage, msgType string, duration time.Duration
 		Duration:  duration,
 		Success:   success,
 	})
+}
+
+func (s *session) observeSendStageSince(stage, msgType string, startedAt time.Time, success bool) {
+	if startedAt.IsZero() {
+		return
+	}
+	s.observeSendStage(stage, msgType, time.Since(startedAt), success)
 }
 
 func (s *session) doTargetTooHigh(reject targetTooHigh) (nextState resendState, err error) {

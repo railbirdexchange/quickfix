@@ -2,7 +2,7 @@ package quickfix
 
 import (
 	"bytes"
-	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -18,26 +18,33 @@ type SendStageEvent struct {
 // SendStageObserver receives synchronous send-stage timing events.
 type SendStageObserver func(SendStageEvent)
 
-var sendStageObserverState struct {
-	sync.RWMutex
+type sendStageObserverHolder struct {
 	observer SendStageObserver
 }
+
+var sendStageObserverState atomic.Pointer[sendStageObserverHolder]
 
 // SetSendStageObserver installs a process-wide observer for FIX send-stage
 // timings. Passing nil disables observation.
 func SetSendStageObserver(observer SendStageObserver) {
-	sendStageObserverState.Lock()
-	defer sendStageObserverState.Unlock()
-	sendStageObserverState.observer = observer
+	if observer == nil {
+		sendStageObserverState.Store(nil)
+		return
+	}
+	sendStageObserverState.Store(&sendStageObserverHolder{observer: observer})
 }
 
 func observeSendStage(event SendStageEvent) {
-	sendStageObserverState.RLock()
-	observer := sendStageObserverState.observer
-	sendStageObserverState.RUnlock()
-	if observer != nil {
-		observer(event)
+	if holder := sendStageObserverState.Load(); holder != nil {
+		holder.observer(event)
 	}
+}
+
+func sendStageStartedAt() time.Time {
+	if sendStageObserverState.Load() == nil {
+		return time.Time{}
+	}
+	return time.Now()
 }
 
 func fixMsgTypeFromRaw(msg []byte) string {

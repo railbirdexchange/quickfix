@@ -27,6 +27,19 @@ func TestSendStageObserver(t *testing.T) {
 	}
 }
 
+func TestSendStageStartedAtSkipsClockWhenObserverDisabled(t *testing.T) {
+	SetSendStageObserver(nil)
+	if !sendStageStartedAt().IsZero() {
+		t.Fatal("disabled send-stage observer unexpectedly read the clock")
+	}
+
+	SetSendStageObserver(func(SendStageEvent) {})
+	t.Cleanup(func() { SetSendStageObserver(nil) })
+	if sendStageStartedAt().IsZero() {
+		t.Fatal("enabled send-stage observer did not read the clock")
+	}
+}
+
 func TestFixMsgTypeFromRaw(t *testing.T) {
 	raw := []byte("8=FIXT.1.1\x019=12\x0135=8\x0149=SENDER\x01")
 	if got := fixMsgTypeFromRaw(raw); got != "8" {

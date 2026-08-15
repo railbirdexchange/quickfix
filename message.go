@@ -387,21 +387,24 @@ func isNumInGroupField(msg *Message, tags []Tag, appDataDictionary *datadictiona
 		mm, ok := appDataDictionary.Messages[msgt]
 		if ok {
 			fields := mm.Fields
+			var nestedFields []*datadictionary.FieldDef
 			for idx, tag := range tags {
-				fd, ok := fields[int(tag)]
+				var fd *datadictionary.FieldDef
+				if idx == 0 {
+					fd, ok = fields[int(tag)]
+				} else {
+					fd, ok = findGroupField(nestedFields, tag)
+				}
 				if ok {
 					if idx == len(tags)-1 {
 						if len(fd.Fields) > 0 {
 							return true
 						}
 					} else {
-						// Map nested fields.
-						newFields := make(map[int]*datadictionary.FieldDef)
-						for _, ff := range fd.Fields {
-							newFields[ff.Tag()] = ff
-						}
-						fields = newFields
+						nestedFields = fd.Fields
 					}
+				} else {
+					return false
 				}
 			}
 		}
@@ -420,26 +423,42 @@ func getGroupFields(msg *Message, tags []Tag, appDataDictionary *datadictionary.
 		mm, ok := appDataDictionary.Messages[msgt]
 		if ok {
 			fields := mm.Fields
+			var nestedFields []*datadictionary.FieldDef
 			for idx, tag := range tags {
-				fd, ok := fields[int(tag)]
+				var fd *datadictionary.FieldDef
+				if idx == 0 {
+					fd, ok = fields[int(tag)]
+				} else {
+					fd, ok = findGroupField(nestedFields, tag)
+				}
 				if ok {
 					if idx == len(tags)-1 {
 						if len(fd.Fields) > 0 {
 							return fd.Fields
 						}
 					} else {
-						// Map nested fields.
-						newFields := make(map[int]*datadictionary.FieldDef)
-						for _, ff := range fd.Fields {
-							newFields[ff.Tag()] = ff
-						}
-						fields = newFields
+						nestedFields = fd.Fields
 					}
+				} else {
+					return nil
 				}
 			}
 		}
 	}
 	return
+}
+
+// findGroupField walks the immutable dictionary slice directly. Rebuilding a
+// temporary tag map at every nested-group lookup used to allocate on the FIX
+// parser hot path; group definitions are small enough that a linear lookup is
+// both cheaper and allocation-free.
+func findGroupField(fields []*datadictionary.FieldDef, tag Tag) (*datadictionary.FieldDef, bool) {
+	for _, field := range fields {
+		if field.Tag() == int(tag) {
+			return field, true
+		}
+	}
+	return nil, false
 }
 
 // isGroupMember evaluates if this tag belongs to a repeating group.
