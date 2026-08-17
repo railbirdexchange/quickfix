@@ -75,6 +75,16 @@ func (f sessionFactory) createSession(
 		return
 	}
 
+	// Close the store on the error path to avoid leaking durable-store resources.
+	// After newSession because that's where session.store is initialized.
+	defer func() {
+		if err != nil && session != nil && session.store != nil {
+			if closeErr := session.store.Close(); closeErr != nil {
+				session.log.OnEventf("Failed to close message store for session %v after createSession error: %v", sessionID, closeErr)
+			}
+		}
+	}()
+
 	if err = registerSession(session); err != nil {
 		return
 	}

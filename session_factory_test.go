@@ -489,6 +489,66 @@ func (s *SessionFactorySuite) TestDuplicateSession() {
 	s.Nil(err)
 }
 
+// closeTrackingStore wraps a MessageStore and records whether Close was called.
+// It lets the RAIL-3056 regression test assert that createSession tears down a
+// store it opened when a later step (duplicate registration) fails.
+type closeTrackingStore struct {
+	MessageStore
+	closed *int
+}
+
+func (s closeTrackingStore) Close() error {
+	*s.closed++
+	return s.MessageStore.Close()
+}
+
+type closeTrackingStoreFactory struct {
+	inner  MessageStoreFactory
+	closed *int
+}
+
+func (f closeTrackingStoreFactory) Create(sessionID SessionID) (MessageStore, error) {
+	store, err := f.inner.Create(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return closeTrackingStore{MessageStore: store, closed: f.closed}, nil
+}
+
+// TestDuplicateSessionClosesStore is the RAIL-3056 regression guard: newSession
+// opens the message store before registerSession runs, so a duplicate SessionID
+// rejection must close the just-opened store or its resources (goroutines,
+// process-wide registrations for durable stores) leak. Confirms createSession
+// closes exactly the store it opened for the rejected attempt, and leaves the
+// surviving session's store open.
+func (s *SessionFactorySuite) TestDuplicateSessionClosesStore() {
+	s.sessionFactory.BuildInitiators = true
+	s.SessionSettings.Set(config.HeartBtInt, "34")
+	s.SessionSettings.Set(config.SocketConnectHost, "127.0.0.1")
+	s.SessionSettings.Set(config.SocketConnectPort, "5000")
+
+	// The session registry is process-global; ensure a clean slate regardless of
+	// what earlier tests in the suite left registered.
+	UnregisterSession(s.SessionID)
+
+	closeCount := 0
+	factory := closeTrackingStoreFactory{inner: s.MessageStoreFactory, closed: &closeCount}
+
+	// First create succeeds and registers the session; its store must stay open.
+	_, err := s.createSession(s.SessionID, factory, s.SessionSettings, s.LogFactory, s.App)
+	s.Nil(err)
+	s.Equal(0, closeCount, "successful createSession must not close its store")
+
+	// Second create builds a new store, then fails at registerSession with a
+	// duplicate SessionID. That just-opened store must be closed on the way out.
+	_, err = s.createSession(s.SessionID, factory, s.SessionSettings, s.LogFactory, s.App)
+	s.NotNil(err)
+	s.Equal("Duplicate SessionID", err.Error())
+	s.Equal(1, closeCount, "duplicate-SessionID createSession must close the store it opened (RAIL-3056)")
+
+	UnregisterSession(s.SessionID)
+}
+
 func (s *SessionFactorySuite) TestNewSessionBuildAcceptors() {
 	s.sessionFactory.BuildInitiators = false
 	s.SessionSettings.Set(config.HeartBtInt, "34")
