@@ -75,13 +75,8 @@ func (f sessionFactory) createSession(
 		return
 	}
 
-	// newSession has already opened the message store, which for durable store
-	// implementations (e.g. a Kafka-backed store) starts background goroutines
-	// and registers process-wide resources. If any subsequent step fails, the
-	// session's run loop never starts, so session.stop() will not tear the store
-	// down. Close the store on the error path to avoid leaking those resources
-	// (RAIL-3056: orphaned stores on rejected dynamic-session logons, e.g.
-	// duplicate SessionID).
+	// Close the store on the error path to avoid leaking durable-store resources.
+	// After newSession because that's where session.store is initialized.
 	defer func() {
 		if err != nil && session != nil && session.store != nil {
 			if closeErr := session.store.Close(); closeErr != nil {
