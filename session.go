@@ -33,11 +33,11 @@ type session struct {
 	log       Log
 	sessionID SessionID
 
-	messageOut chan<- []byte
+	messageOut chan<- outboundMessage
 	messageIn  <-chan fixIn
 
 	// Application messages are queued up for send here.
-	toSend [][]byte
+	toSend []outboundMessage
 
 	// Mutex for access to toSend.
 	sendMutex sync.Mutex
@@ -77,12 +77,12 @@ func (s *session) TargetDefaultApplicationVersionID() string {
 }
 
 type connect struct {
-	messageOut chan<- []byte
+	messageOut chan<- outboundMessage
 	messageIn  <-chan fixIn
 	err        chan<- error
 }
 
-func (s *session) connect(msgIn <-chan fixIn, msgOut chan<- []byte) error {
+func (s *session) connect(msgIn <-chan fixIn, msgOut chan<- outboundMessage) error {
 	rep := make(chan error)
 	s.admin <- connect{
 		messageOut: msgOut,
@@ -91,6 +91,14 @@ func (s *session) connect(msgIn <-chan fixIn, msgOut chan<- []byte) error {
 	}
 
 	return <-rep
+}
+
+// outboundMessage keeps optional write-observation state attached to the exact
+// bytes as they move through the session queue and connection writer.
+type outboundMessage struct {
+	bytes              []byte
+	writeToken         uint64
+	admittedAtUnixNano int64
 }
 
 type stopReq struct{}
@@ -275,6 +283,10 @@ func (s *session) resend(msg *Message) bool {
 
 // queueForSend will validate, persist, and queue the message for send.
 func (s *session) queueForSend(msg *Message) error {
+	return s.queueForSendWithOptions(msg, SendOptions{})
+}
+
+func (s *session) queueForSendWithOptions(msg *Message, options SendOptions) error {
 	// resendMutex must always be locked before sendMutex to prevent a potential deadlock.
 	// Makes sure that live traffic cannot interleave with replayed messages while processing a ResendRequest.
 	s.resendMutex.RLock()
@@ -288,7 +300,12 @@ func (s *session) queueForSend(msg *Message) error {
 		return err
 	}
 
-	s.toSend = append(s.toSend, msgBytes)
+	outbound := outboundMessage{bytes: msgBytes}
+	if options.WriteToken != 0 {
+		outbound.writeToken = options.WriteToken
+		outbound.admittedAtUnixNano = time.Now().UnixNano()
+	}
+	s.toSend = append(s.toSend, outbound)
 
 	s.notifyMessageOut()
 
@@ -325,7 +342,7 @@ func (s *session) sendInReplyTo(msg *Message, inReplyTo *Message) error {
 		return err
 	}
 
-	s.toSend = append(s.toSend, msgBytes)
+	s.toSend = append(s.toSend, outboundMessage{bytes: msgBytes})
 	s.sendQueued(true)
 
 	return nil
@@ -354,7 +371,7 @@ func (s *session) dropAndSendInReplyTo(msg *Message, inReplyTo *Message) error {
 	}
 
 	s.dropQueued()
-	s.toSend = append(s.toSend, msgBytes)
+	s.toSend = append(s.toSend, outboundMessage{bytes: msgBytes})
 	s.sendQueued(true)
 
 	return nil
@@ -421,8 +438,8 @@ func (s *session) persist(seqNum int, msgBytes []byte) error {
 }
 
 func (s *session) sendQueued(blockUntilSent bool) {
-	for i, msgBytes := range s.toSend {
-		if !s.sendBytes(msgBytes, blockUntilSent) {
+	for i, msg := range s.toSend {
+		if !s.sendBytes(msg, blockUntilSent) {
 			s.toSend = s.toSend[i:]
 			s.notifyMessageOut()
 			return
@@ -440,11 +457,11 @@ func (s *session) EnqueueBytesAndSend(msg []byte) {
 	s.sendMutex.Lock()
 	defer s.sendMutex.Unlock()
 
-	s.toSend = append(s.toSend, msg)
+	s.toSend = append(s.toSend, outboundMessage{bytes: msg})
 	s.sendQueued(true)
 }
 
-func (s *session) sendBytes(msg []byte, blockUntilSent bool) bool {
+func (s *session) sendBytes(msg outboundMessage, blockUntilSent bool) bool {
 	if s.messageOut == nil {
 		s.log.OnEventf("Failed to send: disconnected")
 		return false
@@ -453,8 +470,8 @@ func (s *session) sendBytes(msg []byte, blockUntilSent bool) bool {
 	if blockUntilSent {
 		channelStartedAt := time.Now()
 		s.messageOut <- msg
-		s.observeSendStage("outbound_channel_wait", fixMsgTypeFromRaw(msg), time.Since(channelStartedAt), true)
-		s.log.OnOutgoing(msg)
+		s.observeSendStage("outbound_channel_wait", fixMsgTypeFromRaw(msg.bytes), time.Since(channelStartedAt), true)
+		s.log.OnOutgoing(msg.bytes)
 		s.stateTimer.Reset(s.HeartBtInt)
 		return true
 	}
@@ -462,12 +479,12 @@ func (s *session) sendBytes(msg []byte, blockUntilSent bool) bool {
 	channelStartedAt := time.Now()
 	select {
 	case s.messageOut <- msg:
-		s.observeSendStage("outbound_channel_wait", fixMsgTypeFromRaw(msg), time.Since(channelStartedAt), true)
-		s.log.OnOutgoing(msg)
+		s.observeSendStage("outbound_channel_wait", fixMsgTypeFromRaw(msg.bytes), time.Since(channelStartedAt), true)
+		s.log.OnOutgoing(msg.bytes)
 		s.stateTimer.Reset(s.HeartBtInt)
 		return true
 	default:
-		s.observeSendStage("outbound_channel_wait", fixMsgTypeFromRaw(msg), time.Since(channelStartedAt), false)
+		s.observeSendStage("outbound_channel_wait", fixMsgTypeFromRaw(msg.bytes), time.Since(channelStartedAt), false)
 		return false
 	}
 }

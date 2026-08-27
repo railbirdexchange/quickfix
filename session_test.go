@@ -79,6 +79,18 @@ func (s *SessionSuite) TestFillDefaultHeader() {
 	s.FieldEquals(tagSenderLocationID, "SNDL", msg.Header)
 }
 
+func (s *SessionSuite) TestQueueForSendWithOptionsCarriesWriteTokenWithBytes() {
+	s.MockApp.On("ToApp").Return(nil)
+	const token = uint64(42)
+
+	s.Require().NoError(s.session.queueForSendWithOptions(s.NewOrderSingle(), SendOptions{WriteToken: token}))
+	s.Require().Len(s.session.toSend, 1)
+	outbound := s.session.toSend[0]
+	s.Equal(token, outbound.writeToken)
+	s.NotZero(outbound.admittedAtUnixNano)
+	s.Contains(string(outbound.bytes), "\x0135=D\x01")
+}
+
 func (s *SessionSuite) TestInsertSendingTime() {
 	var tests = []struct {
 		BeginString       string

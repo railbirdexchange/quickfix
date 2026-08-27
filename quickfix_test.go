@@ -180,18 +180,19 @@ func (m *MessageFactory) SequenceReset(seqNo int) *Message {
 }
 
 type MockSessionReceiver struct {
-	sendChannel chan []byte
+	sendChannel chan outboundMessage
 }
 
 func newMockSessionReceiver() MockSessionReceiver {
 	return MockSessionReceiver{
-		sendChannel: make(chan []byte, 10),
+		sendChannel: make(chan outboundMessage, 10),
 	}
 }
 
 func (p *MockSessionReceiver) LastMessage() (msg []byte, ok bool) {
 	select {
-	case msg, ok = <-p.sendChannel:
+	case outbound, channelOK := <-p.sendChannel:
+		msg, ok = outbound.bytes, channelOK
 	default:
 		ok = true
 	}

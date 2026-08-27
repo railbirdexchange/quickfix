@@ -53,15 +53,30 @@ func Send(m Messagable) (err error) {
 	return SendToTarget(msg, sessionID)
 }
 
+// SendOptions controls optional behavior for a message submitted to a FIX
+// session. WriteToken is opaque to QuickFIX. When non-zero, it is carried with
+// the exact outbound bytes and returned in a WriteCompletionEvent after the
+// connection write finishes.
+type SendOptions struct {
+	WriteToken uint64
+}
+
 // SendToTarget sends a message based on the sessionID. Convenient for use in FromApp since it provides a session ID for incoming messages.
 func SendToTarget(m Messagable, sessionID SessionID) error {
+	return SendToTargetWithOptions(m, sessionID, SendOptions{})
+}
+
+// SendToTargetWithOptions sends a message and applies optional per-message
+// behavior while preserving the ordering and persistence semantics of
+// SendToTarget.
+func SendToTargetWithOptions(m Messagable, sessionID SessionID, options SendOptions) error {
 	msg := m.ToMessage()
 	session, ok := lookupSession(sessionID)
 	if !ok {
 		return errUnknownSession
 	}
 
-	return session.queueForSend(msg)
+	return session.queueForSendWithOptions(msg, options)
 }
 
 // ResetSession resets session's sequence numbers.

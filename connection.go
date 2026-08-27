@@ -15,16 +15,39 @@
 
 package quickfix
 
-import "io"
+import (
+	"io"
+	"time"
+)
 
-func writeLoop(connection io.Writer, messageOut chan []byte, log Log) {
+func writeLoop(connection io.Writer, messageOut chan outboundMessage, log Log, sessionID SessionID) {
 	for {
 		msg, ok := <-messageOut
 		if !ok {
 			return
 		}
 
-		if _, err := connection.Write(msg); err != nil {
+		var writeStartedAt time.Time
+		if msg.writeToken != 0 {
+			writeStartedAt = time.Now()
+		}
+		written, err := connection.Write(msg.bytes)
+		if err == nil && written != len(msg.bytes) {
+			err = io.ErrShortWrite
+		}
+		if msg.writeToken != 0 {
+			observeWriteCompletion(WriteCompletionEvent{
+				SessionID:   sessionID,
+				MsgType:     fixMsgTypeFromRaw(msg.bytes),
+				Token:       msg.writeToken,
+				AdmittedAt:  time.Unix(0, msg.admittedAtUnixNano),
+				WriteStart:  writeStartedAt,
+				CompletedAt: time.Now(),
+				Bytes:       written,
+				Err:         err,
+			})
+		}
+		if err != nil {
 			log.OnEvent(err.Error())
 		}
 	}

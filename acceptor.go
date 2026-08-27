@@ -365,7 +365,7 @@ func (a *Acceptor) handleConnection(netConn net.Conn) {
 		return
 	}
 	msgIn := make(chan fixIn, session.InChanCapacity)
-	msgOut := make(chan []byte, outboundBufferSize)
+	msgOut := make(chan outboundMessage, outboundBufferSize)
 
 	if err := session.connect(msgIn, msgOut); err != nil {
 		a.globalLog.OnEventf("Unable to accept session %v connection: %v", sessID, err.Error())
@@ -377,7 +377,7 @@ func (a *Acceptor) handleConnection(netConn net.Conn) {
 		readLoop(parser, msgIn, a.globalLog)
 	}()
 
-	writeLoop(netConn, msgOut, a.globalLog)
+	writeLoop(netConn, msgOut, a.globalLog, sessID)
 }
 
 func (a *Acceptor) socketOutboundBufferSize(sessionID SessionID) (int, error) {
