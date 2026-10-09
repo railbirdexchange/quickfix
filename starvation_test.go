@@ -41,7 +41,10 @@ func (a *starvationApp) ToAdmin(*Message, SessionID) {}
 func (a *starvationApp) ToApp(*Message, SessionID) error {
 	if a.toAppCost > 0 {
 		started := time.Now()
-		for time.Since(started) < a.toAppCost {
+		for {
+			if time.Since(started) >= a.toAppCost {
+				break
+			}
 		}
 	}
 	return nil
