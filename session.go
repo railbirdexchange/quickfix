@@ -280,8 +280,14 @@ func (s *session) queueForSend(msg *Message) error {
 	s.resendMutex.RLock()
 	defer s.resendMutex.RUnlock()
 
+	lockStartedAt := time.Now()
 	s.sendMutex.Lock()
-	defer s.sendMutex.Unlock()
+	lockedAt := time.Now()
+	s.observeSendStage("queue_send_lock_wait", "", lockedAt.Sub(lockStartedAt), true)
+	defer func() {
+		s.observeSendStage("queue_send_lock_hold", "", time.Since(lockedAt), true)
+		s.sendMutex.Unlock()
+	}()
 
 	msgBytes, err := s.prepMessageForSend(msg, nil)
 	if err != nil {
@@ -408,6 +414,11 @@ func (s *session) prepMessageForSend(msg *Message, inReplyTo *Message) (msgBytes
 	persistStartedAt := time.Now()
 	err = s.persist(seqNum, msgBytes)
 	s.observeSendStage("persist", string(msgType), time.Since(persistStartedAt), err == nil)
+	if err == nil {
+		if observer, ok := s.application.(BuiltMessageObserver); ok {
+			observer.OnMessageBuilt(s.sessionID, msg, msgBytes)
+		}
+	}
 
 	return
 }
@@ -470,6 +481,14 @@ func (s *session) sendBytes(msg []byte, blockUntilSent bool) bool {
 		s.observeSendStage("outbound_channel_wait", fixMsgTypeFromRaw(msg), time.Since(channelStartedAt), false)
 		return false
 	}
+}
+
+func (s *session) observeQueueDepth() {
+	observeQueueDepth(QueueDepthEvent{
+		SessionID: s.sessionID,
+		ToSend:    len(s.toSend),
+		MessageIn: len(s.messageIn),
+	})
 }
 
 func (s *session) observeSendStage(stage, msgType string, duration time.Duration, success bool) {
