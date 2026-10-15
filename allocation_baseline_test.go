@@ -58,12 +58,43 @@ func TestAllocationBaselineFixtures(t *testing.T) {
 }
 
 func BenchmarkAllocationBaseline(b *testing.B) {
+	b.Run("decimal", benchmarkAllocationBaselineDecimalRead)
 	b.Run("parse/reused_message_without_dictionary", benchmarkAllocationBaselineParseWithoutDictionary)
 	b.Run("parse/reused_message_with_dictionary", benchmarkAllocationBaselineParse)
 	b.Run("parse/reused_message_with_repeating_group", benchmarkAllocationBaselineParseRepeatingGroup)
 	b.Run("validate/valid_new_order_single", benchmarkAllocationBaselineValidate)
 	b.Run("build/new_order_single", benchmarkAllocationBaselineBuild)
 	b.Run("frame/read_steady_state", benchmarkAllocationBaselineReadFrame)
+}
+
+func benchmarkAllocationBaselineDecimalRead(b *testing.B) {
+	for _, fixture := range []struct {
+		name  string
+		value string
+	}{
+		{name: "read_short", value: "-124.3456"},
+		{name: "read_signed_fraction", value: "-1234567890123456789.1234567890123456789"},
+		{name: "read_max_uint128", value: "340282366920938463463374607431768211455"},
+		// Arbitrary-precision overflow remains outside the zero-allocation guarantee.
+		{name: "read_overflow", value: "340282366920938463463374607431768211456"},
+	} {
+		b.Run(fixture.name, func(b *testing.B) {
+			input := []byte(fixture.value)
+			var field FIXUDecimal
+			if err := field.Read(input); err != nil {
+				b.Fatal(err)
+			}
+
+			b.ReportAllocs()
+			b.SetBytes(int64(len(input)))
+			b.ResetTimer()
+			for iteration := 0; iteration < b.N; iteration++ {
+				if err := field.Read(input); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
 }
 
 func benchmarkAllocationBaselineParseWithoutDictionary(b *testing.B) {
