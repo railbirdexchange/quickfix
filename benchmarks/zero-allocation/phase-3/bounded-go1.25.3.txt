@@ -1,0 +1,11 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+cpu: Apple M4 Pro
+BenchmarkBoundedParsing 	  619633	      1932 ns/op	 120.62 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedParsing 	  617422	      1934 ns/op	 120.50 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedParsing 	  598432	      1931 ns/op	 120.68 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedParsing 	  631410	      1947 ns/op	 119.68 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedParsing 	  610694	      1939 ns/op	 120.15 MB/s	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/quickfixgo/quickfix	7.421s

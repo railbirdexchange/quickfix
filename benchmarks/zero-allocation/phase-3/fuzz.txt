@@ -1,0 +1,10 @@
+fuzz: elapsed: 0s, gathering baseline coverage: 0/5 completed
+fuzz: elapsed: 0s, gathering baseline coverage: 5/5 completed, now fuzzing with 1 workers
+fuzz: elapsed: 3s, execs: 47291 (15763/sec), new interesting: 16 (total: 21)
+fuzz: elapsed: 6s, execs: 102024 (18238/sec), new interesting: 18 (total: 23)
+fuzz: elapsed: 9s, execs: 168813 (22270/sec), new interesting: 19 (total: 24)
+fuzz: elapsed: 12s, execs: 210100 (13758/sec), new interesting: 22 (total: 27)
+fuzz: elapsed: 15s, execs: 287976 (25962/sec), new interesting: 24 (total: 29)
+fuzz: elapsed: 16s, execs: 287976 (0/sec), new interesting: 24 (total: 29)
+PASS
+ok  	github.com/quickfixgo/quickfix	16.641s
