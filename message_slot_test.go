@@ -291,6 +291,48 @@ func TestMessageSlotMalformedGroupCounts(t *testing.T) {
 	}
 }
 
+func TestMessageSlotFIXTAdminGroupUsesTransportDictionary(t *testing.T) {
+	transport, err := datadictionary.Parse("spec/FIXT11.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	application, err := datadictionary.Parse("spec/FIX50SP2.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wire := buildFIXT11Wire("35=A\x0134=1\x0149=S\x0156=T\x0152=20231231-20:19:41\x01", "98=0\x01108=30\x011137=9\x01384=2\x01372=D\x01385=R\x01372=F\x01385=R\x01")
+	for _, app := range []*datadictionary.DataDictionary{application, nil} {
+		slot, err := NewMessageSlot(transport, app, ParseLimits{4096, 64, 2, 1})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := slot.Parse(wire); err != nil {
+			t.Fatal(err)
+		}
+		if reject := NewValidator(defaultValidatorSettings, application, transport).Validate(slot.Message()); reject != nil {
+			t.Fatal(reject)
+		}
+		group, err := slot.Group(384)
+		if err != nil || group.Len() != 2 {
+			t.Fatalf("transport group: %d, %v", group.Len(), err)
+		}
+		iterator := group.Iter()
+		for _, want := range []string{"D", "F"} {
+			entry, ok := iterator.Next()
+			if !ok {
+				t.Fatal("missing admin group entry")
+			}
+			if value, ok := entry.GetBytes(372); !ok || string(value) != want {
+				t.Fatalf("admin group entry: %q", value)
+			}
+		}
+		slot.limits.MaxGroupEntries = 1
+		if err := slot.Parse(wire); err != ErrGroupCapacity {
+			t.Fatalf("admin group bound: %v", err)
+		}
+	}
+}
+
 func BenchmarkBoundedParsing(b *testing.B) {
 	dict, err := datadictionary.Parse("spec/FIX44.xml")
 	if err != nil {

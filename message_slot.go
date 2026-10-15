@@ -105,14 +105,18 @@ func (slot *MessageSlot) Message() *Message {
 // mutable Group objects or clone generated templates. Validate the message
 // before invoking application handlers, as with the legacy API.
 func (slot *MessageSlot) Group(tag Tag) (BorrowedGroup, error) {
-	if !slot.valid || slot.appDictionary == nil {
+	if !slot.valid {
 		return BorrowedGroup{}, ErrBorrowedGroupNotFound
 	}
 	typeField, found := slot.message.Header.lookup(tagMsgType)
 	if !found || len(typeField) == 0 {
 		return BorrowedGroup{}, ErrBorrowedGroupNotFound
 	}
-	definition := slot.appDictionary.Messages[string(typeField[0].value)]
+	dictionary := boundedMessageDictionary(slot.transportDictionary, slot.appDictionary, typeField[0].value)
+	if dictionary == nil {
+		return BorrowedGroup{}, ErrBorrowedGroupNotFound
+	}
+	definition := dictionary.Messages[string(typeField[0].value)]
 	if definition == nil {
 		return BorrowedGroup{}, ErrBorrowedGroupNotFound
 	}
@@ -121,6 +125,13 @@ func (slot *MessageSlot) Group(tag Tag) (BorrowedGroup, error) {
 		return BorrowedGroup{}, ErrBorrowedGroupNotFound
 	}
 	return newBorrowedGroup(values, definition.Fields[int(tag)])
+}
+
+func boundedMessageDictionary(transport, application *datadictionary.DataDictionary, msgType []byte) *datadictionary.DataDictionary {
+	if transport != nil && isAdminMessageType(msgType) {
+		return transport
+	}
+	return application
 }
 
 // boundedUnsigned scans a nonnegative decimal without overflowing or allocating.

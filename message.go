@@ -246,9 +246,13 @@ func doParsing(mp *msgParser) (err error) {
 	mp.msg.Header.add(mp.msg.fields[mp.fieldIndex : mp.fieldIndex+1])
 
 	// Start parsing.
-	if mp.appDataDictionary != nil {
+	dictionary := mp.appDataDictionary
+	if mp.limits != nil {
+		dictionary = boundedMessageDictionary(mp.transportDataDictionary, dictionary, mp.parsedFieldBytes.value)
+	}
+	if dictionary != nil {
 		// A transient byte-to-string map key does not copy the frame's bytes.
-		mp.messageDef = mp.appDataDictionary.Messages[string(mp.parsedFieldBytes.value)]
+		mp.messageDef = dictionary.Messages[string(mp.parsedFieldBytes.value)]
 	}
 	mp.msg.bodyBytes = mp.rawBytes
 	mp.fieldIndex++

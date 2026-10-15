@@ -1,10 +1,10 @@
-fuzz: elapsed: 0s, gathering baseline coverage: 0/29 completed
-fuzz: elapsed: 0s, gathering baseline coverage: 29/29 completed, now fuzzing with 1 workers
-fuzz: elapsed: 3s, execs: 38545 (12844/sec), new interesting: 4 (total: 33)
-fuzz: elapsed: 6s, execs: 81617 (14357/sec), new interesting: 6 (total: 35)
-fuzz: elapsed: 9s, execs: 151878 (23425/sec), new interesting: 8 (total: 37)
-fuzz: elapsed: 12s, execs: 195452 (14522/sec), new interesting: 10 (total: 39)
-fuzz: elapsed: 15s, execs: 245797 (16783/sec), new interesting: 11 (total: 40)
-fuzz: elapsed: 15s, execs: 245797 (0/sec), new interesting: 11 (total: 40)
+fuzz: elapsed: 0s, gathering baseline coverage: 0/40 completed
+fuzz: elapsed: 0s, gathering baseline coverage: 40/40 completed, now fuzzing with 1 workers
+fuzz: elapsed: 3s, execs: 39750 (13245/sec), new interesting: 2 (total: 42)
+fuzz: elapsed: 6s, execs: 76087 (12112/sec), new interesting: 3 (total: 43)
+fuzz: elapsed: 9s, execs: 135558 (19826/sec), new interesting: 3 (total: 43)
+fuzz: elapsed: 12s, execs: 180675 (15037/sec), new interesting: 3 (total: 43)
+fuzz: elapsed: 15s, execs: 252328 (23886/sec), new interesting: 4 (total: 44)
+fuzz: elapsed: 15s, execs: 252328 (0/sec), new interesting: 4 (total: 44)
 PASS
-ok  	github.com/quickfixgo/quickfix	16.921s
+ok  	github.com/quickfixgo/quickfix	16.773s

@@ -35,6 +35,8 @@ levels. All are explicit constructor parameters. Capacity errors are static;
 the parser never grows fixed storage or changes session sequence/store state.
 Header and trailer groups use transport-dictionary definitions and share the
 same entry/depth budget. XMLData delimiter bytes do not consume field slots.
+FIXT admin-message body groups also use the transport dictionary, including
+when no application dictionary is configured.
 Malformed group-count syntax still reaches dictionary validation, preserving its
 FIX reject reason and field tag; numeric counts beyond the capacity return the
 explicit capacity error. Both declared counts and actual delimiters are bounded.
@@ -87,7 +89,7 @@ tag sets and borrowed nested-group traversal, including malformed group counts.
 
 Fixtures cover exact wire rebuilding, multiple/nested/sibling groups, dictionary
 validation of the parsed NewOrderSingle, original resend body boundaries,
-header/trailer groups, embedded XML delimiters, capacity boundaries, empty and
+header/trailer and FIXT admin groups, embedded XML delimiters, capacity boundaries, empty and
 overflowing group counts, missing checksum, truncation, failed-parse reuse,
 borrowed view lifetimes, fixed-map value copies and tag churn.
 
@@ -101,7 +103,7 @@ GOTOOLCHAIN=auto rtk proxy go test . -run '^$' -fuzz '^FuzzMessageSlotParse$' -f
 Evidence: [package tests](tests-go1.23.12.txt), [race run](race.txt), and
 [malformed-input fuzzing](fuzz.txt). Performance and race measurement run
 separately. All passed; Go 1.23.12 vet exited zero with no diagnostics. Fuzzing
-completed 245,797 executions on the final source without a failure. Independent reviews found count
+completed 252,328 executions on the final source without a failure. Independent reviews found count
 overflow, header/trailer limit and accessor/capacity edge cases; each was fixed
 and covered by regression fixtures before the final verification.
 
