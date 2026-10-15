@@ -324,6 +324,77 @@ func (s *InSessionTestSuite) TestFIXMsgInResendRequestAllAdminThenApp() {
 	s.State(inSession{})
 }
 
+func builtAppMessages(built [][]byte) [][]byte {
+	var app [][]byte
+	for _, raw := range built {
+		msg := NewMessage()
+		if ParseMessage(msg, bytes.NewBuffer(raw)) != nil {
+			continue
+		}
+		if msgType, err := msg.Header.GetBytes(tagMsgType); err == nil && !isAdminMessageType(msgType) {
+			app = append(app, raw)
+		}
+	}
+	return app
+}
+
+func (s *InSessionTestSuite) TestFIXMsgInResendRequestReportsReplayedAppBytesToBuiltMessageObserver() {
+	app := &builtObservingApp{MockApp: &s.MockApp}
+	s.session.application = app
+
+	s.MockApp.On("ToAdmin")
+	s.session.Timeout(s.session, internal.NeedHeartbeat)
+	s.LastToAdminMessageSent()
+
+	s.MockApp.On("ToApp").Return(nil)
+	s.Require().Nil(s.session.send(s.NewOrderSingle()))
+	s.LastToAppMessageSent()
+	s.Require().Len(builtAppMessages(app.built), 1)
+
+	s.MockApp.On("FromAdmin").Return(nil)
+	s.fixMsgIn(s.session, s.ResendRequest(1))
+
+	var sent [][]byte
+	for {
+		raw, ok := s.Receiver.LastMessage()
+		if !ok || raw == nil {
+			break
+		}
+		sent = append(sent, raw)
+	}
+	sentApp := builtAppMessages(sent)
+	s.Require().NotEmpty(sentApp)
+	appBuilt := builtAppMessages(app.built)
+	s.Require().Len(appBuilt, 2)
+	s.Equal(sentApp[len(sentApp)-1], appBuilt[1])
+	for _, sessionID := range app.sessionIDs {
+		s.Equal(s.sessionID, sessionID)
+	}
+
+	msg := NewMessage()
+	s.Require().Nil(ParseMessage(msg, bytes.NewBuffer(appBuilt[1])))
+	s.MessageType("D", msg)
+	s.FieldEquals(tagMsgSeqNum, 2, msg.Header)
+	s.FieldEquals(tagPossDupFlag, true, msg.Header)
+}
+
+func (s *InSessionTestSuite) TestFIXMsgInResendRequestDoesNotReportSkippedAppMessagesToBuiltMessageObserver() {
+	app := &builtObservingApp{MockApp: &s.MockApp}
+	s.session.application = app
+
+	s.MockApp.On("ToApp").Return(nil).Once()
+	s.Require().Nil(s.session.send(s.NewOrderSingle()))
+	s.LastToAppMessageSent()
+	s.Require().Len(builtAppMessages(app.built), 1)
+
+	s.MockApp.On("FromAdmin").Return(nil)
+	s.MockApp.On("ToAdmin")
+	s.MockApp.On("ToApp").Return(ErrDoNotSend)
+	s.fixMsgIn(s.session, s.ResendRequest(1))
+
+	s.Len(builtAppMessages(app.built), 1)
+}
+
 func (s *InSessionTestSuite) TestFIXMsgInResendRequestReplaysFIXT11NewOrderWithPartiesOnValidWire() {
 	origHeader := "35=D34=149=RAILBIRD52=20260514-18:10:00.00056=2ace818c-d763-42c3-aa4d-db785604882a"
 	origBody := "1=82e8fb5b-1f9d-420e-bf3d-6c3adfb0545911=51785122-c081-45bf-bfdc-a8f54c12c4e021=138=1040=244=0.5054=155=CL60=20260514-18:10:00.000453=2448=82e8fb5b-1f9d-420e-bf3d-6c3adfb05459447=D452=24448=sub-order-firm-2447=D452=3528=I"

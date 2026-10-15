@@ -1326,3 +1326,78 @@ func (s *SessionSuite) TestSeqNumResetTime_NanoSeconds() {
 	s.NextSenderMsgSeqNum(2)
 	s.NextTargetMsgSeqNum(1)
 }
+
+type builtObservingApp struct {
+	*MockApp
+	sessionIDs []SessionID
+	built      [][]byte
+}
+
+func (a *builtObservingApp) OnMessageBuilt(sessionID SessionID, _ *Message, raw []byte) {
+	a.sessionIDs = append(a.sessionIDs, sessionID)
+	a.built = append(a.built, append([]byte(nil), raw...))
+}
+
+func (suite *SessionSendTestSuite) TestQueueForSendReportsSendLockWaitAndHold() {
+	var stages []string
+	SetSendStageObserver(func(event SendStageEvent) {
+		stages = append(stages, event.Stage)
+	})
+	defer SetSendStageObserver(nil)
+
+	suite.MockApp.On("ToApp").Return(nil)
+	require.Nil(suite.T(), suite.queueForSend(suite.NewOrderSingle()))
+
+	suite.Contains(stages, "queue_send_lock_wait")
+	suite.Contains(stages, "queue_send_lock_hold")
+	suite.Equal("queue_send_lock_hold", stages[len(stages)-1])
+}
+
+func (suite *SessionSendTestSuite) TestSendAppMessagesReportsLoopLockWaitAndQueueDepth() {
+	var stages []string
+	var depths []QueueDepthEvent
+	SetSendStageObserver(func(event SendStageEvent) {
+		stages = append(stages, event.Stage)
+	})
+	SetQueueDepthObserver(func(event QueueDepthEvent) {
+		depths = append(depths, event)
+	})
+	defer SetSendStageObserver(nil)
+	defer SetQueueDepthObserver(nil)
+
+	suite.MockApp.On("ToApp").Return(nil)
+	require.Nil(suite.T(), suite.queueForSend(suite.NewOrderSingle()))
+	require.Nil(suite.T(), suite.queueForSend(suite.NewOrderSingle()))
+	suite.session.SendAppMessages(suite.session)
+
+	suite.Contains(stages, "loop_send_lock_wait")
+	suite.Require().Len(depths, 1)
+	suite.Equal(suite.sessionID, depths[0].SessionID)
+	suite.Equal(2, depths[0].ToSend)
+	suite.NoMessageQueued()
+}
+
+func (suite *SessionSendTestSuite) TestBuiltMessageObserverReceivesTheBytesThatAreSent() {
+	app := &builtObservingApp{MockApp: &suite.MockApp}
+	suite.session.application = app
+
+	suite.MockApp.On("ToApp").Return(nil)
+	require.Nil(suite.T(), suite.queueForSend(suite.NewOrderSingle()))
+	suite.session.SendAppMessages(suite.session)
+
+	sent, ok := suite.Receiver.LastMessage()
+	suite.Require().True(ok)
+	suite.Require().Len(app.built, 1)
+	suite.Equal(sent, app.built[0])
+	suite.Equal([]SessionID{suite.sessionID}, app.sessionIDs)
+}
+
+func (suite *SessionSendTestSuite) TestBuiltMessageObserverIsNotCalledWhenToAppRefusesTheMessage() {
+	app := &builtObservingApp{MockApp: &suite.MockApp}
+	suite.session.application = app
+
+	suite.MockApp.On("ToApp").Return(ErrDoNotSend)
+	suite.Equal(ErrDoNotSend, suite.queueForSend(suite.NewOrderSingle()))
+
+	suite.Empty(app.built)
+}

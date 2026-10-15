@@ -40,6 +40,38 @@ func observeSendStage(event SendStageEvent) {
 	}
 }
 
+type BuiltMessageObserver interface {
+	OnMessageBuilt(sessionID SessionID, msg *Message, raw []byte)
+}
+
+type QueueDepthEvent struct {
+	SessionID SessionID
+	ToSend    int
+	MessageIn int
+}
+
+type QueueDepthObserver func(QueueDepthEvent)
+
+var queueDepthObserverState struct {
+	sync.RWMutex
+	observer QueueDepthObserver
+}
+
+func SetQueueDepthObserver(observer QueueDepthObserver) {
+	queueDepthObserverState.Lock()
+	defer queueDepthObserverState.Unlock()
+	queueDepthObserverState.observer = observer
+}
+
+func observeQueueDepth(event QueueDepthEvent) {
+	queueDepthObserverState.RLock()
+	observer := queueDepthObserverState.observer
+	queueDepthObserverState.RUnlock()
+	if observer != nil {
+		observer(event)
+	}
+}
+
 func fixMsgTypeFromRaw(msg []byte) string {
 	if bytes.HasPrefix(msg, []byte("35=")) {
 		return rawTagValue(msg[3:])
