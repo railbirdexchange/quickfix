@@ -367,6 +367,10 @@ func (a *Acceptor) handleConnection(netConn net.Conn) {
 	msgIn := make(chan fixIn, session.InChanCapacity)
 	msgOut := make(chan []byte, outboundBufferSize)
 	var readerControl *boundedReadConnection
+	var writerControl *boundedWriteConnection
+	if session.boundedOut != nil {
+		writerControl = newBoundedWriteConnection(netConn, session.boundedOut)
+	}
 	if session.boundedIn != nil {
 		readerControl, err = startBoundedRead(netConn, parser, session.boundedIn, msgIn, msgBytes.Bytes(), parser.lastRead)
 		if err != nil {
@@ -375,7 +379,7 @@ func (a *Acceptor) handleConnection(netConn net.Conn) {
 		}
 	}
 
-	if err := session.connectWithReader(msgIn, msgOut, readerControl); err != nil {
+	if err := session.connectWithIO(msgIn, msgOut, readerControl, writerControl); err != nil {
 		if readerControl != nil {
 			readerControl.stopAndDrain(msgIn)
 		}
@@ -390,7 +394,11 @@ func (a *Acceptor) handleConnection(netConn net.Conn) {
 		}()
 	}
 
-	writeLoop(netConn, msgOut, a.globalLog)
+	if writerControl != nil {
+		writerControl.run()
+	} else {
+		writeLoop(netConn, msgOut, a.globalLog)
+	}
 }
 
 func (a *Acceptor) socketOutboundBufferSize(sessionID SessionID) (int, error) {

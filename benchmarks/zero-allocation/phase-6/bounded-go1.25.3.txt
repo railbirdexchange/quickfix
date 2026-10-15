@@ -1,0 +1,31 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+cpu: Apple M4 Pro
+BenchmarkBoundedOutboundOwnership 	   90232	     11672 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBoundedOutboundOwnership 	  104017	     11602 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBoundedOutboundOwnership 	  101018	     11543 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBoundedOutboundOwnership 	  108434	     11508 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBoundedOutboundOwnership 	  107430	     11544 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBoundedBuild/legacy_existing_message_baseline         	 1552905	       764.5 ns/op	 134.72 MB/s	     152 B/op	       6 allocs/op
+BenchmarkBoundedBuild/legacy_existing_message_baseline         	 1561086	       767.5 ns/op	 134.19 MB/s	     152 B/op	       6 allocs/op
+BenchmarkBoundedBuild/legacy_existing_message_baseline         	 1565902	       760.4 ns/op	 135.45 MB/s	     152 B/op	       6 allocs/op
+BenchmarkBoundedBuild/legacy_existing_message_baseline         	 1599349	       729.2 ns/op	 141.26 MB/s	     152 B/op	       6 allocs/op
+BenchmarkBoundedBuild/legacy_existing_message_baseline         	 1612150	       764.3 ns/op	 134.77 MB/s	     152 B/op	       6 allocs/op
+BenchmarkBoundedBuild/legacy_repopulate_and_append             	 1210426	       963.5 ns/op	 106.91 MB/s	     376 B/op	      34 allocs/op
+BenchmarkBoundedBuild/legacy_repopulate_and_append             	 1219306	       988.7 ns/op	 104.18 MB/s	     376 B/op	      34 allocs/op
+BenchmarkBoundedBuild/legacy_repopulate_and_append             	 1000000	      1001 ns/op	 102.85 MB/s	     376 B/op	      34 allocs/op
+BenchmarkBoundedBuild/legacy_repopulate_and_append             	 1000000	      1002 ns/op	 102.83 MB/s	     376 B/op	      34 allocs/op
+BenchmarkBoundedBuild/legacy_repopulate_and_append             	 1000000	      1002 ns/op	 102.82 MB/s	     376 B/op	      34 allocs/op
+BenchmarkBoundedBuild/bounded_existing_message_encode          	 6396408	       192.9 ns/op	 533.95 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedBuild/bounded_existing_message_encode          	 6240948	       192.5 ns/op	 535.13 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedBuild/bounded_existing_message_encode          	 6356665	       192.9 ns/op	 534.02 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedBuild/bounded_existing_message_encode          	 6260685	       194.2 ns/op	 530.50 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedBuild/bounded_existing_message_encode          	 6308743	       194.4 ns/op	 529.73 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedBuild/bounded_construct_and_encode             	  659743	      1753 ns/op	  58.74 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedBuild/bounded_construct_and_encode             	  721014	      1726 ns/op	  59.68 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedBuild/bounded_construct_and_encode             	  724126	      1710 ns/op	  60.24 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedBuild/bounded_construct_and_encode             	  598165	      1741 ns/op	  59.14 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedBuild/bounded_construct_and_encode             	  733058	      1719 ns/op	  59.93 MB/s	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/quickfixgo/quickfix	37.302s

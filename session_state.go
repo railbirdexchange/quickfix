@@ -51,7 +51,9 @@ func (sm *stateMachine) Connect(session *session) {
 	}
 
 	if session.ResetOnLogon {
-		if err := session.store.Reset(); err != nil {
+		if session.boundedOut != nil {
+			session.boundedOut.resetPending = true
+		} else if err := session.store.Reset(); err != nil {
 			session.logError(err)
 			return
 		}
@@ -59,6 +61,9 @@ func (sm *stateMachine) Connect(session *session) {
 
 	session.log.OnEvent("Sending logon request")
 	if err := session.sendLogon(); err != nil {
+		if session.boundedOut != nil {
+			session.preserveOnDisconnect = true
+		}
 		session.logError(err)
 		return
 	}
@@ -271,6 +276,9 @@ func (sm *stateMachine) IsSessionTime() bool {
 }
 
 func handleStateError(s *session, err error) sessionState {
+	if s.boundedOut != nil {
+		s.preserveOnDisconnect = true
+	}
 	s.logError(err)
 	return latentState{}
 }

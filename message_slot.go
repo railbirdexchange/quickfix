@@ -48,6 +48,7 @@ type MessageSlot struct {
 	transportDictionary *datadictionary.DataDictionary
 	appDictionary       *datadictionary.DataDictionary
 	valid               bool
+	outbound            *boundedOutboundSession
 }
 
 // NewMessageSlot allocates all parse storage once. Dictionaries must remain

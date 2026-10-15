@@ -35,6 +35,13 @@ func (state inSession) FixMsgIn(session *session, msg *Message) sessionState {
 	switch {
 	case bytes.Equal(msgTypeLogon, msgType):
 		if err := session.handleLogon(msg); err != nil {
+			if session.boundedOut != nil {
+				_, protocolReject := err.(MessageRejectError)
+				_, outboundFailure := err.(*boundedOutboundReject)
+				if !protocolReject || outboundFailure {
+					return handleStateError(session, err)
+				}
+			}
 			if err := session.initiateLogoutInReplyTo("", msg); err != nil {
 				return handleStateError(session, err)
 			}
@@ -64,6 +71,9 @@ func (state inSession) FixMsgIn(session *session, msg *Message) sessionState {
 }
 
 func (state inSession) Timeout(session *session, event internal.Event) (nextState sessionState) {
+	if session.boundedOut != nil {
+		return state.boundedTimeout(session, event)
+	}
 	switch event {
 	case internal.NeedHeartbeat:
 		heartBt := NewMessage()
@@ -96,6 +106,9 @@ func (state inSession) handleLogout(session *session, msg *Message) (nextState s
 		session.log.OnEvent("Sending logout response")
 
 		if err := session.sendLogoutInReplyTo("", msg); err != nil {
+			if session.boundedOut != nil {
+				return handleStateError(session, err)
+			}
 			session.logError(err)
 		}
 	} else {
@@ -128,6 +141,9 @@ func (state inSession) handleTestRequest(session *session, msg *Message) (nextSt
 	if err := session.verify(msg); err != nil {
 		return state.processReject(session, msg, err)
 	}
+	if session.boundedOut != nil {
+		return state.boundedHandleTestRequest(session, msg)
+	}
 	var testReq FIXString
 	if err := msg.Body.GetField(tagTestReqID, &testReq); err != nil {
 		session.log.OnEvent("Test Request with no testRequestID")
@@ -149,8 +165,12 @@ func (state inSession) handleTestRequest(session *session, msg *Message) (nextSt
 func (state inSession) handleSequenceReset(session *session, msg *Message) (nextState sessionState) {
 	var gapFillFlag FIXBoolean
 	if msg.Body.Has(tagGapFillFlag) {
-		if err := msg.Body.GetField(tagGapFillFlag, &gapFillFlag); err != nil {
+		value, err := msg.Body.GetBytes(tagGapFillFlag)
+		if err != nil {
 			return state.processReject(session, msg, err)
+		}
+		if err := gapFillFlag.Read(value); err != nil {
+			return state.processReject(session, msg, IncorrectDataFormatForValue(tagGapFillFlag))
 		}
 	}
 
@@ -158,14 +178,13 @@ func (state inSession) handleSequenceReset(session *session, msg *Message) (next
 		return state.processReject(session, msg, err)
 	}
 
-	var newSeqNo FIXInt
-	if err := msg.Body.GetField(tagNewSeqNo, &newSeqNo); err == nil {
-		expectedSeqNum := FIXInt(session.store.NextTargetMsgSeqNum())
+	if newSeqNo, err := msg.Body.GetInt(tagNewSeqNo); err == nil {
+		expectedSeqNum := session.store.NextTargetMsgSeqNum()
 		session.log.OnEventf("Received SequenceReset FROM: %v TO: %v", expectedSeqNum, newSeqNo)
 
 		switch {
 		case newSeqNo > expectedSeqNum:
-			if err := session.store.SetNextTargetMsgSeqNum(int(newSeqNo)); err != nil {
+			if err := session.store.SetNextTargetMsgSeqNum(newSeqNo); err != nil {
 				return handleStateError(session, err)
 			}
 		case newSeqNo < expectedSeqNum:
@@ -183,20 +202,14 @@ func (state inSession) handleResendRequest(session *session, msg *Message) (next
 		return state.processReject(session, msg, err)
 	}
 
-	var err error
-	var beginSeqNoField FIXInt
-	if err = msg.Body.GetField(tagBeginSeqNo, &beginSeqNoField); err != nil {
+	beginSeqNo, err := msg.Body.GetInt(tagBeginSeqNo)
+	if err != nil {
 		return state.processReject(session, msg, RequiredTagMissing(tagBeginSeqNo))
 	}
-
-	beginSeqNo := beginSeqNoField
-
-	var endSeqNoField FIXInt
-	if err = msg.Body.GetField(tagEndSeqNo, &endSeqNoField); err != nil {
+	endSeqNo, err := msg.Body.GetInt(tagEndSeqNo)
+	if err != nil {
 		return state.processReject(session, msg, RequiredTagMissing(tagEndSeqNo))
 	}
-
-	endSeqNo := int(endSeqNoField)
 
 	session.log.OnEventf("Received ResendRequest FROM: %d TO: %d", beginSeqNo, endSeqNo)
 	expectedSeqNum := session.store.NextSenderMsgSeqNum()
@@ -207,7 +220,7 @@ func (state inSession) handleResendRequest(session *session, msg *Message) (next
 		endSeqNo = expectedSeqNum - 1
 	}
 
-	if err := state.resendMessages(session, int(beginSeqNo), endSeqNo, *msg); err != nil {
+	if err := state.resendMessages(session, beginSeqNo, endSeqNo, *msg); err != nil {
 		return handleStateError(session, err)
 	}
 
@@ -226,6 +239,9 @@ func (state inSession) handleResendRequest(session *session, msg *Message) (next
 }
 
 func (state inSession) resendMessages(session *session, beginSeqNo, endSeqNo int, inReplyTo Message) error {
+	if session.boundedOut != nil {
+		return session.boundedOut.resendRange(beginSeqNo, endSeqNo, &inReplyTo)
+	}
 	if session.DisableMessagePersist {
 		return state.generateSequenceReset(session, beginSeqNo, endSeqNo+1, inReplyTo)
 	}
@@ -287,6 +303,8 @@ func (state inSession) resendMessages(session *session, beginSeqNo, endSeqNo int
 
 func (state inSession) processReject(session *session, msg *Message, rej MessageRejectError) sessionState {
 	switch TypedError := rej.(type) {
+	case *boundedOutboundReject:
+		return session.failBoundedInbound(TypedError)
 	case targetTooHigh:
 		stashIndex := -1
 		if msg.inbound != nil {
@@ -357,7 +375,11 @@ func (state inSession) processReject(session *session, msg *Message, rej Message
 func (state inSession) doTargetTooLow(session *session, msg *Message, rej targetTooLow) (nextState sessionState) {
 	var posDupFlag FIXBoolean
 	if msg.Header.Has(tagPossDupFlag) {
-		if err := msg.Header.GetField(tagPossDupFlag, &posDupFlag); err != nil {
+		value, err := msg.Header.GetBytes(tagPossDupFlag)
+		if err == nil && posDupFlag.Read(value) != nil {
+			err = IncorrectDataFormatForValue(tagPossDupFlag)
+		}
+		if err != nil {
 			if rejErr := session.doReject(msg, err); rejErr != nil {
 				return handleStateError(session, rejErr)
 			}
@@ -380,15 +402,23 @@ func (state inSession) doTargetTooLow(session *session, msg *Message, rej target
 	}
 
 	var origSendingTime FIXUTCTimestamp
-	if err := msg.Header.GetField(tagOrigSendingTime, &origSendingTime); err != nil {
+	original, err := msg.Header.GetBytes(tagOrigSendingTime)
+	if err == nil && origSendingTime.Read(original) != nil {
+		err = IncorrectDataFormatForValue(tagOrigSendingTime)
+	}
+	if err != nil {
 		if rejErr := session.doReject(msg, err); rejErr != nil {
 			return handleStateError(session, rejErr)
 		}
 		return state
 	}
 
-	sendingTime := new(FIXUTCTimestamp)
-	if err := msg.Header.GetField(tagSendingTime, sendingTime); err != nil {
+	var sendingTime FIXUTCTimestamp
+	current, err := msg.Header.GetBytes(tagSendingTime)
+	if err == nil && sendingTime.Read(current) != nil {
+		err = IncorrectDataFormatForValue(tagSendingTime)
+	}
+	if err != nil {
 		return state.processReject(session, msg, err)
 	}
 
@@ -407,6 +437,9 @@ func (state inSession) doTargetTooLow(session *session, msg *Message, rej target
 }
 
 func (state *inSession) generateSequenceReset(session *session, beginSeqNo int, endSeqNo int, inReplyTo Message) (err error) {
+	if session.boundedOut != nil {
+		return session.boundedOut.gapFill(beginSeqNo, endSeqNo, &inReplyTo)
+	}
 	sequenceReset := NewMessage()
 	session.fillDefaultHeader(sequenceReset, &inReplyTo)
 

@@ -182,6 +182,7 @@ func (i *Initiator) handleConnection(session *session, tlsConfig *tls.Config, di
 		var msgOut chan []byte
 		var outboundBufferSize int
 		var readerControl *boundedReadConnection
+		var writerControl *boundedWriteConnection
 
 		address := session.SocketConnectAddress[connectionAttempt%len(session.SocketConnectAddress)]
 		session.log.OnEventf("Connecting to: %v", address)
@@ -223,7 +224,10 @@ func (i *Initiator) handleConnection(session *session, tlsConfig *tls.Config, di
 				goto reconnect
 			}
 		}
-		if err := session.connectWithReader(msgIn, msgOut, readerControl); err != nil {
+		if session.boundedOut != nil {
+			writerControl = newBoundedWriteConnection(netConn, session.boundedOut)
+		}
+		if err := session.connectWithIO(msgIn, msgOut, readerControl, writerControl); err != nil {
 			if readerControl != nil {
 				readerControl.stopAndDrain(msgIn)
 				_ = netConn.Close()
@@ -237,7 +241,11 @@ func (i *Initiator) handleConnection(session *session, tlsConfig *tls.Config, di
 		}
 		disconnected = make(chan interface{})
 		go func() {
-			writeLoop(netConn, msgOut, session.log)
+			if writerControl != nil {
+				writerControl.run()
+			} else {
+				writeLoop(netConn, msgOut, session.log)
+			}
 			if err := netConn.Close(); err != nil {
 				session.log.OnEvent(err.Error())
 			}

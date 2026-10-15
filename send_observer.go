@@ -2,7 +2,7 @@ package quickfix
 
 import (
 	"bytes"
-	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -18,25 +18,24 @@ type SendStageEvent struct {
 // SendStageObserver receives synchronous send-stage timing events.
 type SendStageObserver func(SendStageEvent)
 
-var sendStageObserverState struct {
-	sync.RWMutex
-	observer SendStageObserver
-}
+// The installed function is immutable; replacement happens outside the send
+// path. Readers need no lock and never share mutable event storage.
+var sendStageObserverState atomic.Pointer[SendStageObserver]
 
 // SetSendStageObserver installs a process-wide observer for FIX send-stage
 // timings. Passing nil disables observation.
 func SetSendStageObserver(observer SendStageObserver) {
-	sendStageObserverState.Lock()
-	defer sendStageObserverState.Unlock()
-	sendStageObserverState.observer = observer
+	if observer == nil {
+		sendStageObserverState.Store(nil)
+		return
+	}
+	sendStageObserverState.Store(&observer)
 }
 
 func observeSendStage(event SendStageEvent) {
-	sendStageObserverState.RLock()
-	observer := sendStageObserverState.observer
-	sendStageObserverState.RUnlock()
+	observer := sendStageObserverState.Load()
 	if observer != nil {
-		observer(event)
+		(*observer)(event)
 	}
 }
 

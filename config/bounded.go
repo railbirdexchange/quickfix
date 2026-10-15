@@ -1,6 +1,15 @@
 package config
 
 const (
+	// BoundedOutbound enables fixed output ownership and a strict BoundedStore.
+	// It requires BoundedInbound and BorrowedOutboundApplication. Default: N.
+	BoundedOutbound = "BoundedOutbound"
+	// BoundedOutboundQueueDepth reserves queued writes plus one writer slot. Default: 32.
+	BoundedOutboundQueueDepth = "BoundedOutboundQueueDepth"
+	// BoundedBuilderBytes is the cumulative field mutation budget. Default: 32768.
+	BoundedBuilderBytes = "BoundedBuilderBytes"
+	// BoundedWriteTimeout bounds each complete socket write, including partial writes. Default: 5s.
+	BoundedWriteTimeout = "BoundedWriteTimeout"
 	// BoundedInbound enables fixed inbound frame/message slots. It requires a
 	// quickfix.BorrowedApplication and quickfix.BorrowedLog. Defaults to N.
 	BoundedInbound = "BoundedInbound"
