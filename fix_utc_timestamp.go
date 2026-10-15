@@ -74,13 +74,33 @@ func (f *FIXUTCTimestamp) Read(bytes []byte) (err error) {
 }
 
 func (f FIXUTCTimestamp) Write() []byte {
+	var scratch [64]byte
+	encoded, _ := f.AppendTo(scratch[:0])
+	return append([]byte(nil), encoded...)
+}
+
+// AppendTo appends the UTC timestamp with its configured precision to
+// caller-owned storage. Insufficient capacity returns ErrBufferTooSmall and
+// leaves dst unchanged; the output buffer is never grown.
+func (f FIXUTCTimestamp) AppendTo(dst []byte) ([]byte, error) {
+	// A signed int-sized year plus the longest FIX timestamp suffix fits in
+	// 64 bytes, including years outside the usual four-digit FIX date range.
+	var scratch [64]byte
+	encoded := f.UTC().AppendFormat(scratch[:0], f.layout())
+	if len(encoded) > cap(dst)-len(dst) {
+		return dst, ErrBufferTooSmall
+	}
+	return append(dst, encoded...), nil
+}
+
+func (f FIXUTCTimestamp) layout() string {
 	switch f.Precision {
 	case Seconds:
-		return []byte(f.UTC().Format(utcTimestampSecondsFormat))
+		return utcTimestampSecondsFormat
 	case Micros:
-		return []byte(f.UTC().Format(utcTimestampMicrosFormat))
+		return utcTimestampMicrosFormat
 	case Nanos:
-		return []byte(f.UTC().Format(utcTimestampNanosFormat))
+		return utcTimestampNanosFormat
 	}
-	return []byte(f.UTC().Format(utcTimestampMillisFormat))
+	return utcTimestampMillisFormat
 }
