@@ -42,7 +42,8 @@ func (message *Message) appendTo(dst, bodyBytes []byte, useBodyBytes bool) ([]by
 		return dst, ErrBufferTooSmall
 	}
 	remaining -= 11
-	for _, value := range message.Header.tagLookup[tagBeginString] {
+	beginString, _ := message.Header.lookup(tagBeginString)
+	for _, value := range beginString {
 		if len(value.bytes) > remaining {
 			return dst, ErrBufferTooSmall
 		}
@@ -72,7 +73,7 @@ func (message *Message) appendTo(dst, bodyBytes []byte, useBodyBytes bool) ([]by
 	}
 
 	start := len(dst)
-	for _, value := range message.Header.tagLookup[tagBeginString] {
+	for _, value := range beginString {
 		dst = append(dst, value.bytes...)
 	}
 	dst = append(dst, '9', '=')
@@ -104,11 +105,12 @@ func (fields *FieldMap) lengthExcept(first, second Tag) int {
 
 func (fields *FieldMap) lengthWithin(first, second Tag, limit int) (int, bool) {
 	length := 0
-	for _, tag := range fields.tags {
+	for _, tag := range fields.fieldTags() {
 		if first != 0 && tag == first || second != 0 && tag == second {
 			continue
 		}
-		for _, value := range fields.tagLookup[tag] {
+		values, _ := fields.lookup(tag)
+		for _, value := range values {
 			if len(value.bytes) > limit-length {
 				return 0, false
 			}
@@ -119,7 +121,8 @@ func (fields *FieldMap) lengthWithin(first, second Tag, limit int) (int, bool) {
 }
 
 func (fields *FieldMap) appendOwned(dst []byte, first, second Tag) []byte {
-	slices.SortFunc(fields.tags, func(left, right Tag) int {
+	tags := fields.fieldTags()
+	slices.SortFunc(tags, func(left, right Tag) int {
 		if fields.compare(left, right) {
 			return -1
 		}
@@ -128,11 +131,12 @@ func (fields *FieldMap) appendOwned(dst []byte, first, second Tag) []byte {
 		}
 		return 0
 	})
-	for _, tag := range fields.tags {
+	for _, tag := range tags {
 		if first != 0 && tag == first || second != 0 && tag == second {
 			continue
 		}
-		for _, value := range fields.tagLookup[tag] {
+		values, _ := fields.lookup(tag)
+		for _, value := range values {
 			dst = append(dst, value.bytes...)
 		}
 	}
@@ -140,14 +144,14 @@ func (fields *FieldMap) appendOwned(dst []byte, first, second Tag) []byte {
 }
 
 func (fields *FieldMap) serializedLength() int {
-	fields.rwLock.RLock()
-	defer fields.rwLock.RUnlock()
+	fields.rlock()
+	defer fields.runlock()
 	return fields.lengthExcept(0, 0)
 }
 
 func (fields *FieldMap) appendLegacy(dst []byte) []byte {
-	fields.rwLock.Lock()
-	defer fields.rwLock.Unlock()
+	fields.lock()
+	defer fields.unlock()
 	return fields.appendOwned(dst, 0, 0)
 }
 

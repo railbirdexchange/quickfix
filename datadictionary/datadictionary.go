@@ -10,6 +10,7 @@ import (
 )
 
 // DataDictionary models FIX messages, components, and fields.
+// Dictionary definitions must remain unchanged while used for parsing.
 type DataDictionary struct {
 	FIXType         string
 	Major           int
@@ -133,6 +134,7 @@ type FieldDef struct {
 	Fields         []*FieldDef
 	requiredParts  []MessagePart
 	requiredFields []*FieldDef
+	childrenByTag  map[int]*FieldDef
 }
 
 // NewFieldDef returns an initialized FieldDef.
@@ -144,6 +146,8 @@ func NewFieldDef(fieldType *FieldType, required bool) *FieldDef {
 }
 
 // NewGroupFieldDef returns an initialized FieldDef for a repeating group.
+// The group layout is immutable after construction. To change Parts or Fields,
+// construct a new group definition so its child lookup matches the layout.
 func NewGroupFieldDef(fieldType *FieldType, required bool, parts []MessagePart) *FieldDef {
 	field := FieldDef{
 		FieldType: fieldType,
@@ -175,7 +179,30 @@ func NewGroupFieldDef(fieldType *FieldType, required bool, parts []MessagePart) 
 		}
 	}
 
+	if len(field.Fields) > 0 {
+		field.childrenByTag = make(map[int]*FieldDef, len(field.Fields))
+		for _, child := range field.Fields {
+			field.childrenByTag[child.Tag()] = child
+		}
+	}
+
 	return &field
+}
+
+// Child returns the immediate group field with tag, or nil if absent. Fields
+// inside components are immediate children; fields inside nested groups are not.
+// Constructor-built groups use an immutable lookup. Hand-built definitions use
+// an allocation-free scan of Fields. If a tag occurs twice, the last field wins.
+func (f FieldDef) Child(tag int) *FieldDef {
+	if f.childrenByTag != nil {
+		return f.childrenByTag[tag]
+	}
+	for index := len(f.Fields) - 1; index >= 0; index-- {
+		if child := f.Fields[index]; child.Tag() == tag {
+			return child
+		}
+	}
+	return nil
 }
 
 // Required returns true if this FieldDef is required for the containing
