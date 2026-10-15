@@ -588,18 +588,20 @@ func (m *Message) String() string {
 }
 
 func formatCheckSum(value int) string {
-	return fmt.Sprintf("%03d", value)
+	if value < 0 || value > 255 {
+		return fmt.Sprintf("%03d", value)
+	}
+	return string([]byte{byte(value/100) + '0', byte(value/10%10) + '0', byte(value%10) + '0'})
 }
 
 // Build constructs a []byte from a Message instance.
 func (m *Message) build() []byte {
 	m.cook(m.Body.length(), m.Body.total())
 
-	var b bytes.Buffer
-	m.Header.write(&b)
-	m.Body.write(&b)
-	m.Trailer.write(&b)
-	return b.Bytes()
+	dst := make([]byte, 0, m.Header.serializedLength()+m.Body.serializedLength()+m.Trailer.serializedLength())
+	dst = m.Header.appendLegacy(dst)
+	dst = m.Body.appendLegacy(dst)
+	return m.Trailer.appendLegacy(dst)
 }
 
 // Constructs a []byte from a Message instance, using the given bodyBytes.
@@ -610,11 +612,10 @@ func (m *Message) build() []byte {
 func (m *Message) buildWithBodyBytes(bodyBytes []byte) []byte {
 	m.cook(len(bodyBytes), bytesTotal(bodyBytes))
 
-	var b bytes.Buffer
-	m.Header.write(&b)
-	b.Write(bodyBytes)
-	m.Trailer.write(&b)
-	return b.Bytes()
+	dst := make([]byte, 0, m.Header.serializedLength()+len(bodyBytes)+m.Trailer.serializedLength())
+	dst = m.Header.appendLegacy(dst)
+	dst = append(dst, bodyBytes...)
+	return m.Trailer.appendLegacy(dst)
 }
 
 func (m *Message) cook(bodyLen, bodyTotal int) {
