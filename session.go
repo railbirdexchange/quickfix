@@ -415,12 +415,16 @@ func (s *session) prepMessageForSend(msg *Message, inReplyTo *Message) (msgBytes
 	err = s.persist(seqNum, msgBytes)
 	s.observeSendStage("persist", string(msgType), time.Since(persistStartedAt), err == nil)
 	if err == nil {
-		if observer, ok := s.application.(BuiltMessageObserver); ok {
-			observer.OnMessageBuilt(s.sessionID, msg, msgBytes)
-		}
+		s.notifyMessageBuilt(msg, msgBytes)
 	}
 
 	return
+}
+
+func (s *session) notifyMessageBuilt(msg *Message, msgBytes []byte) {
+	if observer, ok := s.application.(BuiltMessageObserver); ok {
+		observer.OnMessageBuilt(s.sessionID, msg, msgBytes)
+	}
 }
 
 func (s *session) persist(seqNum int, msgBytes []byte) error {

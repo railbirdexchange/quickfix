@@ -265,6 +265,7 @@ func (state inSession) resendMessages(session *session, beginSeqNo, endSeqNo int
 
 		session.log.OnEventf("Resending Message: %v", sentMessageSeqNum)
 		msgBytes = msg.buildWithBodyBytes(msg.bodyBytes) // workaround for maintaining repeating group field order
+		session.notifyMessageBuilt(msg, msgBytes)
 		session.EnqueueBytesAndSend(msgBytes)
 
 		seqNum = sentMessageSeqNum + 1
