@@ -15,11 +15,7 @@
 
 package quickfix
 
-import (
-	"bytes"
-
-	"github.com/quickfixgo/quickfix/datadictionary"
-)
+import "github.com/quickfixgo/quickfix/datadictionary"
 
 const (
 	UserDefinedTagMin int = 5000
@@ -80,12 +76,12 @@ func (v *fixValidator) Validate(msg *Message) MessageRejectError {
 	if !msg.Header.Has(tagMsgType) {
 		return RequiredTagMissing(tagMsgType)
 	}
-	msgType, err := msg.Header.GetString(tagMsgType)
+	msgType, err := msg.Header.GetBytes(tagMsgType)
 	if err != nil {
 		return err
 	}
 
-	return validateFIX(v.dataDictionary, v.settings, msgType, msg)
+	return validateFIX(v.dataDictionary, v.settings, string(msgType), msg)
 }
 
 // Validate tests the message against the provided transport and app data dictionaries.
@@ -94,18 +90,22 @@ func (v *fixtValidator) Validate(msg *Message) MessageRejectError {
 	if !msg.Header.Has(tagMsgType) {
 		return RequiredTagMissing(tagMsgType)
 	}
-	msgType, err := msg.Header.GetString(tagMsgType)
+	msgType, err := msg.Header.GetBytes(tagMsgType)
 	if err != nil {
 		return err
 	}
 
-	if isAdminMessageType([]byte(msgType)) {
-		return validateFIX(v.transportDataDictionary, v.settings, msgType, msg)
+	if isAdminMessageType(msgType) {
+		return validateFIX(v.transportDataDictionary, v.settings, string(msgType), msg)
 	}
-	return validateFIXT(v.transportDataDictionary, v.appDataDictionary, v.settings, msgType, msg)
+	return validateFIXT(v.transportDataDictionary, v.appDataDictionary, v.settings, string(msgType), msg)
 }
 
 func validateFIX(d *datadictionary.DataDictionary, settings ValidatorSettings, msgType string, msg *Message) MessageRejectError {
+	return validateFIXWithScratch(d, settings, msgType, msg, nil)
+}
+
+func validateFIXWithScratch(d *datadictionary.DataDictionary, settings ValidatorSettings, msgType string, msg *Message, scratch *FieldMap) MessageRejectError {
 	if d != nil {
 		if err := validateMsgType(d, msgType, msg); err != nil {
 			return err
@@ -125,7 +125,7 @@ func validateFIX(d *datadictionary.DataDictionary, settings ValidatorSettings, m
 			return err
 		}
 
-		if err := validateWalk(d, d, settings, msgType, msg); err != nil {
+		if err := validateWalkWithScratch(d, d, settings, msgType, msg, scratch); err != nil {
 			return err
 		}
 	}
@@ -134,6 +134,10 @@ func validateFIX(d *datadictionary.DataDictionary, settings ValidatorSettings, m
 }
 
 func validateFIXT(transportDD, appDD *datadictionary.DataDictionary, settings ValidatorSettings, msgType string, msg *Message) MessageRejectError {
+	return validateFIXTWithScratch(transportDD, appDD, settings, msgType, msg, nil)
+}
+
+func validateFIXTWithScratch(transportDD, appDD *datadictionary.DataDictionary, settings ValidatorSettings, msgType string, msg *Message, scratch *FieldMap) MessageRejectError {
 	if appDD != nil && transportDD != nil {
 		if err := validateMsgType(appDD, msgType, msg); err != nil {
 			return err
@@ -153,7 +157,7 @@ func validateFIXT(transportDD, appDD *datadictionary.DataDictionary, settings Va
 			return err
 		}
 
-		if err := validateWalk(transportDD, appDD, settings, msgType, msg); err != nil {
+		if err := validateWalkWithScratch(transportDD, appDD, settings, msgType, msg, scratch); err != nil {
 			return err
 		}
 	}
@@ -169,8 +173,15 @@ func validateMsgType(d *datadictionary.DataDictionary, msgType string, _ *Messag
 }
 
 func validateWalk(transportDD *datadictionary.DataDictionary, appDD *datadictionary.DataDictionary, settings ValidatorSettings, msgType string, msg *Message) MessageRejectError {
+	return validateWalkWithScratch(transportDD, appDD, settings, msgType, msg, nil)
+}
+
+func validateWalkWithScratch(transportDD *datadictionary.DataDictionary, appDD *datadictionary.DataDictionary, settings ValidatorSettings, msgType string, msg *Message, scratch *FieldMap) MessageRejectError {
 	remainingFields := msg.fields
-	iteratedTags := make(datadictionary.TagSet)
+	var iteratedTags datadictionary.TagSet
+	if scratch == nil {
+		iteratedTags = make(datadictionary.TagSet)
+	}
 
 	var messageDef *datadictionary.MessageDef
 	var fieldDef *datadictionary.FieldDef
@@ -190,10 +201,21 @@ func validateWalk(transportDD *datadictionary.DataDictionary, appDD *datadiction
 			messageDef = appDD.Messages[msgType]
 		}
 
-		if _, duplicate := iteratedTags[int(tag)]; duplicate {
-			return tagAppearsMoreThanOnce(tag)
+		if scratch != nil {
+			if _, duplicate := scratch.lookup(tag); duplicate {
+				return tagAppearsMoreThanOnce(tag)
+			}
+			// BoundedValidator checks the entire field count before traversal.
+			// The set only receives top-level tags, so it cannot exceed it.
+			if !scratch.put(tag, nil) {
+				panic(ErrValidationCapacity)
+			}
+		} else {
+			if _, duplicate := iteratedTags[int(tag)]; duplicate {
+				return tagAppearsMoreThanOnce(tag)
+			}
+			iteratedTags.Add(int(tag))
 		}
-		iteratedTags.Add(int(tag))
 
 		if fieldDef, ok = messageDef.Fields[int(tag)]; !ok {
 			if !checkFieldNotDefined(settings, tag) {
@@ -387,92 +409,11 @@ func validateField(d *datadictionary.DataDictionary,
 		return nil
 	}
 
-	allowedValues := fieldType.Enums
-	if len(allowedValues) != 0 {
-		switch fieldType.Type {
-		case "MULTIPLESTRINGVALUE", "MULTIPLEVALUESTRING", "MULTIPLECHARVALUE":
-			// These fields carry a space-delimited set of enum tokens, each of
-			// which must be individually valid (e.g. ExecInst "1 5" = two enums).
-			for _, component := range bytes.Split(field.value, []byte{' '}) {
-				if _, validValue := allowedValues[string(component)]; !validValue {
-					return ValueIsIncorrect(field.tag)
-				}
-			}
-		default:
-			if _, validValue := allowedValues[string(field.value)]; !validValue {
-				return ValueIsIncorrect(field.tag)
-			}
-		}
+	if !validEnumValues(fieldType, field.value) {
+		return ValueIsIncorrect(field.tag)
 	}
 
-	var prototype FieldValue
-	switch fieldType.Type {
-	case "MULTIPLESTRINGVALUE", "MULTIPLEVALUESTRING":
-		fallthrough
-	case "MULTIPLECHARVALUE":
-		fallthrough
-	case "CHAR":
-		fallthrough
-	case "CURRENCY":
-		fallthrough
-	case "DATA":
-		fallthrough
-	case "MONTHYEAR":
-		fallthrough
-	case "LOCALMKTDATE", "DATE":
-		fallthrough
-	case "EXCHANGE":
-		fallthrough
-	case "LANGUAGE":
-		fallthrough
-	case "XMLDATA":
-		fallthrough
-	case "COUNTRY":
-		fallthrough
-	case "UTCTIMEONLY":
-		fallthrough
-	case "UTCDATEONLY", "UTCDATE":
-		fallthrough
-	case "TZTIMEONLY":
-		fallthrough
-	case "TZTIMESTAMP":
-		fallthrough
-	case "STRING":
-		prototype = new(FIXString)
-
-	case "BOOLEAN":
-		prototype = new(FIXBoolean)
-
-	case "LENGTH":
-		fallthrough
-	case "DAYOFMONTH":
-		fallthrough
-	case "NUMINGROUP":
-		fallthrough
-	case "SEQNUM":
-		fallthrough
-	case "INT":
-		prototype = new(FIXInt)
-
-	case "UTCTIMESTAMP", "TIME":
-		prototype = new(FIXUTCTimestamp)
-
-	case "QTY", "QUANTITY":
-		fallthrough
-	case "AMT":
-		fallthrough
-	case "PRICE":
-		fallthrough
-	case "PRICEOFFSET":
-		fallthrough
-	case "PERCENTAGE":
-		fallthrough
-	case "FLOAT":
-		prototype = new(FIXFloat)
-
-	}
-
-	if err := prototype.Read(field.value); err != nil {
+	if !validFieldValue(fieldType.Type, field.value) {
 		return IncorrectDataFormatForValue(field.tag)
 	}
 
