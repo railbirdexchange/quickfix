@@ -44,19 +44,25 @@ func (validator *BoundedValidator) Validate(message *Message) (MessageRejectErro
 	if len(message.fields) > validator.maxFields {
 		return nil, ErrValidationCapacity
 	}
+	return validator.validateWithinCapacity(message), nil
+}
+
+// validateWithinCapacity is also used by a session whose MessageSlots enforce
+// the same field capacity before validation. The session owns both objects.
+func (validator *BoundedValidator) validateWithinCapacity(message *Message) MessageRejectError {
 	validator.seen.clearNoLock()
 	if !message.Header.Has(tagMsgType) {
-		return RequiredTagMissing(tagMsgType), nil
+		return RequiredTagMissing(tagMsgType)
 	}
 	msgType, reject := message.Header.GetBytes(tagMsgType)
 	if reject != nil {
-		return reject, nil
+		return reject
 	}
 	if validator.transport == nil {
-		return validateFIXWithScratch(validator.application, validator.settings, string(msgType), message, &validator.seen), nil
+		return validateFIXWithScratch(validator.application, validator.settings, string(msgType), message, &validator.seen)
 	}
 	if isAdminMessageType(msgType) {
-		return validateFIXWithScratch(validator.transport, validator.settings, string(msgType), message, &validator.seen), nil
+		return validateFIXWithScratch(validator.transport, validator.settings, string(msgType), message, &validator.seen)
 	}
-	return validateFIXTWithScratch(validator.transport, validator.application, validator.settings, string(msgType), message, &validator.seen), nil
+	return validateFIXTWithScratch(validator.transport, validator.application, validator.settings, string(msgType), message, &validator.seen)
 }

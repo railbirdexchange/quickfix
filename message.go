@@ -122,6 +122,7 @@ type Message struct {
 	// Field bytes as they appear in the raw message.
 	fields     []TagValue
 	groupStack []*datadictionary.FieldDef
+	inbound    *inboundSlot
 }
 
 // ToMessage returns the message itself.

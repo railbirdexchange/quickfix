@@ -39,3 +39,15 @@ type Application interface {
 	// FromApp notification of app message being received from target.
 	FromApp(message *Message, sessionID SessionID) MessageRejectError
 }
+
+// BorrowedApplication opts into the bounded inbound callback lifetime. With
+// BoundedInbound enabled, these methods replace FromAdmin and FromApp. The slot,
+// message, field bytes and group views are read-only and valid only during the
+// callback. Do not retain, reset, mutate or pass them to asynchronous work.
+// Applications needing retention must explicitly copy field bytes. CopyInto
+// alone is not a deep copy of borrowed field values.
+type BorrowedApplication interface {
+	Application
+	FromAdminBorrowed(slot *MessageSlot, sessionID SessionID) MessageRejectError
+	FromAppBorrowed(slot *MessageSlot, sessionID SessionID) MessageRejectError
+}

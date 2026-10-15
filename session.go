@@ -61,6 +61,9 @@ type session struct {
 	internal.SessionSettings
 	transportDataDictionary *datadictionary.DataDictionary
 	appDataDictionary       *datadictionary.DataDictionary
+	boundedIn               *boundedInboundSession
+	readConnection          *boundedReadConnection
+	preserveOnDisconnect    bool
 
 	timestampPrecision      TimestampPrecision
 	lastCheckedResetSeqTime time.Time
@@ -80,14 +83,20 @@ type connect struct {
 	messageOut chan<- []byte
 	messageIn  <-chan fixIn
 	err        chan<- error
+	reader     *boundedReadConnection
 }
 
 func (s *session) connect(msgIn <-chan fixIn, msgOut chan<- []byte) error {
+	return s.connectWithReader(msgIn, msgOut, nil)
+}
+
+func (s *session) connectWithReader(msgIn <-chan fixIn, msgOut chan<- []byte, reader *boundedReadConnection) error {
 	rep := make(chan error)
 	s.admin <- connect{
 		messageOut: msgOut,
 		messageIn:  msgIn,
 		err:        rep,
+		reader:     reader,
 	}
 
 	return <-rep
@@ -680,7 +689,11 @@ func (s *session) verifySelect(msg *Message, checkTooHigh bool, checkTooLow bool
 }
 
 func (s *session) verifyMsgAgainstAppImpl(msg *Message) MessageRejectError {
-	if s.Validator != nil {
+	if msg.inbound != nil {
+		if reject := s.boundedIn.validator.validateWithinCapacity(msg); reject != nil {
+			return reject
+		}
+	} else if s.Validator != nil {
 		if reject := s.Validator.Validate(msg); reject != nil {
 			return reject
 		}
@@ -693,6 +706,12 @@ func (s *session) fromCallback(msg *Message) MessageRejectError {
 	msgType, err := msg.Header.GetBytes(tagMsgType)
 	if err != nil {
 		return err
+	}
+	if msg.inbound != nil {
+		if isAdminMessageType(msgType) {
+			return s.boundedIn.application.FromAdminBorrowed(msg.inbound.parsed, s.sessionID)
+		}
+		return s.boundedIn.application.FromAppBorrowed(msg.inbound.parsed, s.sessionID)
 	}
 
 	if isAdminMessageType(msgType) {
@@ -792,9 +811,12 @@ func (s *session) drainMessageIn() {
 	s.log.OnEventf("Draining %d messages from inbound channel...", len(s.messageIn))
 	for {
 		select {
-		case _, ok := <-s.messageIn:
+		case message, ok := <-s.messageIn:
 			if !ok {
 				return
+			}
+			if message.slot != nil {
+				message.slot.release()
 			}
 		default:
 			return
@@ -854,15 +876,27 @@ func (s *session) doReject(msg *Message, rej MessageRejectError) error {
 type fixIn struct {
 	bytes       *bytes.Buffer
 	receiveTime time.Time
+	slot        *inboundSlot
+	readError   error
 }
 
 func (s *session) onDisconnect() {
 	s.log.OnEvent("Disconnected")
-	if s.ResetOnDisconnect {
+	if s.readConnection != nil {
+		// Stop reads and blocked channel sends, then reclaim every transferred
+		// slot before another connection can use this session's ring.
+		s.readConnection.stopAndDrain(s.messageIn)
+		s.readConnection = nil
+	}
+	if s.boundedIn != nil {
+		s.boundedIn.ring.clearStash()
+	}
+	if s.ResetOnDisconnect && !s.preserveOnDisconnect {
 		if err := s.dropAndReset(); err != nil {
 			s.logError(err)
 		}
 	}
+	s.preserveOnDisconnect = false
 
 	if s.messageOut != nil {
 		close(s.messageOut)
@@ -903,9 +937,16 @@ func (s *session) onAdmin(msg interface{}) {
 
 		s.messageIn = msg.messageIn
 		s.messageOut = msg.messageOut
+		s.readConnection = msg.reader
 		s.sentReset = false
 
 		s.Connect(s)
+		if msg.reader != nil && !s.IsConnected() {
+			// Initiator refresh/reset/logon preparation can fail before Connect
+			// installs a connected state. Reclaim the accepted controller even
+			// though a latent-to-latent transition would not run teardown.
+			s.onDisconnect()
+		}
 
 	case stopReq:
 		s.Stop(s)

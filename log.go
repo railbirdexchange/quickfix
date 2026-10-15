@@ -30,6 +30,16 @@ type Log interface {
 	OnEventf(string, ...interface{})
 }
 
+// BorrowedLog explicitly accepts frame bytes whose lifetime ends when the call
+// returns. Implementations must finish reading or copying the bytes synchronously
+// and must not mutate them. Bounded inbound sessions require this interface;
+// implementations that allocate are outside the zero-allocation guarantee.
+type BorrowedLog interface {
+	Log
+	OnIncomingBorrowed([]byte)
+	OnOutgoingBorrowed([]byte)
+}
+
 // The LogFactory interface creates global and session specific Log instances.
 type LogFactory interface {
 	// Create global log.

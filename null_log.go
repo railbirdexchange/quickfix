@@ -21,6 +21,8 @@ func (l nullLog) OnIncoming([]byte)                   {}
 func (l nullLog) OnOutgoing([]byte)                   {}
 func (l nullLog) OnEvent(string)                      {}
 func (l nullLog) OnEventf(_ string, _ ...interface{}) {}
+func (l nullLog) OnIncomingBorrowed([]byte)           {}
+func (l nullLog) OnOutgoingBorrowed([]byte)           {}
 
 type nullLogFactory struct{}
 
