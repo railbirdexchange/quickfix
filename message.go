@@ -488,9 +488,12 @@ func (mp *msgParser) pushGroup(definition *datadictionary.FieldDef) error {
 			return ErrGroupDepth
 		}
 		count, err := boundedUnsigned(mp.parsedFieldBytes.value, mp.limits.MaxGroupEntries-mp.declaredGroupEntries, ErrGroupCapacity)
-		if err != nil {
+		if err != nil && err != ErrInvalidUnsignedValue {
 			return err
 		}
+		// Invalid count syntax belongs to dictionary validation, which supplies
+		// the existing FIX reject reason/tag. Actual fields and delimiters are
+		// still bounded even when the declared count is malformed.
 		mp.declaredGroupEntries += count
 	}
 	mp.msg.groupStack = append(mp.msg.groupStack, definition)

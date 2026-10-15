@@ -129,15 +129,23 @@ func boundedUnsigned(value []byte, limit int, capacityError error) (int, error) 
 		return 0, ErrInvalidUnsignedValue
 	}
 	count := 0
+	exceeded := false
 	for _, c := range value {
 		if c < '0' || c > '9' {
 			return 0, ErrInvalidUnsignedValue
 		}
 		digit := int(c - '0')
+		if exceeded {
+			continue
+		}
 		if count > limit/10 || count == limit/10 && digit > limit%10 {
-			return 0, capacityError
+			exceeded = true
+			continue
 		}
 		count = count*10 + digit
+	}
+	if exceeded {
+		return 0, capacityError
 	}
 	return count, nil
 }

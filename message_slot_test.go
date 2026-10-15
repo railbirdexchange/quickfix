@@ -241,9 +241,28 @@ func TestMessageSlotMalformedGroupCounts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, value := range []string{"", "-1", "X", "18446744073709551617", "18446744073709551616", "999999999999999999999999999999999999999999"} {
+	for _, value := range []string{"18446744073709551617", "18446744073709551616", "999999999999999999999999999999999999999999"} {
 		if err := slot.Parse(buildFIXT11Wire("35=D\x01", "453="+value+"\x01")); err == nil {
 			t.Fatalf("accepted count %q", value)
+		}
+	}
+	for _, value := range []string{"", "-1", "X", "999X"} {
+		wire := buildFIXT11Wire("35=D\x0134=2\x0149=S\x0156=T\x0152=20231231-20:19:41\x01", "11=order\x0121=1\x0138=1\x0140=1\x0154=1\x0155=SYM\x0160=20231231-20:19:41\x01453="+value+"\x01")
+		legacy := NewMessage()
+		if err := ParseMessageWithDataDictionary(legacy, bytes.NewBuffer(wire), dict, dict); err != nil {
+			t.Fatal(err)
+		}
+		if err := slot.Parse(wire); err != nil {
+			t.Fatalf("count syntax should reach validation: %q: %v", value, err)
+		}
+		validator := NewValidator(defaultValidatorSettings, dict, nil)
+		want := validator.Validate(legacy)
+		got := validator.Validate(slot.Message())
+		if want == nil || got == nil || want.Error() != got.Error() || want.RejectReason() != got.RejectReason() {
+			t.Fatalf("count %q reject got %v want %v", value, got, want)
+		}
+		if want.RefTagID() == nil || got.RefTagID() == nil || *want.RefTagID() != 453 || *got.RefTagID() != 453 {
+			t.Fatalf("count %q rejected a different field: got %v want %v", value, got.RefTagID(), want.RefTagID())
 		}
 	}
 	for _, malformed := range []string{"8=FIX.4.4\x019=20\x0135=D\x01453=1\x01448=no-terminator", "8=FIX.4.4\x019=20\x0135=D\x01453=1\x01448=A\x01"} {
