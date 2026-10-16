@@ -142,6 +142,19 @@ func (m FieldMap) GetBytes(tag Tag) ([]byte, MessageRejectError) {
 	return f[0].value, nil
 }
 
+// getBytesIfPresent reads an optional field without constructing a missing-field
+// reject. The returned bytes have the same lifetime as GetBytes results.
+func (m FieldMap) getBytesIfPresent(tag Tag) ([]byte, bool) {
+	m.rlock()
+	defer m.runlock()
+
+	f, ok := m.lookup(tag)
+	if !ok {
+		return nil, false
+	}
+	return f[0].value, true
+}
+
 // getBytesNoLock is a lock free zero-copy GetField wrapper for []bytes fields.
 func (m FieldMap) getBytesNoLock(tag Tag) ([]byte, MessageRejectError) {
 	f, ok := m.lookup(tag)
