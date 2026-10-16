@@ -1,30 +1,41 @@
-# Phase 4: bounded validation
+# Phase 4: ordinary validator allocation reduction
 
-Validation now reads scalar syntax directly from field bytes and scans multi-value
-enums without splitting them. Timestamp validation retains the existing concrete
-reader. The legacy validator keeps per-call duplicate-tag maps so existing shared
-validator use remains safe; the additive `BoundedValidator` uses fixed scratch
-owned by one session and detects capacity exhaustion before scratch mutation.
+The existing `NewValidator(...).Validate(message)` API now uses call-local inline
+storage for duplicate detection. It does not require a new validator type, a
+message slot, a configuration switch, or application changes. Scalar validation
+reads field bytes directly and multi-value enum validation scans without
+splitting. Timestamp validation retains the existing concrete reader.
+
+The unchanged ordinary-API NewOrderSingle benchmark measures **0 B/op and
+0 allocs/op**, down from **936 B/op and 5 allocs/op** immediately before this
+correction. Validation alone measured 852–874 ns/op; that does not measure
+parsing, handler execution, encoding, persistence, or socket completion.
+
+Each call tracks up to 512 distinct top-level tags in a fixed stack table. Group
+members are validated in their existing group traversal and do not consume
+top-level entries. A larger legacy message uses a private overflow map, retaining
+unlimited input behavior; that case can allocate. The validator and parsed
+message are not mutated, so one validator and immutable messages can still be
+validated concurrently without locks, pools, or shared scratch.
 
 ```mermaid
 sequenceDiagram
-    participant Session as Exclusive session owner
-    participant Message as Borrowed parsed message
-    participant Validator as BoundedValidator and fixed scratch
-    Session->>Validator: Validate(Message)
-    Validator->>Validator: Check configured field capacity
+    participant Caller
+    participant Message as Existing parsed Message
+    participant Validator as Existing NewValidator
+    participant Scratch as Call-local stack table
+    Caller->>Validator: Validate(Message)
     Validator->>Message: Read required fields, order, values and groups
-    Validator->>Validator: Track top-level duplicate tags
-    Validator-->>Session: FIX reject, capacity error, or success
-    Note over Session,Validator: No mutable scratch or message is shared concurrently
+    Validator->>Scratch: Track top-level duplicate tags
+    Validator-->>Caller: Existing FIX reject or success
+    Note over Caller,Scratch: Every concurrent call owns independent scratch
 ```
 
-`NewBoundedValidator` allocates once. Its positive `maxFields` limit includes all
-parsed fields, including repeated group members, header and trailer. The default
-message-slot configuration uses 512 fields; the validator accepts an explicit
-limit to match the slot. Oversized input returns `ErrValidationCapacity` separately
-from a FIX reject. Validation changes no message, store or sequence state. Each
-session owns its validator; dictionaries remain immutable.
+The earlier additive `BoundedValidator` remains covered by its compatibility
+tests, but is not selected by the ordinary-API qualification below. Its explicit
+capacity errors and session-owned scratch are separate from the unchanged
+`Validator` API. Dictionaries remain immutable during validation. Neither path
+changes message, store, or sequence state.
 
 The validation pass order, settings, required-field checks, enum rules, scalar
 mapping, duplicate handling and group reject behavior remain intact. Integer
@@ -36,7 +47,42 @@ cover long fractions beyond strconv's internal decimal precision. String-like
 dictionary types retain the same validation as before. An unknown dictionary
 type now yields an incorrect-format reject instead of a nil-reader panic.
 
-## Controlled benchmark
+## Controlled ordinary-API correction
+
+Correction before source: `64484313d9aadbb62ea8f7a3180a01ecf565f2ae`.
+Measured October 15, 2026, Go 1.25.3, darwin/arm64, Apple M4 Pro. The same baseline
+harness and command were run before and after the change. Setup and warm-up stay
+outside timing, and other builds, load tests, and benchmarks were paused.
+
+```sh
+GOTOOLCHAIN=auto rtk proxy go test . -run '^$' -bench '^BenchmarkAllocationBaseline$' -benchmem -benchtime=1s -count=5 -cpu=1
+```
+
+| Warmed flow | Correction before B/op | Before allocs/op | Correction after B/op | After allocs/op |
+|---|---:|---:|---:|---:|
+| Ordinary validate NewOrderSingle | 936 | 5 | 0 | 0 |
+| Parse without dictionary | 0 | 0 | 0 | 0 |
+| Parse with dictionary | 0 | 0 | 0 | 0 |
+| Parse with repeating group | 0 | 0 | 0 | 0 |
+| Legacy build NewOrderSingle | 152 | 6 | 152 | 6 |
+| Framed read | 160 | 2 | 160 | 2 |
+| Decimal short/fraction/uint128 | 0 | 0 | 0 | 0 |
+| Decimal overflow, excluded | 168 | 5 | 168 | 5 |
+
+All five allocation samples agree. Ordinary validation changed from
+1,271–1,376 ns/op to 852–874 ns/op. Raw
+[correction before](correction-before-go1.25.3.txt) and
+[correction after](correction-after-go1.25.3.txt) preserve all samples.
+
+Allocation assertions separately use only `NewMessage`, `ParseMessage`, and
+`NewValidator` for NewOrderSingle, nested groups, and 512 dictionary-defined
+fields. No alternative validator or parser storage selects those tests. Tests
+also cover 513- and 2,049-field legacy messages, duplicates first seen before and
+after overflow, zero/negative/full-width tag keys, and shared validators with the
+same immutable messages. Validating larger legacy inputs remains supported and
+can allocate; no new public capacity error or rejection rule is introduced.
+
+## Initial phase-4 evidence
 
 Before source: `ca2494fa959b639623d0b1ad3a90b741f167ae6b` (phase 3).
 Measured October 15, 2026, Go 1.25.3, darwin/arm64, Apple M4 Pro.
@@ -74,6 +120,22 @@ long valid integer, float, timestamp and multi-enum values.
 
 ## Verification
 
+The ordinary-API correction passed the Go 1.23.12
+[all-package suite](correction-tests-go1.23.12.txt), with only the known Mongo
+logger suite excluded. Go 1.23.12 vet exited zero without diagnostics
+([output](correction-vet-go1.23.12.txt)). The focused validation
+[race run](correction-race.txt) passed, including concurrent calls sharing the
+same immutable messages and overflow-map inputs.
+
+```sh
+GOTOOLCHAIN=go1.23.12+auto rtk proxy go test ./... -skip '^TestMongoLogTestSuite$' -count=1
+GOTOOLCHAIN=go1.23.12+auto rtk proxy go vet ./...
+GOTOOLCHAIN=auto rtk proxy go test -race . -run '^(TestValidate|TestBoundedValidation|TestLegacyValidator|TestValidatorInline)' -count=1 -timeout=120s
+```
+
+The following additional checks and evidence were recorded for the initial
+phase-4 scalar-validation implementation before this correction.
+
 Fixtures cover existing FIX/FIXT rejects, reason/text/RefTagID compatibility,
 paired-error precedence, all 32 setting combinations, enum whitespace, nested
 groups, exact/exceeded capacity and recovery, and legacy concurrent validation.
@@ -94,7 +156,10 @@ The pre-existing optional Mongo logging teardown failure remains documented in
 [phase 1](../phase-1/README.md#existing-optional-mongo-logger-test-failure); its
 integration suite is explicitly excluded, not reported as passing.
 
-This is valid-message validation qualification, not a complete-session guarantee.
-FIX reject/error construction, legacy duplicate maps, allocating convenience
-getters and arbitrary application/store/logger behavior remain outside this
-phase's zero-allocation contract. Framing and session ownership remain phases 5–7.
+This is valid-message validation qualification, not a complete-session or
+sub-microsecond processing guarantee. FIX reject/error construction, overflow
+beyond 512 distinct top-level tags, allocating convenience getters, and arbitrary
+application/store/logger behavior remain outside this phase's zero-allocation
+contract. Message, group, frame, and output retention lifetimes remain unchanged;
+this change does not recycle independently retainable results. Framing and
+session ownership remain separate work.
