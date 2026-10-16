@@ -176,12 +176,77 @@ func validateWalk(transportDD *datadictionary.DataDictionary, appDD *datadiction
 	return validateWalkWithScratch(transportDD, appDD, settings, msgType, msg, nil)
 }
 
+const validationInlineTagCapacity = 512
+
+// validationTagSet belongs to one Validate call, preserving shared validator
+// and immutable-message use. Keep the table at most half full. Larger legacy
+// messages spill into a private map without imposing a new validation limit.
+type validationTagSet struct {
+	tags     [2 * validationInlineTagCapacity]Tag
+	count    int
+	hasZero  bool
+	overflow datadictionary.TagSet
+}
+
+// add returns false for an already visited top-level tag. Tag zero needs a
+// separate marker because zero also identifies an unoccupied table entry.
+func (seen *validationTagSet) add(tag Tag) bool {
+	if seen.overflow != nil {
+		if _, exists := seen.overflow[int(tag)]; exists {
+			return false
+		}
+		seen.overflow.Add(int(tag))
+		return true
+	}
+	if tag == 0 {
+		if seen.hasZero {
+			return false
+		}
+		if seen.count == validationInlineTagCapacity {
+			seen.spill(tag)
+		} else {
+			seen.hasZero = true
+			seen.count++
+		}
+		return true
+	}
+	hash := uint64(tag) * 11400714819323198485
+	hash ^= hash >> 32
+	const mask = 2*validationInlineTagCapacity - 1
+	index := int(hash & mask)
+	for {
+		switch seen.tags[index] {
+		case tag:
+			return false
+		case 0:
+			if seen.count == validationInlineTagCapacity {
+				seen.spill(tag)
+			} else {
+				seen.tags[index] = tag
+				seen.count++
+			}
+			return true
+		}
+		index = (index + 1) & mask
+	}
+}
+
+func (seen *validationTagSet) spill(tag Tag) {
+	seen.overflow = make(datadictionary.TagSet, seen.count+1)
+	for _, previous := range seen.tags {
+		if previous != 0 {
+			seen.overflow.Add(int(previous))
+		}
+	}
+	if seen.hasZero {
+		seen.overflow.Add(0)
+	}
+	seen.overflow.Add(int(tag))
+}
+
 func validateWalkWithScratch(transportDD *datadictionary.DataDictionary, appDD *datadictionary.DataDictionary, settings ValidatorSettings, msgType string, msg *Message, scratch *FieldMap) MessageRejectError {
 	remainingFields := msg.fields
-	var iteratedTags datadictionary.TagSet
-	if scratch == nil {
-		iteratedTags = make(datadictionary.TagSet)
-	}
+	var iteratedTags validationTagSet
 
 	var messageDef *datadictionary.MessageDef
 	var fieldDef *datadictionary.FieldDef
@@ -211,10 +276,9 @@ func validateWalkWithScratch(transportDD *datadictionary.DataDictionary, appDD *
 				panic(ErrValidationCapacity)
 			}
 		} else {
-			if _, duplicate := iteratedTags[int(tag)]; duplicate {
+			if !iteratedTags.add(tag) {
 				return tagAppearsMoreThanOnce(tag)
 			}
-			iteratedTags.Add(int(tag))
 		}
 
 		if fieldDef, ok = messageDef.Fields[int(tag)]; !ok {
