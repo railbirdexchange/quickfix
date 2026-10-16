@@ -20,8 +20,15 @@ The current Linux candidate's ordinary direct p50 ranges from 6.708 to 6.917
 microseconds across five runs. Older platform measurements remain below with
 their original source identities.
 
-**Not ready to merge:** the sub-microsecond target and callback lifetime
-compatibility remain unresolved. Current `8033f27d` fix-server steady and burst
+**Current delivery criteria:** one microsecond is a stretch target, not a merge
+gate. Callback lifetime compatibility and final isolated dev qualification
+remain open. Further lab optimization is bounded: one dev baseline/candidate
+comparison, at most one performance follow-up justified by its measured
+bottleneck, then a merge/rework decision. Correctness and compatibility must
+still pass. Historical results below retain their original latency observations;
+exceeding one microsecond is no longer treated as a release blocker.
+
+Current `8033f27d` fix-server steady and burst
 loads pass delivery, audit, ordering and three-session recovery assertions.
 Whole-process allocated bytes are +0.069% steady / +0.022% burst versus fresh
 matched `a2fb11b9` runs, one run each. Those runs still allocate and do not

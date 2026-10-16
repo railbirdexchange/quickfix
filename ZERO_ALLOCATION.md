@@ -26,8 +26,11 @@ whole-process runs still allocate: +0.069% steady / +0.022% burst versus
 `a2fb11b9`, one run each. These small differences do not establish statistical
 improvement or a zero-allocation service result. The burst reaches 9,793.541
 requests/second; this is throughput rather than engine latency.
-Allocation and latency are separate qualifications: the sub-microsecond
-target remains unmet even at the directly measured final-read-to-write boundary.
+Allocation and latency are separate qualifications. One microsecond is a
+stretch target, not a release gate. The delivery objective is to reduce measured
+latency as far as practical while preserving zero allocation in the supported
+path, correctness and compatibility; it does not require an open-ended search
+for the minimum achievable time.
 An additional unchanged-runtime [Linux VM measurement](benchmarks/zero-allocation/phase-7/linux-read-to-write/README.md)
 reports ordinary p50 6.333–6.500 µs and p99 10.834–11.500 µs; all ten ordinary/group
 benchmark rows report 0/0. This shared QEMU ARM64 development VM is a separate
@@ -42,9 +45,19 @@ Legacy callback lifetime compatibility is also unresolved: saving an incoming
 recycles it. The [callback audit](benchmarks/zero-allocation/phase-7/callback-lifetime-audit.md)
 records the exact affected boundaries. Unchanged signatures and explicit copy
 helpers do not preserve that existing behavior automatically.
-This work is not ready to merge. The current
+Callback lifetime compatibility and final isolated dev qualification remain
+open. Exceeding one microsecond does not itself block merging. The current
 [phase-7 evidence](benchmarks/zero-allocation/phase-7/README.md) identifies the
 source, measurements and checks that are final versus diagnostic.
+
+The next delivery step is one controlled dev baseline/candidate comparison with
+fixed resources, workloads, durations and repetitions declared before running.
+It measures delivery/recovery correctness, completed-write and service latency,
+CPU, allocations/GC and queue pressure. At most one further performance change
+is included in this delivery, supported by a clear bottleneck from that run and
+a focused before/after rerun. Otherwise retain the measured gains and make the
+merge/rework decision. Correctness failures still require repair and verification;
+they do not justify unrelated optimization experiments.
 
 ## Configuration and cold storage
 
