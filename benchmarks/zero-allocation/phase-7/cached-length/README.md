@@ -4,8 +4,8 @@ Disposition: **RETAINED**, runtime commit
 `8033f27d5f154fd0f0ec69dd1ed5facbfff38cae`. The completed-outbound component and
 full TCP batch improvements survived unchanged-binary A–B–A controls. Direct
 individual latency did not improve. Final race, vet and exact allocation checks
-passed. Isolated fix-server integration is qualified separately at its published
-dependency pin.
+passed. Isolated fix-server integration also passed at published dependency
+`v0.9.10-railbird.3.0.20261016154543-8033f27d5f15`.
 
 This independent candidate has completed component, direct and full TCP batch
 A–B–A measurements, plus the mandatory allocation comparison.
@@ -15,7 +15,7 @@ throughput gains were observed; direct latency did not demonstrate improvement.
 
 All reused BEFORE measurements and the fresh component capture use the same
 preserved executable from clean checkout
-`338c3f03efd663365d050baffb6af4f24e91448d`, production implementation
+`338c3f03efd663365d050baffb6af4f24e91448d`, runtime implementation
 `a2fb11b923d1e0143a60427cf38ba2854cc142f6`, cross-compiled with Go 1.23.12 for
 linux/arm64, `CGO_ENABLED=0`. The binary SHA-256 is
 `0515b641faac565783b2f3b0eefcac9504c3422939d4b2c1bef990e94188df03`.
@@ -204,6 +204,20 @@ GOTOOLCHAIN=go1.23.12 rtk proxy go test . -run '^TestBoundedFullSessionExactAllo
 GOTOOLCHAIN=go1.23.12 rtk proxy go test -race . -count=1 -timeout=5m
 GOTOOLCHAIN=go1.23.12 rtk proxy go vet ./...
 ```
+
+## Isolated fix-server qualification
+
+The unchanged fix-server fixtures ran fresh before/after loads with an isolated
+broker per run: 5,000 steady and 10,000 burst requests for each version. All
+trading/drop-copy/audit/order/recovery assertions passed; source build and
+RFQ/audit ownership race fixtures also passed. Candidate burst throughput was
+9,793.541 requests/s versus 9,711.319 before. Whole-process allocated bytes
+changed +0.069% steady and +0.022% burst. These single pairs do not establish
+service speedup, allocation reduction or engine latency. Both burst runs retain
+the known two `client closed` audit errors during teardown after assertions;
+shutdown audit delivery remains unqualified. All four owned brokers/volumes and
+tunnels were removed. [Integration PR 1362](https://github.com/railbirdexchange/draftkings-exchange/pull/1362)
+contains exact pins, raw JSON/logs and cleanup evidence.
 
 ## Candidate identity
 

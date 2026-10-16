@@ -7,7 +7,7 @@ session storage is configured by default. The complete limits, ownership,
 lifetime and exhaustion contract is in
 [ZERO_ALLOCATION.md](../../../ZERO_ALLOCATION.md).
 
-Current production runtime is `8033f27d5f154fd0f0ec69dd1ed5facbfff38cae`.
+Current runtime source is `8033f27d5f154fd0f0ec69dd1ed5facbfff38cae`.
 The [cached-length change](cached-length/README.md) removes redundant outbound
 length scans for intact caller-owned construction arenas. Completed outbound
 component medians improve 2.3–5.0% and full TCP 32-request batch medians improve
@@ -20,13 +20,12 @@ The current Linux candidate's ordinary direct p50 ranges from 6.708 to 6.917
 microseconds across five runs. Older platform measurements remain below with
 their original source identities.
 
-**Not ready to merge:** the sub-microsecond target is unmet. All 35 refreshed
-full TCP AFTER samples report zero bytes and allocations; the mandatory baseline
-also passes. Final `a2fb11b9` fix-server steady and burst loads pass delivery,
-audit, ordering and three-session recovery assertions. Whole-process allocated
-bytes are +0.369% steady / −0.522% burst versus the matched baseline, one run
-each. Those runs still allocate and do not establish statistical improvement or
-a zero-allocation integration result.
+**Not ready to merge:** the sub-microsecond target and callback lifetime
+compatibility remain unresolved. Current `8033f27d` fix-server steady and burst
+loads pass delivery, audit, ordering and three-session recovery assertions.
+Whole-process allocated bytes are +0.069% steady / +0.022% burst versus fresh
+matched `a2fb11b9` runs, one run each. Those runs still allocate and do not
+establish statistical improvement or a zero-allocation integration result.
 
 ## Current qualification at `8033f27d`
 
@@ -44,6 +43,8 @@ A–B–A controls, frozen executable/source/fixture identities and all raw samp
 | Full TCP ordinary/group batches | All 30 before/candidate/control rows 0/0; candidate medians 297404/332882 ns per 32 requests |
 | Direct final-read-to-completed-write | All 30 before/candidate/control rows 0/0; ordinary p50 medians 6833/6833/6916 ns. No demonstrated gain |
 | Mandatory allocation baseline | PASS, all 50 candidate rows retain baseline allocation categories. Legacy group parsing remains 3 B/op and 0 reported allocs/op |
+| Isolated fix-server source build and ownership tests | PASS at published `8033f27d` dependency; RFQ/audit retention fixtures pass three repetitions under race |
+| Fresh matched fix-server steady/burst loads | Old/new both PASS, 5,000 steady and 10,000 burst requests per version; all delivery/audit/order/recovery assertions. Candidate burst 9,793.541 requests/s. [Integration PR 1362](https://github.com/railbirdexchange/draftkings-exchange/pull/1362) records raw results and exact pins |
 
 The runtime change preserves the existing length walk for explicit resend
 bodies, copies and replaced sections. Exact-size and one-byte-short destination

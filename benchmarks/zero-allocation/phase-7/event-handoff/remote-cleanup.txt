@@ -1,0 +1,8 @@
+Warning: Permanently added '192.168.252.5' (ED25519) to the list of known hosts.
+removed '/tmp/quickfix-event-handoff-8033f27d.LCn8N7/before.test'
+removed '/tmp/quickfix-event-handoff-8033f27d.LCn8N7/candidate.test'
+removed '/tmp/quickfix-event-handoff-8033f27d.LCn8N7/spec/FIX40.xml'
+removed '/tmp/quickfix-event-handoff-8033f27d.LCn8N7/spec/FIX44.xml'
+rmdir: removing directory, '/tmp/quickfix-event-handoff-8033f27d.LCn8N7/spec'
+rmdir: removing directory, '/tmp/quickfix-event-handoff-8033f27d.LCn8N7'
+Fri Oct 16 16:03:31 UTC 2026

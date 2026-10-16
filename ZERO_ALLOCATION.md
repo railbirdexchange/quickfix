@@ -20,10 +20,12 @@ The prior `a2fb11b9` full seven-flow throughput capture reports 0 B/op and
 current ordinary/group batch and direct captures report 0/0 in all samples.
 The mandatory baseline capture passes with its allocation rows preserved,
 including 3 B/op and 0 reported allocs/op for legacy convenience group parsing.
-The prior `a2fb11b9` revision passes unchanged fix-server steady and burst
-delivery, audit, ordering and recovery assertions. Those whole-process runs
-still allocate: +0.369% steady / −0.522% burst versus the matched baseline, one
-run each. These small differences do not establish statistical improvement.
+The current published `8033f27d` dependency passes unchanged fix-server steady
+and burst delivery, audit, ordering and recovery assertions. Fresh matched
+whole-process runs still allocate: +0.069% steady / +0.022% burst versus
+`a2fb11b9`, one run each. These small differences do not establish statistical
+improvement or a zero-allocation service result. The burst reaches 9,793.541
+requests/second; this is throughput rather than engine latency.
 Allocation and latency are separate qualifications: the sub-microsecond
 target remains unmet even at the directly measured final-read-to-write boundary.
 An additional unchanged-runtime [Linux VM measurement](benchmarks/zero-allocation/phase-7/linux-read-to-write/README.md)

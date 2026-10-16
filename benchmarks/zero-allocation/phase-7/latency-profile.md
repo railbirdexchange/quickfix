@@ -93,3 +93,12 @@ demonstrated individual latency improvement. All seven exact allocation
 intervals, Go 1.23 package checks (the existing Mongo teardown exclusion), vet
 and the separate full core race run pass. The one-microsecond target remains
 unmet; these measurements do not establish a performance floor.
+
+The subsequent [event-handoff experiment](event-handoff/README.md) dispatches at
+most one pending output hint immediately after `Incoming` returns, preserving
+the existing send path and completed inbound scope. Focused lifecycle, state,
+slow-writer and FIFO tests passed, but direct ordinary p50 medians were
+6792 → 6916 → 6959 ns and groups were 7667 → 7625 → 7625 ns across unchanged
+before, candidate and unchanged before. Ordinary remained inside control drift;
+the group's candidate matched the final control. The experiment was rejected
+without a demonstrated individual latency gain. No batch speedup is claimed.
