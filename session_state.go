@@ -92,6 +92,9 @@ func (sm *stateMachine) Incoming(session *session, m fixIn) {
 	owned := m.slot != nil
 	if m.slot != nil {
 		defer func() {
+			// Raw slots can be released by reader cancellation independently.
+			// Only the session owner ends the active parsed-message scope.
+			session.boundedIn.parsed.Reset()
 			if owned {
 				m.slot.release()
 			}
@@ -102,15 +105,23 @@ func (sm *stateMachine) Incoming(session *session, m fixIn) {
 		return
 	}
 	var boundedParseError error
+	var parsedMessage *Message
 	if m.slot != nil && sm.IsConnected() {
-		session.boundedIn.log.OnIncomingBorrowed(m.slot.frame)
-		boundedParseError = m.slot.parsed.Parse(m.slot.frame)
+		m.slot.receiveTime = m.receiveTime
+		session.logIncomingFrame(m.slot.frame)
+		parsedMessage, boundedParseError = session.parseInboundSlot(m.slot)
 		if isInboundCapacityError(boundedParseError) {
 			sm.setState(session, session.failBoundedInbound(boundedParseError))
 			return
 		}
 	}
-	sm.CheckSessionTime(session, time.Now())
+	var sessionTime time.Time
+	if session.SessionTime != nil {
+		sessionTime = time.Now()
+	}
+	// An unrestricted schedule ignores the clock, but still needs the same
+	// lifecycle transitions and notifications in CheckSessionTime.
+	sm.CheckSessionTime(session, sessionTime)
 	if !sm.IsConnected() {
 		return
 	}
@@ -119,10 +130,7 @@ func (sm *stateMachine) Incoming(session *session, m fixIn) {
 		if boundedParseError != nil {
 			session.log.OnEventf("Msg Parse Error: %v", boundedParseError.Error())
 		} else {
-			msg := m.slot.parsed.Message()
-			msg.inbound = m.slot
-			msg.ReceiveTime = m.receiveTime
-			nextState := sm.State.FixMsgIn(session, msg)
+			nextState := sm.State.FixMsgIn(session, parsedMessage)
 			// Capture transfer before setState can discard a retained message
 			// during teardown. Never inspect a slot after returning ownership.
 			owned = !m.slot.retained

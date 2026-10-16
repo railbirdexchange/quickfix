@@ -1,7 +1,6 @@
 package quickfix
 
 import (
-	"bytes"
 	"net"
 	"strconv"
 	"testing"
@@ -21,10 +20,11 @@ type inboundCallbackRecord struct {
 // would violate the callback contract that these tests exercise.
 type inboundRecordingApplication struct {
 	t             *testing.T
-	legacy        []*Message
-	legacyAdmin   []*Message
 	borrowed      []inboundCallbackRecord
 	borrowedAdmin []int
+	received      []time.Time
+	fromApp       func(*Message) MessageRejectError
+	toAdmin       func(*Message)
 	resends       [][2]int
 	logouts       int
 }
@@ -35,6 +35,9 @@ func (a *inboundRecordingApplication) OnLogout(SessionID) {
 	a.logouts++
 }
 func (a *inboundRecordingApplication) ToAdmin(message *Message, _ SessionID) {
+	if a.toAdmin != nil {
+		a.toAdmin(message)
+	}
 	messageType, err := message.Header.GetString(tagMsgType)
 	require.Nil(a.t, err)
 	if messageType == string(msgTypeResendRequest) {
@@ -47,25 +50,20 @@ func (a *inboundRecordingApplication) ToAdmin(message *Message, _ SessionID) {
 }
 func (*inboundRecordingApplication) ToApp(*Message, SessionID) error { return nil }
 func (a *inboundRecordingApplication) FromApp(message *Message, _ SessionID) MessageRejectError {
-	a.legacy = append(a.legacy, message)
-	return nil
-}
-func (a *inboundRecordingApplication) FromAdmin(message *Message, _ SessionID) MessageRejectError {
-	a.legacyAdmin = append(a.legacyAdmin, message)
-	return nil
-}
-func (a *inboundRecordingApplication) FromAppBorrowed(slot *MessageSlot, _ SessionID) MessageRejectError {
-	message := slot.Message()
 	require.NotNil(a.t, message)
 	sequence, err := message.Header.GetInt(tagMsgSeqNum)
 	require.Nil(a.t, err)
 	id, err := message.Body.GetString(11)
 	require.Nil(a.t, err)
 	a.borrowed = append(a.borrowed, inboundCallbackRecord{sequence, id})
+	a.received = append(a.received, message.ReceiveTime)
+	if a.fromApp != nil {
+		return a.fromApp(message)
+	}
 	return nil
 }
-func (a *inboundRecordingApplication) FromAdminBorrowed(slot *MessageSlot, _ SessionID) MessageRejectError {
-	sequence, err := slot.Message().Header.GetInt(tagMsgSeqNum)
+func (a *inboundRecordingApplication) FromAdmin(message *Message, _ SessionID) MessageRejectError {
+	sequence, err := message.Header.GetInt(tagMsgSeqNum)
 	require.Nil(a.t, err)
 	a.borrowedAdmin = append(a.borrowedAdmin, sequence)
 	return nil
@@ -99,7 +97,6 @@ func (l *inboundRecordingLog) OnEventf(format string, arguments ...interface{}) 
 
 func inboundIntegrationSettings(queue, stash int) *SessionSettings {
 	settings := NewSessionSettings()
-	settings.Set(config.BoundedInbound, "Y")
 	settings.Set(config.InChanCapacity, strconv.Itoa(queue))
 	settings.Set(config.BoundedInboundStashCapacity, strconv.Itoa(stash))
 	settings.Set(config.BoundedMaxFrameBytes, "1024")
@@ -109,7 +106,7 @@ func inboundIntegrationSettings(queue, stash int) *SessionSettings {
 	return settings
 }
 
-func newInboundIntegrationSession(t *testing.T, bounded bool, queue, stash int) (*session, *inboundRecordingApplication, *inboundRecordingLog, *memoryStore) {
+func newInboundIntegrationSession(t *testing.T, queue, stash int) (*session, *inboundRecordingApplication, *inboundRecordingLog, *memoryStore) {
 	t.Helper()
 	application := &inboundRecordingApplication{t: t}
 	log := &inboundRecordingLog{}
@@ -126,9 +123,8 @@ func newInboundIntegrationSession(t *testing.T, bounded bool, queue, stash int) 
 	s.InChanCapacity = queue
 	s.MaxLatency = 120 * time.Second
 	s.HeartBtInt = time.Minute
-	if bounded {
-		require.NoError(t, s.configureBoundedInbound(inboundIntegrationSettings(queue, stash), application, ValidatorSettings{}))
-	}
+	s.Validator = NewValidator(ValidatorSettings{}, nil, nil)
+	require.NoError(t, s.configureBoundedInbound(inboundIntegrationSettings(queue, stash)))
 	t.Cleanup(func() {
 		if s.IsConnected() {
 			s.Disconnected(s)
@@ -169,27 +165,30 @@ func inboundIntegrationConfigureGroupLimit(t *testing.T, s *session, key string)
 	assertInboundRingVacant(t, s.boundedIn.ring)
 	s.sessionID.BeginString = BeginStringFIX44
 	s.appDataDictionary, s.transportDataDictionary = dictionary, dictionary
+	s.Validator = NewValidator(ValidatorSettings{}, dictionary, dictionary)
 	settings := inboundIntegrationSettings(0, 1)
 	settings.Set(key, "2")
-	require.NoError(t, s.configureBoundedInbound(settings, s.application, ValidatorSettings{}))
+	require.NoError(t, s.configureBoundedInbound(settings))
 }
 
 func inboundIntegrationDeliver(t *testing.T, s *session, message *Message) {
 	t.Helper()
+	inboundIntegrationDeliverAt(t, s, message, time.Now())
+}
+
+func inboundIntegrationDeliverAt(t *testing.T, s *session, message *Message, received time.Time) {
+	t.Helper()
 	wire := message.build()
-	if s.boundedIn == nil {
-		s.Incoming(s, fixIn{bytes: bytes.NewBuffer(wire), receiveTime: time.Now()})
-		return
-	}
 	slot := inboundRingTestAcquire(t, s.boundedIn.ring)
 	require.LessOrEqual(t, len(wire), cap(slot.frame))
 	slot.frame = slot.frame[:len(wire)]
 	copy(slot.frame, wire)
-	s.Incoming(s, fixIn{slot: slot, receiveTime: time.Now()})
+	slot.receiveTime = received
+	s.Incoming(s, fixIn{slot: slot, receiveTime: received})
 }
 
 func TestBoundedInboundSessionReplay(t *testing.T) {
-	s, application, log, store := newInboundIntegrationSession(t, true, 1, 3)
+	s, application, log, store := newInboundIntegrationSession(t, 1, 3)
 	for _, sequence := range []int{2, 3, 4} {
 		inboundIntegrationDeliver(t, s, inboundIntegrationOrder(sequence, strconv.Itoa(sequence)))
 	}
@@ -205,7 +204,7 @@ func TestBoundedInboundSessionReplay(t *testing.T) {
 }
 
 func TestBoundedInboundSessionDuplicateReplacement(t *testing.T) {
-	s, application, _, store := newInboundIntegrationSession(t, true, 0, 1)
+	s, application, _, store := newInboundIntegrationSession(t, 0, 1)
 	inboundIntegrationDeliver(t, s, inboundIntegrationOrder(2, "original"))
 	inboundIntegrationDeliver(t, s, inboundIntegrationOrder(2, "replacement"))
 	require.Len(t, s.boundedIn.ring.vacant, len(s.boundedIn.ring.slots)-1)
@@ -216,7 +215,7 @@ func TestBoundedInboundSessionDuplicateReplacement(t *testing.T) {
 }
 
 func TestBoundedInboundSessionGapFillDiscard(t *testing.T) {
-	s, application, _, store := newInboundIntegrationSession(t, true, 1, 2)
+	s, application, _, store := newInboundIntegrationSession(t, 1, 2)
 	inboundIntegrationDeliver(t, s, inboundIntegrationOrder(3, "discard-three"))
 	inboundIntegrationDeliver(t, s, inboundIntegrationOrder(4, "discard-four"))
 	factory := MessageFactory{}
@@ -232,7 +231,7 @@ func TestBoundedInboundSessionGapFillDiscard(t *testing.T) {
 }
 
 func TestBoundedInboundSessionChunkedRecovery(t *testing.T) {
-	s, application, _, store := newInboundIntegrationSession(t, true, 1, 2)
+	s, application, _, store := newInboundIntegrationSession(t, 1, 2)
 	s.ResendRequestChunkSize = 2
 	inboundIntegrationDeliver(t, s, inboundIntegrationOrder(5, "5"))
 	s.State = pendingTimeout{s.State}
@@ -247,7 +246,7 @@ func TestBoundedInboundSessionChunkedRecovery(t *testing.T) {
 }
 
 func TestBoundedInboundSessionPendingTimeoutExtendedRange(t *testing.T) {
-	s, application, _, store := newInboundIntegrationSession(t, true, 1, 2)
+	s, application, _, store := newInboundIntegrationSession(t, 1, 2)
 	inboundIntegrationDeliver(t, s, inboundIntegrationOrder(5, "5"))
 	s.State = pendingTimeout{s.State}
 	inboundIntegrationDeliver(t, s, inboundIntegrationOrder(10, "10"))
@@ -274,7 +273,7 @@ func TestBoundedInboundSessionPendingTimeoutExtendedRange(t *testing.T) {
 }
 
 func TestBoundedInboundSessionMalformedRetainedFrameReleasedOnce(t *testing.T) {
-	s, _, _, _ := newInboundIntegrationSession(t, true, 0, 2)
+	s, _, _, _ := newInboundIntegrationSession(t, 0, 2)
 	inboundIntegrationDeliver(t, s, inboundIntegrationOrder(2, "first-stash"))
 	malformed := inboundIntegrationOrder(3, "current-stash")
 	malformed.Body.SetString(tagGapFillFlag, "X")
@@ -334,7 +333,7 @@ func TestBoundedInboundSessionCapacityPreservesStore(t *testing.T) {
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			s, application, _, store := newInboundIntegrationSession(t, true, 0, 1)
+			s, application, _, store := newInboundIntegrationSession(t, 0, 1)
 			s.ResetOnDisconnect = true
 			require.NoError(t, store.SetNextSenderMsgSeqNum(7))
 			require.NoError(t, store.SetNextTargetMsgSeqNum(3))
@@ -372,7 +371,7 @@ func TestBoundedInboundSessionCapacityPreservesStore(t *testing.T) {
 		})
 	}
 	t.Run("zero-stash", func(t *testing.T) {
-		s, application, _, store := newInboundIntegrationSession(t, true, 0, 0)
+		s, application, _, store := newInboundIntegrationSession(t, 0, 0)
 		s.ResetOnDisconnect = true
 		inboundIntegrationDeliver(t, s, inboundIntegrationOrder(2, "no-capacity"))
 		require.False(t, s.IsConnected())
@@ -385,71 +384,105 @@ func TestBoundedInboundSessionCapacityPreservesStore(t *testing.T) {
 }
 
 func TestBoundedInboundSessionCallbackLifetimes(t *testing.T) {
-	t.Run("legacy-retention", func(t *testing.T) {
-		s, application, log, _ := newInboundIntegrationSession(t, false, 0, 0)
-		first := inboundIntegrationOrder(1, "retained-first")
-		firstWire := string(first.build())
-		inboundIntegrationDeliver(t, s, first)
-		inboundIntegrationDeliver(t, s, inboundIntegrationOrder(2, "second"))
-		require.Len(t, application.legacy, 2)
-		require.NotSame(t, application.legacy[0], application.legacy[1])
-		id, err := application.legacy[0].Body.GetString(11)
-		require.Nil(t, err)
-		require.Equal(t, "retained-first", id)
-		require.Equal(t, firstWire, application.legacy[0].rawMessage.String())
-		require.Empty(t, application.borrowed)
-		require.Len(t, log.incoming, 2)
-		require.Empty(t, log.borrowed)
-	})
-	t.Run("borrowed-reuse", func(t *testing.T) {
-		s, application, log, _ := newInboundIntegrationSession(t, true, 0, 0)
-		for sequence := 1; sequence <= 4; sequence++ {
-			inboundIntegrationDeliver(t, s, inboundIntegrationOrder(sequence, strconv.Itoa(sequence)))
-		}
-		factory := MessageFactory{}
-		factory.SetNextSeqNum(5)
-		inboundIntegrationDeliver(t, s, factory.Heartbeat())
-		require.Equal(t, []inboundCallbackRecord{{1, "1"}, {2, "2"}, {3, "3"}, {4, "4"}}, application.borrowed)
-		require.Equal(t, []int{5}, application.borrowedAdmin)
-		require.Empty(t, application.legacy)
-		require.Empty(t, application.legacyAdmin)
-		require.Empty(t, log.incoming)
-		require.Len(t, log.borrowed, 5)
-		require.Contains(t, log.borrowed[0], "11=1\x01")
-		assertInboundRingVacant(t, s.boundedIn.ring)
-	})
+	s, application, log, _ := newInboundIntegrationSession(t, 0, 0)
+	application.fromApp = func(message *Message) MessageRejectError {
+		require.Same(t, s.boundedIn.parsed.Message(), message)
+		require.NotNil(t, message.inbound)
+		require.Len(t, s.boundedIn.ring.vacant, len(s.boundedIn.ring.slots)-1)
+		return nil
+	}
+	for sequence := 1; sequence <= 4; sequence++ {
+		inboundIntegrationDeliver(t, s, inboundIntegrationOrder(sequence, strconv.Itoa(sequence)))
+		require.Nil(t, s.boundedIn.parsed.Message(), "scratch remains live after complete session processing")
+		require.Nil(t, s.boundedIn.parsed.message.rawMessage)
+	}
+	factory := MessageFactory{}
+	factory.SetNextSeqNum(5)
+	inboundIntegrationDeliver(t, s, factory.Heartbeat())
+	require.Equal(t, []inboundCallbackRecord{{1, "1"}, {2, "2"}, {3, "3"}, {4, "4"}}, application.borrowed)
+	require.Equal(t, []int{5}, application.borrowedAdmin)
+	require.Empty(t, log.incoming)
+	require.Len(t, log.borrowed, 5)
+	require.Contains(t, log.borrowed[0], "11=1\x01")
+	assertInboundRingVacant(t, s.boundedIn.ring)
 }
 
-func TestBoundedInboundSessionRequiresExplicitOptIn(t *testing.T) {
-	application := &inboundRecordingApplication{t: t}
-	for _, test := range []struct {
-		name        string
-		application Application
-		log         Log
-		want        error
-	}{
-		{"application", &MockApp{}, &inboundRecordingLog{}, ErrBorrowedApplicationRequired},
-		{"logger", application, &inboundLegacyLog{}, ErrBorrowedLogRequired},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			s := &session{log: test.log}
-			require.ErrorIs(t, s.configureBoundedInbound(inboundIntegrationSettings(0, 0), test.application, ValidatorSettings{}), test.want)
-			require.Nil(t, s.boundedIn)
-		})
+func TestScopedInboundRejectKeepsMessageUntilReplyCompletes(t *testing.T) {
+	s, application, _, store := newInboundIntegrationSession(t, 0, 0)
+	callbackReturned, replyObserved := false, false
+	application.fromApp = func(*Message) MessageRejectError {
+		callbackReturned = true
+		return NewMessageRejectError("application reject", rejectReasonValueIsIncorrect, nil)
 	}
-	for _, enabled := range []string{"", "N"} {
-		settings := NewSessionSettings()
-		if enabled != "" {
-			settings.Set(config.BoundedInbound, enabled)
+	application.toAdmin = func(reply *Message) {
+		require.True(t, callbackReturned)
+		active := s.boundedIn.parsed.Message()
+		require.NotNil(t, active, "callback return released scratch before reject construction")
+		sequence, reject := active.Header.GetInt(tagMsgSeqNum)
+		require.Nil(t, reject)
+		require.Equal(t, 1, sequence)
+		reference, reject := reply.Body.GetInt(tagRefSeqNum)
+		require.Nil(t, reject)
+		require.Equal(t, 1, reference)
+		replyObserved = true
+	}
+	inboundIntegrationDeliver(t, s, inboundIntegrationOrder(1, "reject-me"))
+	require.True(t, replyObserved)
+	require.Equal(t, 2, store.NextTargetMsgSeqNum())
+	require.Nil(t, s.boundedIn.parsed.Message())
+	assertInboundRingVacant(t, s.boundedIn.ring)
+}
+
+type inboundRetainingLog struct {
+	inboundLegacyLog
+	frames [][]byte
+}
+
+func (log *inboundRetainingLog) OnIncoming(frame []byte) {
+	log.frames = append(log.frames, frame)
+}
+
+func TestScopedInboundOrdinaryLoggerReceivesOwnedBytes(t *testing.T) {
+	s, _, _, _ := newInboundIntegrationSession(t, 0, 0)
+	log := &inboundRetainingLog{}
+	s.log = log
+	require.NoError(t, s.configureBoundedInbound(inboundIntegrationSettings(0, 0)))
+	require.Nil(t, s.boundedIn.log)
+	var expected []string
+	for sequence := 1; sequence <= 4; sequence++ {
+		message := inboundIntegrationOrder(sequence, strconv.Itoa(sequence))
+		expected = append(expected, string(message.build()))
+		inboundIntegrationDeliver(t, s, message)
+	}
+	for range s.boundedIn.ring.slots {
+		slot := inboundRingTestAcquire(t, s.boundedIn.ring)
+		for index := range slot.frame[:cap(slot.frame)] {
+			slot.frame[:cap(slot.frame)][index] = 'X'
 		}
-		s := &session{log: &inboundLegacyLog{}}
-		require.NoError(t, s.configureBoundedInbound(settings, &MockApp{}, ValidatorSettings{}))
-		require.Nil(t, s.boundedIn)
+		slot.release()
 	}
+	require.Len(t, log.frames, len(expected))
+	for index, frame := range log.frames {
+		require.Equal(t, expected[index], string(frame), "ordinary logger retained a recycled frame")
+	}
+	assertInboundRingVacant(t, s.boundedIn.ring)
+}
+
+func TestScopedInboundReplayPreservesReceiveTime(t *testing.T) {
+	s, application, log, _ := newInboundIntegrationSession(t, 0, 2)
+	first := time.Date(2026, time.October, 15, 12, 0, 0, 123, time.UTC)
+	replacement, missing := first.Add(time.Second), first.Add(2*time.Second)
+	inboundIntegrationDeliverAt(t, s, inboundIntegrationOrder(2, "original"), first)
+	inboundIntegrationDeliverAt(t, s, inboundIntegrationOrder(2, "replacement"), replacement)
+	inboundIntegrationDeliverAt(t, s, inboundIntegrationOrder(1, "missing"), missing)
+	require.Equal(t, []inboundCallbackRecord{{1, "missing"}, {2, "replacement"}}, application.borrowed)
+	require.Equal(t, []time.Time{missing, replacement}, application.received)
+	require.Len(t, log.borrowed, 3, "replay must not duplicate incoming logging")
+	assertInboundRingVacant(t, s.boundedIn.ring)
 }
 
 func TestBoundedInboundSessionDiagnosticLoggerRetainsOwnedArgument(t *testing.T) {
-	s, application, log, _ := newInboundIntegrationSession(t, true, 0, 0)
+	s, application, log, _ := newInboundIntegrationSession(t, 0, 0)
 	s.State = logonState{}
 	message := inboundIntegrationOrder(1, "invalid-before-logon")
 	wire := string(message.build())
@@ -471,7 +504,7 @@ func TestBoundedInboundSessionDiagnosticLoggerRetainsOwnedArgument(t *testing.T)
 }
 
 func TestBoundedInboundSessionDisconnectCleanup(t *testing.T) {
-	s, application, _, store := newInboundIntegrationSession(t, true, 2, 1)
+	s, application, _, store := newInboundIntegrationSession(t, 2, 1)
 	inboundIntegrationDeliver(t, s, inboundIntegrationOrder(2, "discard-on-disconnect"))
 	incoming := make(chan fixIn, 2)
 	for range 2 {
@@ -498,7 +531,7 @@ func TestBoundedInboundSessionDisconnectCleanup(t *testing.T) {
 func TestBoundedInboundSessionDisconnectJoinsReader(t *testing.T) {
 	for _, queue := range []int{0, 1} {
 		t.Run(strconv.Itoa(queue), func(t *testing.T) {
-			s, _, _, _ := newInboundIntegrationSession(t, true, queue, 1)
+			s, _, _, _ := newInboundIntegrationSession(t, queue, 1)
 			connection, peer := net.Pipe()
 			defer connection.Close()
 			defer peer.Close()

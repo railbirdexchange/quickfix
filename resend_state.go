@@ -89,8 +89,15 @@ func (s resendState) FixMsgIn(session *session, msg *Message) (nextState session
 			if slot == nil {
 				break
 			}
-			nextState = inSession{}.FixMsgIn(session, slot.parsed.Message())
-			slot.release()
+			message, err := session.parseInboundSlot(slot)
+			if err != nil {
+				slot.release()
+				return session.failBoundedInbound(err)
+			}
+			nextState = inSession{}.FixMsgIn(session, message)
+			if !slot.retained {
+				slot.release()
+			}
 			if !nextState.IsLoggedOn() {
 				return
 			}

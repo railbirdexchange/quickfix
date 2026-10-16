@@ -102,16 +102,16 @@ func (v *fixtValidator) Validate(msg *Message) MessageRejectError {
 }
 
 func validateFIX(d *datadictionary.DataDictionary, settings ValidatorSettings, msgType string, msg *Message) MessageRejectError {
-	return validateFIXWithScratch(d, settings, msgType, msg, nil)
+	return validateFIXWithScratch(d, settings, msgType, msg, nil, nil)
 }
 
-func validateFIXWithScratch(d *datadictionary.DataDictionary, settings ValidatorSettings, msgType string, msg *Message, scratch *FieldMap) MessageRejectError {
+func validateFIXWithScratch(d *datadictionary.DataDictionary, settings ValidatorSettings, msgType string, msg *Message, scratch *validationTagSet, required *validationRequiredMetadata) MessageRejectError {
 	if d != nil {
 		if err := validateMsgType(d, msgType, msg); err != nil {
 			return err
 		}
 
-		if err := validateRequired(d, d, msgType, msg); err != nil {
+		if err := validateRequired(d, d, msgType, msg, required); err != nil {
 			return err
 		}
 	}
@@ -121,7 +121,7 @@ func validateFIXWithScratch(d *datadictionary.DataDictionary, settings Validator
 	}
 
 	if settings.RejectInvalidMessage && d != nil {
-		if err := validateFields(d, d, settings, msgType, msg); err != nil {
+		if err := validateFields(d, d, settings, msg); err != nil {
 			return err
 		}
 
@@ -134,16 +134,16 @@ func validateFIXWithScratch(d *datadictionary.DataDictionary, settings Validator
 }
 
 func validateFIXT(transportDD, appDD *datadictionary.DataDictionary, settings ValidatorSettings, msgType string, msg *Message) MessageRejectError {
-	return validateFIXTWithScratch(transportDD, appDD, settings, msgType, msg, nil)
+	return validateFIXTWithScratch(transportDD, appDD, settings, msgType, msg, nil, nil)
 }
 
-func validateFIXTWithScratch(transportDD, appDD *datadictionary.DataDictionary, settings ValidatorSettings, msgType string, msg *Message, scratch *FieldMap) MessageRejectError {
+func validateFIXTWithScratch(transportDD, appDD *datadictionary.DataDictionary, settings ValidatorSettings, msgType string, msg *Message, scratch *validationTagSet, required *validationRequiredMetadata) MessageRejectError {
 	if appDD != nil && transportDD != nil {
 		if err := validateMsgType(appDD, msgType, msg); err != nil {
 			return err
 		}
 
-		if err := validateRequired(transportDD, appDD, msgType, msg); err != nil {
+		if err := validateRequired(transportDD, appDD, msgType, msg, required); err != nil {
 			return err
 		}
 	}
@@ -153,7 +153,7 @@ func validateFIXTWithScratch(transportDD, appDD *datadictionary.DataDictionary, 
 	}
 
 	if settings.RejectInvalidMessage && appDD != nil && transportDD != nil {
-		if err := validateFields(transportDD, appDD, settings, msgType, msg); err != nil {
+		if err := validateFields(transportDD, appDD, settings, msg); err != nil {
 			return err
 		}
 
@@ -176,12 +176,124 @@ func validateWalk(transportDD *datadictionary.DataDictionary, appDD *datadiction
 	return validateWalkWithScratch(transportDD, appDD, settings, msgType, msg, nil)
 }
 
-func validateWalkWithScratch(transportDD *datadictionary.DataDictionary, appDD *datadictionary.DataDictionary, settings ValidatorSettings, msgType string, msg *Message, scratch *FieldMap) MessageRejectError {
-	remainingFields := msg.fields
-	var iteratedTags datadictionary.TagSet
-	if scratch == nil {
-		iteratedTags = make(datadictionary.TagSet)
+const validationInlineTagCapacity = 512
+
+// validationTagSet has one owner. Public validators use a call-local table;
+// sessions reuse fixed storage and clear only the entries touched by a call.
+// Keep either table at most half full. Larger legacy messages spill into a
+// private map without imposing a new validation limit.
+type validationTagSet struct {
+	tags     []Tag
+	limit    int
+	count    int
+	hasZero  bool
+	overflow datadictionary.TagSet
+	touched  []int
+	used     int
+}
+
+func (seen *validationTagSet) initFixed(capacity int) {
+	size := 2
+	for size < 2*capacity {
+		size *= 2
 	}
+	seen.tags = make([]Tag, size)
+	seen.limit = capacity
+	seen.touched = make([]int, capacity)
+}
+
+func (seen *validationTagSet) reset() {
+	for _, index := range seen.touched[:seen.used] {
+		seen.tags[index] = 0
+	}
+	seen.used = 0
+	seen.count = 0
+	seen.hasZero = false
+}
+
+// add returns false for an already visited top-level tag. Tag zero needs a
+// separate marker because zero also identifies an unoccupied table entry.
+func (seen *validationTagSet) add(tag Tag) bool {
+	if seen.overflow != nil {
+		if _, exists := seen.overflow[int(tag)]; exists {
+			return false
+		}
+		seen.overflow.Add(int(tag))
+		return true
+	}
+	if tag == 0 {
+		if seen.hasZero {
+			return false
+		}
+		if seen.count == seen.limit {
+			seen.spill(tag)
+		} else {
+			seen.hasZero = true
+			seen.count++
+		}
+		return true
+	}
+	hash := uint64(tag) * 11400714819323198485
+	hash ^= hash >> 32
+	mask := len(seen.tags) - 1
+	index := int(hash & uint64(mask))
+	for {
+		switch seen.tags[index] {
+		case tag:
+			return false
+		case 0:
+			if seen.count == seen.limit {
+				seen.spill(tag)
+			} else {
+				seen.tags[index] = tag
+				if seen.touched != nil {
+					seen.touched[seen.used] = index
+					seen.used++
+				}
+				seen.count++
+			}
+			return true
+		}
+		index = (index + 1) & mask
+	}
+}
+
+func (seen *validationTagSet) spill(tag Tag) {
+	if seen.touched != nil {
+		// The session parser and BoundedValidator check the complete field
+		// count first. Only top-level tags enter this table.
+		panic(ErrValidationCapacity)
+	}
+	seen.overflow = make(datadictionary.TagSet, seen.count+1)
+	for _, previous := range seen.tags {
+		if previous != 0 {
+			seen.overflow.Add(int(previous))
+		}
+	}
+	if seen.hasZero {
+		seen.overflow.Add(0)
+	}
+	seen.overflow.Add(int(tag))
+}
+
+func validateWalkWithScratch(transportDD *datadictionary.DataDictionary, appDD *datadictionary.DataDictionary, settings ValidatorSettings, msgType string, msg *Message, scratch *validationTagSet) MessageRejectError {
+	if scratch == nil {
+		return validateWalkWithLocalScratch(transportDD, appDD, settings, msgType, msg)
+	}
+	return validateWalkWithTagSet(transportDD, appDD, settings, msgType, msg, scratch)
+}
+
+// Keep the public validator's stack table in its own call frame. Session
+// validation must not initialize an unused 8 KiB table on every message.
+func validateWalkWithLocalScratch(transportDD, appDD *datadictionary.DataDictionary, settings ValidatorSettings, msgType string, msg *Message) MessageRejectError {
+	var tags [2 * validationInlineTagCapacity]Tag
+	seen := validationTagSet{tags: tags[:], limit: validationInlineTagCapacity}
+	return validateWalkWithTagSet(transportDD, appDD, settings, msgType, msg, &seen)
+}
+
+func validateWalkWithTagSet(transportDD, appDD *datadictionary.DataDictionary, settings ValidatorSettings, msgType string, msg *Message, seen *validationTagSet) MessageRejectError {
+	remainingFields := msg.fields
+	bodyDef := appDD.Messages[msgType]
 
 	var messageDef *datadictionary.MessageDef
 	var fieldDef *datadictionary.FieldDef
@@ -189,8 +301,7 @@ func validateWalkWithScratch(transportDD *datadictionary.DataDictionary, appDD *
 	var ok bool
 
 	for len(remainingFields) > 0 {
-		field := remainingFields[0]
-		tag := field.tag
+		tag := remainingFields[0].tag
 
 		switch {
 		case tag.IsHeader():
@@ -198,23 +309,11 @@ func validateWalkWithScratch(transportDD *datadictionary.DataDictionary, appDD *
 		case tag.IsTrailer():
 			messageDef = transportDD.Trailer
 		default: // is body
-			messageDef = appDD.Messages[msgType]
+			messageDef = bodyDef
 		}
 
-		if scratch != nil {
-			if _, duplicate := scratch.lookup(tag); duplicate {
-				return tagAppearsMoreThanOnce(tag)
-			}
-			// BoundedValidator checks the entire field count before traversal.
-			// The set only receives top-level tags, so it cannot exceed it.
-			if !scratch.put(tag, nil) {
-				panic(ErrValidationCapacity)
-			}
-		} else {
-			if _, duplicate := iteratedTags[int(tag)]; duplicate {
-				return tagAppearsMoreThanOnce(tag)
-			}
-			iteratedTags.Add(int(tag))
+		if !seen.add(tag) {
+			return tagAppearsMoreThanOnce(tag)
 		}
 
 		if fieldDef, ok = messageDef.Fields[int(tag)]; !ok {
@@ -238,7 +337,7 @@ func validateWalkWithScratch(transportDD *datadictionary.DataDictionary, appDD *
 }
 
 func validateVisitField(fieldDef *datadictionary.FieldDef, fields []TagValue) ([]TagValue, MessageRejectError) {
-	if fieldDef.IsGroup() {
+	if len(fieldDef.Fields) > 0 {
 		var err MessageRejectError
 		if fields, err = validateVisitGroupField(fieldDef, fields); err != nil {
 			return nil, err
@@ -323,7 +422,12 @@ func validateFieldContent(msg *Message, checkFieldsHaveValues, checkFieldsOutOfO
 	return nil
 }
 
-func validateRequired(transportDD *datadictionary.DataDictionary, appDD *datadictionary.DataDictionary, msgType string, message *Message) MessageRejectError {
+func validateRequired(transportDD *datadictionary.DataDictionary, appDD *datadictionary.DataDictionary, msgType string, message *Message, compiled *validationRequiredMetadata) MessageRejectError {
+	if compiled != nil && compiled.allPresent(msgType, message) {
+		return nil
+	}
+	// On a missing field, retain the original traversal and reject selection.
+	// Compiled order is used only for successful session validation.
 	if err := validateRequiredFieldMap(message, transportDD.Header.RequiredTags, message.Header.FieldMap); err != nil {
 		return err
 	}
@@ -353,21 +457,21 @@ func validateRequiredFieldMap(_ *Message, requiredTags map[int]struct{}, fieldMa
 func validateFields(transportDD *datadictionary.DataDictionary,
 	appDD *datadictionary.DataDictionary,
 	settings ValidatorSettings,
-	msgType string,
 	message *Message,
 ) MessageRejectError {
-	for _, field := range message.fields {
+	for index := range message.fields {
+		field := &message.fields[index]
 		switch {
 		case field.tag.IsHeader():
-			if err := validateField(transportDD, settings, transportDD.Header.Tags, field); err != nil {
+			if err := validateField(transportDD, settings, field); err != nil {
 				return err
 			}
 		case field.tag.IsTrailer():
-			if err := validateField(transportDD, settings, transportDD.Trailer.Tags, field); err != nil {
+			if err := validateField(transportDD, settings, field); err != nil {
 				return err
 			}
 		default:
-			if err := validateField(appDD, settings, appDD.Messages[msgType].Tags, field); err != nil {
+			if err := validateField(appDD, settings, field); err != nil {
 				return err
 			}
 		}
@@ -393,8 +497,7 @@ func checkFieldNotDefined(settings ValidatorSettings, field Tag) bool {
 
 func validateField(d *datadictionary.DataDictionary,
 	settings ValidatorSettings,
-	_ datadictionary.TagSet,
-	field TagValue,
+	field *TagValue,
 ) MessageRejectError {
 	if len(field.value) == 0 {
 		return TagSpecifiedWithoutAValue(field.tag)

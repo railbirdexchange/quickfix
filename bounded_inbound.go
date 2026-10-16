@@ -2,8 +2,7 @@ package quickfix
 
 import (
 	"errors"
-
-	"github.com/quickfixgo/quickfix/datadictionary"
+	"time"
 )
 
 var (
@@ -11,13 +10,13 @@ var (
 	ErrInboundStashCapacity = errors.New("quickfix: inbound stash capacity exceeded")
 )
 
-// inboundSlot transfers as one unit: its frame and parsed indexes always have
-// the same owner. A retained slot belongs to the session's out-of-order stash.
+// inboundSlot transfers raw frame ownership. Only the session uses parse scratch;
+// a reader releasing a raw slot must never reset the active parsed message.
 type inboundSlot struct {
-	frame    []byte
-	parsed   *MessageSlot
-	ring     *inboundRing
-	retained bool
+	frame       []byte
+	receiveTime time.Time
+	ring        *inboundRing
+	retained    bool
 }
 
 // inboundRing owns fixed storage. Only the session owner may inspect or change
@@ -34,7 +33,7 @@ type inboundStashEntry struct {
 	slot *inboundSlot
 }
 
-func newInboundRing(transport, application *datadictionary.DataDictionary, limits ParseLimits, queueDepth, maxStash int) (*inboundRing, error) {
+func newInboundRing(limits ParseLimits, queueDepth, maxStash int) (*inboundRing, error) {
 	maximum := int(^uint(0) >> 1)
 	if queueDepth < 0 || maxStash < 0 || maxStash > maximum-2 || queueDepth > maximum-maxStash-2 {
 		return nil, ErrInvalidInboundLimits
@@ -48,8 +47,7 @@ func newInboundRing(transport, application *datadictionary.DataDictionary, limit
 	if count > maximum/1024 {
 		return nil, ErrInvalidInboundLimits
 	}
-	first, err := NewMessageSlot(transport, application, limits)
-	if err != nil {
+	if err := validateParseLimits(limits); err != nil {
 		return nil, err
 	}
 	if count > maximum/limits.MaxFrameBytes {
@@ -62,28 +60,20 @@ func newInboundRing(transport, application *datadictionary.DataDictionary, limit
 	}
 	frames := make([]byte, count*limits.MaxFrameBytes)
 	for index := range ring.slots {
-		parsed := first
-		if index > 0 {
-			parsed, err = NewMessageSlot(transport, application, limits)
-			if err != nil {
-				return nil, err
-			}
-		}
 		start := index * limits.MaxFrameBytes
 		end := start + limits.MaxFrameBytes
 		slot := &ring.slots[index]
-		*slot = inboundSlot{frame: frames[start:start:end], parsed: parsed, ring: ring}
+		*slot = inboundSlot{frame: frames[start:start:end], ring: ring}
 		ring.vacant <- slot
 	}
 	return ring, nil
 }
 
-// release ends all frame/message borrows before returning the slot. The current
-// owner calls it exactly once and must not access the slot after the send.
+// release returns raw storage. The current owner must finish all reads first,
+// call it exactly once, and never access the slot after the send.
 func (slot *inboundSlot) release() {
-	slot.parsed.message.inbound = nil
-	slot.parsed.Reset()
 	slot.frame = slot.frame[:0]
+	slot.receiveTime = time.Time{}
 	slot.retained = false
 	slot.ring.vacant <- slot
 }
@@ -120,8 +110,8 @@ func (ring *inboundRing) retain(index, seq int, slot *inboundSlot) {
 	slot.retained = true
 }
 
-// take transfers a retained slot back to active session processing. It leaves
-// the frame and parsed message intact until that owner releases the slot.
+// take transfers a retained raw frame back to the session, which reparses it
+// into its exclusive scratch before replaying the original receive timestamp.
 func (ring *inboundRing) take(seq int) *inboundSlot {
 	for index := range ring.stash {
 		entry := &ring.stash[index]

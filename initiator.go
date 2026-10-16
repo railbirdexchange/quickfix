@@ -216,13 +216,11 @@ func (i *Initiator) handleConnection(session *session, tlsConfig *tls.Config, di
 		}
 		msgIn = make(chan fixIn, session.InChanCapacity)
 		msgOut = make(chan []byte, outboundBufferSize)
-		if session.boundedIn != nil {
-			readerControl, err = startBoundedRead(netConn, newParser(bufio.NewReader(netConn)), session.boundedIn, msgIn, nil, time.Time{})
-			if err != nil {
-				session.log.OnEvent(err.Error())
-				_ = netConn.Close()
-				goto reconnect
-			}
+		readerControl, err = startBoundedRead(netConn, newParser(bufio.NewReader(netConn)), session.boundedIn, msgIn, nil, time.Time{})
+		if err != nil {
+			session.log.OnEvent(err.Error())
+			_ = netConn.Close()
+			goto reconnect
 		}
 		if session.boundedOut != nil {
 			writerControl = newBoundedWriteConnection(netConn, session.boundedOut)
@@ -236,9 +234,6 @@ func (i *Initiator) handleConnection(session *session, tlsConfig *tls.Config, di
 			goto reconnect
 		}
 
-		if readerControl == nil {
-			go readLoop(newParser(bufio.NewReader(netConn)), msgIn, session.log)
-		}
 		disconnected = make(chan interface{})
 		go func() {
 			if writerControl != nil {

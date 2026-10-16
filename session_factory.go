@@ -133,8 +133,6 @@ func (f sessionFactory) newSession(
 		}
 	}
 
-	// Always use a default message validator without data dictionaries
-	s.Validator = NewValidator(validatorSettings, nil, nil)
 	if sessionID.IsFIXT() {
 		if s.DefaultApplVerID, err = settings.Setting(config.DefaultApplVerID); err != nil {
 			return
@@ -170,8 +168,6 @@ func (f sessionFactory) newSession(
 				)
 				return
 			}
-
-			s.Validator = NewValidator(validatorSettings, s.appDataDictionary, s.transportDataDictionary)
 		}
 	} else if settings.HasSetting(config.DataDictionary) {
 		var dataDictionaryPath string
@@ -186,8 +182,6 @@ func (f sessionFactory) newSession(
 			)
 			return
 		}
-
-		s.Validator = NewValidator(validatorSettings, s.appDataDictionary, nil)
 	}
 
 	if settings.HasSetting(config.ResetOnLogon) {
@@ -464,7 +458,10 @@ func (f sessionFactory) newSession(
 	if s.log, err = logFactory.CreateSessionLog(s.sessionID); err != nil {
 		return
 	}
-	if err = s.configureBoundedInbound(settings, application, validatorSettings); err != nil {
+	if err = s.configureBoundedInbound(settings); err != nil {
+		return
+	}
+	if s.Validator, err = newSessionValidator(validatorSettings, s.appDataDictionary, s.transportDataDictionary, s.boundedIn.limits.MaxFields); err != nil {
 		return
 	}
 

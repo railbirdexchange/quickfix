@@ -1,21 +1,15 @@
 package quickfix
 
 import (
-	"errors"
+	"bytes"
 
 	"github.com/quickfixgo/quickfix/config"
-)
-
-var (
-	ErrBorrowedApplicationRequired = errors.New("quickfix: bounded inbound requires BorrowedApplication")
-	ErrBorrowedLogRequired         = errors.New("quickfix: bounded inbound requires BorrowedLog")
 )
 
 type boundedInboundSession struct {
 	limits      ParseLimits
 	ring        *inboundRing
-	validator   *BoundedValidator
-	application BorrowedApplication
+	parsed      *MessageSlot
 	log         BorrowedLog
 	recovery    resendState
 	pending     pendingTimeout
@@ -25,24 +19,10 @@ type boundedInboundSession struct {
 	eventLog    BorrowedEventLog
 }
 
-func (s *session) configureBoundedInbound(settings *SessionSettings, application Application, validation ValidatorSettings) error {
-	if !settings.HasSetting(config.BoundedInbound) {
-		return nil
-	}
-	enabled, err := settings.BoolSetting(config.BoundedInbound)
-	if err != nil || !enabled {
-		return err
-	}
-	borrowedApplication, ok := application.(BorrowedApplication)
-	if !ok {
-		return ErrBorrowedApplicationRequired
-	}
-	borrowedLog, ok := s.log.(BorrowedLog)
-	if !ok {
-		return ErrBorrowedLogRequired
-	}
+func (s *session) configureBoundedInbound(settings *SessionSettings) error {
 	limits := DefaultParseLimits()
 	stashCapacity := 32
+	queueAllowance := min(s.InChanCapacity, 32)
 	for _, setting := range []struct {
 		key    string
 		target *int
@@ -52,6 +32,7 @@ func (s *session) configureBoundedInbound(settings *SessionSettings, application
 		{config.BoundedMaxGroupEntries, &limits.MaxGroupEntries},
 		{config.BoundedMaxGroupDepth, &limits.MaxGroupDepth},
 		{config.BoundedInboundStashCapacity, &stashCapacity},
+		{config.InboundFrameQueueCapacity, &queueAllowance},
 	} {
 		if settings.HasSetting(setting.key) {
 			value, err := settings.IntSetting(setting.key)
@@ -61,22 +42,48 @@ func (s *session) configureBoundedInbound(settings *SessionSettings, application
 			*setting.target = value
 		}
 	}
-	if !settings.HasSetting(config.InChanCapacity) {
-		s.InChanCapacity = 32
+	if queueAllowance < 0 {
+		return ErrInvalidInboundLimits
 	}
-	ring, err := newInboundRing(s.transportDataDictionary, s.appDataDictionary, limits, s.InChanCapacity, stashCapacity)
+	queueAllowance = min(queueAllowance, s.InChanCapacity)
+	ring, err := newInboundRing(limits, queueAllowance, stashCapacity)
 	if err != nil {
 		return err
 	}
-	validator, err := NewBoundedValidator(validation, s.appDataDictionary, s.transportDataDictionary, limits.MaxFields)
+	parsed, err := NewMessageSlot(s.transportDataDictionary, s.appDataDictionary, limits)
 	if err != nil {
 		return err
 	}
-	s.boundedIn = &boundedInboundSession{limits: limits, ring: ring, validator: validator, application: borrowedApplication, log: borrowedLog}
-	// Resolve the optional interface once. A hot interface assertion may lazily
-	// allocate its runtime cache even after many otherwise allocation-free calls.
+	parsed.enableScopedCallbacks()
+	borrowedLog, _ := s.log.(BorrowedLog)
+	s.boundedIn = &boundedInboundSession{limits: limits, ring: ring, parsed: parsed, log: borrowedLog}
+	// Resolve borrowed event logging before the session begins processing.
 	s.boundedIn.eventLog, _ = s.log.(BorrowedEventLog)
 	return nil
+}
+
+func (s *session) parseInboundSlot(slot *inboundSlot) (*Message, error) {
+	parsed := s.boundedIn.parsed
+	// A previous callback may have used allocating setters. Restore the fixed
+	// scratch before parsing the next frame, including retained-frame replay.
+	parsed.Reset()
+	if err := parsed.Parse(slot.frame); err != nil {
+		return nil, err
+	}
+	message := parsed.Message()
+	message.inbound = slot
+	message.ReceiveTime = slot.receiveTime
+	return message, nil
+}
+
+func (s *session) logIncomingFrame(frame []byte) {
+	if s.boundedIn.log != nil {
+		s.boundedIn.log.OnIncomingBorrowed(frame)
+		return
+	}
+	// Arbitrary loggers retain their existing byte ownership. This allocating
+	// adapter is outside the zero-allocation logger contract.
+	s.log.OnIncoming(bytes.Clone(frame))
 }
 
 func isResendRecovery(state sessionState) bool {

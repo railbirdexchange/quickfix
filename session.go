@@ -754,11 +754,7 @@ func (s *session) verifySelect(msg *Message, checkTooHigh bool, checkTooLow bool
 }
 
 func (s *session) verifyMsgAgainstAppImpl(msg *Message) MessageRejectError {
-	if msg.inbound != nil {
-		if reject := s.boundedIn.validator.validateWithinCapacity(msg); reject != nil {
-			return reject
-		}
-	} else if s.Validator != nil {
+	if s.Validator != nil {
 		if reject := s.Validator.Validate(msg); reject != nil {
 			return reject
 		}
@@ -772,33 +768,6 @@ func (s *session) fromCallback(msg *Message) MessageRejectError {
 	if err != nil {
 		return err
 	}
-	if msg.inbound != nil {
-		if s.boundedOut != nil {
-			b := s.boundedOut
-			b.activeSlot = msg.inbound.parsed
-			b.callbackErr.err = nil
-			var reject MessageRejectError
-			if isAdminMessageType(msgType) {
-				reject = b.application.FromAdminBorrowed(b.activeSlot, s.sessionID)
-			} else {
-				reject = b.application.FromAppBorrowed(b.activeSlot, s.sessionID)
-			}
-			if b.builder.active && b.builder.Err() != nil {
-				b.callbackErr.err = b.builder.Err()
-			}
-			b.abort()
-			b.activeSlot = nil
-			if b.callbackErr.err != nil {
-				return &b.callbackErr
-			}
-			return reject
-		}
-		if isAdminMessageType(msgType) {
-			return s.boundedIn.application.FromAdminBorrowed(msg.inbound.parsed, s.sessionID)
-		}
-		return s.boundedIn.application.FromAppBorrowed(msg.inbound.parsed, s.sessionID)
-	}
-
 	if isAdminMessageType(msgType) {
 		return s.application.FromAdmin(msg, s.sessionID)
 	}
