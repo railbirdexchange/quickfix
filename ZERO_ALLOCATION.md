@@ -9,10 +9,21 @@ or send API is required.
 The measured target is the warmed, bounded path from a TCP frame through
 dictionary/group parsing, validation, ordinary application handling, encoding,
 resend-journal commit, completed write and output-slot return. Source remains
-compatible with Go 1.23. Exact Go 1.23 checks of seven warmed TCP scenarios each
-completed 100 cycles with zero allocated objects and zero allocated bytes.
+compatible with Go 1.23. At current runtime `a2fb11b9`, exact Go 1.23 checks of
+seven warmed TCP scenarios each completed 100 cycles with zero allocated objects
+and zero allocated bytes. This includes connected-send backpressure and the
+corrected slow-consumer lifecycle. Focused correctness and race checks pass;
+the fresh Go 1.23 all-package suite, vet and complete core race run also pass.
+Only the previously reproduced optional Mongo logger teardown suite is excluded.
+All 35 refreshed full TCP samples report 0 B/op and 0 allocs/op; the mandatory
+baseline capture passes with its allocation rows preserved.
+The final `a2fb11b9` revision passes unchanged fix-server steady and burst
+delivery, audit, ordering and recovery assertions. Those whole-process runs
+still allocate: +0.369% steady / −0.522% burst versus the matched baseline, one
+run each. These small differences do not establish statistical improvement.
 Allocation and latency are separate qualifications: the sub-microsecond
-full-session latency target remains unmet. The current
+target remains unmet even at the directly measured final-read-to-write boundary.
+This work is not ready to merge. The current
 [phase-7 evidence](benchmarks/zero-allocation/phase-7/README.md) identifies the
 source, measurements and checks that are final versus diagnostic.
 
@@ -55,11 +66,20 @@ parser per raw frame.
 A repeatedly sent caller message attaches its construction arena on its second
 ordinary send. The arena has wire, getter-value and overlap-staging byte planes,
 each bounded by the frame limit, plus fixed field indexes and records. An
-[illustrative cold construction benchmark](benchmarks/zero-allocation/phase-7/construction-cold-go1.25.3.txt)
+[historical cold construction benchmark](benchmarks/zero-allocation/phase-7/construction-cold-go1.25.3.txt)
 measured 440,840 B and 54 allocations with the default arena versus 1,688 B and
 31 allocations for its ordinary construction fixture. This is a setup cost,
 not a per-request result or an exact memory formula for every message shape.
 Reusing many caller messages multiplies that storage.
+
+The [first-send correction](benchmarks/zero-allocation/phase-7/first-send/README.md)
+removes the large scratch allocation on fresh sends and repeated arena
+attachment after convenience reparsing. Current
+[cold scalar packing](benchmarks/zero-allocation/phase-7/cold-scalars/README.md)
+further reduces the completed-send component fixtures to 2,760 B / 24 allocations
+for a fresh parsed message and 88 B / 4 allocations for repeated convenience
+reparsing into the same message. Those compatibility lifecycles still allocate;
+they are separate from warmed scalar updates on a reused response.
 
 The session also owns one control-message arena of the same kind, a 16 KiB
 reject-text buffer, a 16 KiB + 18-byte event buffer and fixed engine-field
@@ -82,7 +102,9 @@ existing processing/send scope.
 - A caller-owned outgoing message remains the caller's after synchronous
   `SendToTarget` encoding returns. The writer owns an independent wire slot, so
   subsequent caller mutation cannot alter queued bytes. Do not concurrently
-  mutate or send the same message. Getter views from its arena can move or be
+  mutate or send the same message. On a logged-on connection, this call can wait
+  for output capacity; the caller must keep the message and borrowed input
+  values valid until it returns. Getter views from its arena can move or be
   replaced on later mutations; engine-generated views can change on a later
   send. Public `SetBytes` retains its caller-supplied value alias, and the source
   must remain valid for the operation using it.
@@ -120,7 +142,10 @@ flowchart LR
     Owner --> Handler[Ordinary Application callback]
     Handler --> Caller[Caller-owned response Message]
     Caller --> Send[Synchronous SendToTarget]
-    Send --> Reserve[Reserve output and journal capacity]
+    Send --> Admission[Output admission]
+    Admission -->|capacity available| Reserve[Reserve output and journal capacity]
+    Admission -->|logged on and exhausted| Wait[Sending owner waits for writer progress]
+    Wait -->|slot returned| Reserve
     Reserve --> Callback[ToApp or ToAdmin]
     Callback --> Encode[Encode independent output slot]
     Encode --> Commit[Commit journal copy and sender sequence]
@@ -139,17 +164,42 @@ or discard.
 Vacant inbound-slot exhaustion backpressures the socket reader. Frame, field,
 group, nesting and stash capacity failures produce explicit errors without
 growing storage or changing committed sequence/store state for that failed
-operation. Ordinary output exhaustion returns `ErrOutboundCapacity`; the caller
-can retry after capacity returns. The runtime never silently allocates another
-output slot or converts a failed send into success.
+operation. When the session is offline or not yet logged on, ordinary output
+exhaustion returns `ErrOutboundCapacity`; the caller can retry after capacity
+returns. Replacement sends also preserve immediate finite admission and return
+`ErrOutboundCapacity` when their capacity is unavailable.
+
+For ordinary nonreplacement sends on a logged-on session with a live writer,
+output exhaustion backpressures the synchronous sending owner. It transfers
+already committed pending frames to the writer and waits for a returned output
+slot or writer failure under the existing send/resend ownership. It does not
+wait for the session loop's message-event notification. The current send does
+not invoke its application callback, change sender sequence or retained history,
+or hold a journal reservation while waiting. Writer failure returns an error
+without committing the waiting send. The runtime never grows the ring or
+converts a failed send into success.
+
+Pending/scheduled reset and journal-admission errors remain immediate, before
+flushing queued traffic or entering a capacity wait. Pending reset returns
+`ErrOutboundResetPending`; full retention returns `ErrJournalFull`. A reset
+Logon with `141=Y` retains the immediate output-capacity boundary so it cannot
+flush bytes its reset intends to discard. Preflight journal reserve/abort leaves
+reservation bookkeeping unchanged during a connected capacity wait.
 
 Output and prepared-journal reservations precede assigning prospective send
 state; complete encoding and retention-capacity checks precede commit. A failed
 send preserves the sender sequence and journal. Earlier successful sends remain
-committed. If an application handles an output-capacity error and returns `nil`
+committed. If an application handles an immediate send error and returns `nil`
 from its incoming callback, normal input processing can still advance the target
-sequence; the measured slow-consumer fixture does this and retries the failed
-business ID with a fresh inbound FIX sequence.
+sequence. Connected capacity backpressure no longer requires the application to
+retry the current business message. The revised slow-consumer fixture fills all
+33 output slots, observes request 34 blocked for one millisecond, releases the
+writer independently, and validates all 34 responses without an application
+retry. This observation interval is included in the measured cycle. Its new
+exact 100-cycle allocation interval passes with zero objects and bytes at
+`a2fb11b9`; all five refreshed throughput samples also report 0/0. Historical `0572f01b`
+results used an immediate rejection followed by retry and are not a timing
+baseline for this changed operation.
 
 Arena capacity failures latch the affected section's error without committing
 that field mutation. Send and append report the error before persistence. Clear
@@ -199,7 +249,31 @@ fixtures include actual TCP reads/writes, dictionary validation, changing order
 fields, groups, resend, inbound gaps, queue exhaustion and warmed traffic after
 reconnect. Every measured cycle includes peer validation, ACK processing,
 completed writes and output-slot return. Correctness and race runs are separate
-from performance measurement.
+from performance measurement. The revised connected-backpressure case uses only
+setup-allocated channels and a reused timer; no goroutine is created per cycle.
+Owner-copied snapshots establish unchanged committed state before preparation,
+and the writer-failure case checks that a blocked send fails without committing.
+The [backpressure regression checks](benchmarks/zero-allocation/phase-7/backpressure/)
+and current [seven exact allocation intervals](benchmarks/zero-allocation/phase-7/cold-scalars/full-session-exact-go1.23.12.txt)
+cover those semantics. Fresh [final qualification](benchmarks/zero-allocation/phase-7/final-qualification/)
+records the full Go 1.23 package, vet and core race passes separately from
+performance captures.
+
+The additional [direct latency fixture](benchmarks/zero-allocation/phase-7/read-to-write/README.md)
+starts at `Message.ReceiveTime`, stamped after the final socket read returns,
+before framing finishes. It includes remaining framing, queueing, parsing,
+dictionary validation, ordinary handling, encoding, persistence and writer
+waits through the final completed socket write. Network arrival, read blocking
+and framing work before that last read are excluded. Samples are accepted only
+after the unchanged peer-validation/ACK/slot-return/journal-retirement barrier;
+the broader client TCP/ACK RTT remains a separate metric.
+
+Across five Go 1.23 samples at `a2fb11b9`, direct p50 is 8.875–8.959 microseconds
+for ordinary messages and 9.875–10.000 microseconds with groups. All ten
+instrumented request/ACK benchmark rows report 0 B/op and 0 allocs/op, which are
+rounded benchmark results rather than a new exact allocation assertion.
+These samples do not demonstrate a latency improvement or meet the
+sub-microsecond target.
 
 Dictionary loading, session/connection creation, initial arena allocation,
 disconnect/reconnect setup, arbitrary malformed-message diagnostics and terminal

@@ -51,3 +51,32 @@ The one-microsecond goal remains unmet. No transport change, validation removal,
 pool or dependency was introduced in response to these profiles. The user-supplied
 [design references](design-references.md) informed the lifetime and profiling
 review; their benchmark numbers are not QuickFIX evidence.
+
+## Corrected runtime and next measured changes
+
+At `a2fb11b9`, the new [direct read-to-write fixture](read-to-write/README.md)
+measures ordinary p50 8.875–8.959 microseconds and p99 13.166–13.875 microseconds
+on Go 1.23. It starts at the final socket Read return and ends at the final
+successful Write return; acceptance still requires peer validation and slot
+return. This removes the extra ACK from the direct latency interval without
+removing the completion proof. All ten candidate rows report zero allocations,
+but the matched comparison does not demonstrate a latency improvement.
+
+Source review of the corrected runtime identifies two bounded follow-up
+experiments; neither is implemented or claimed as a speedup here. First,
+`messageArena.scalarFits` finds the record and calculates lengths that
+`setScalar` immediately calculates again. Byte setters also preflight before
+alias staging and then repeat preflight. Carrying one locally checked record
+index and lengths into mutation could remove repeated lookup without persistent
+caching. All capacity checks must remain before staging/mutation; overlap,
+group replacement, exact-fit/one-over, sticky errors and section replacement
+fixtures must remain intact.
+
+Second, outbound replay admission currently resets its private parse slot
+before and after parsing; previous admission and resend completion already
+reset it, and Parse restores its representation. Removing only the preceding
+reset is a candidate after auditing every exit and alternating malformed,
+oversized, decreasing-field and nested-group cases. Full replay-capacity parsing
+and the following reset must remain before commit. Both changes require new
+controlled before/after component and complete-path measurements. Skipping
+validation or assuming a globally valid encoded-length cache is not justified.
