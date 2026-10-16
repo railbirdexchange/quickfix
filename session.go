@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/quickfixgo/quickfix/datadictionary"
@@ -65,6 +66,7 @@ type session struct {
 	readConnection          *boundedReadConnection
 	outbound                *outboundRing
 	writeConnection         *outboundWriter
+	outboundLoggedOn        atomic.Bool // Published by the session owner; external senders must not read State.
 	preserveOnDisconnect    bool
 	controls                scopedControl
 
@@ -709,7 +711,9 @@ func (s *session) handleLogon(msg *Message) error {
 		if !s.HeartBtIntOverride {
 			var heartBtInt FIXInt
 			if err := msg.Body.GetField(tagHeartBtInt, &heartBtInt); err == nil {
+				s.sendMutex.Lock()
 				s.HeartBtInt = time.Duration(heartBtInt) * time.Second
+				s.sendMutex.Unlock()
 			}
 		}
 
@@ -1002,6 +1006,7 @@ type fixIn struct {
 }
 
 func (s *session) onDisconnect() {
+	s.outboundLoggedOn.Store(false)
 	s.log.OnEvent("Disconnected")
 	if s.readConnection != nil {
 		// Stop reads and blocked channel sends, then reclaim every transferred
@@ -1070,6 +1075,7 @@ func (s *session) onAdmin(msg interface{}) {
 
 		s.messageIn = msg.messageIn
 		s.sendMutex.Lock()
+		s.outboundLoggedOn.Store(false)
 		s.messageOut = msg.messageOut
 		s.writeConnection = msg.writer
 		s.sendMutex.Unlock()

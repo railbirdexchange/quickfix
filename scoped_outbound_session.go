@@ -113,7 +113,13 @@ func (s *session) prepareOutbound(message, inReplyTo *Message, replacement bool)
 		}
 	}
 	ring := s.outbound
-	slot, err := ring.reserve(replacement)
+	var slot *outboundSlot
+	if replacement {
+		// Replacement must not flush the pending bytes it intends to discard.
+		slot, err = ring.reserve(true)
+	} else {
+		slot, err = s.reserveOrdinaryOutput(message)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -261,6 +267,77 @@ func (s *session) prepareOutbound(message, inReplyTo *Message, replacement bool)
 	return slot, nil
 }
 
+// reserveOrdinaryOutput preserves bounded admission while applying socket
+// backpressure to logged-on ordinary sends. The existing sendMutex protects the
+// pending queue and connection, and resendMutex preserves replay ordering. The
+// independent writer returns slots without either lock or session dispatch.
+func (s *session) reserveOrdinaryOutput(message *Message) (*outboundSlot, error) {
+	ring, writer := s.outbound, s.writeConnection
+	if writer == nil || !s.outboundLoggedOn.Load() {
+		// Waiting for Logon/session dispatch from its own callback would
+		// deadlock. Offline and pre-logon queues keep explicit finite limits.
+		return ring.reserve(false)
+	}
+	select {
+	case <-writer.failed:
+		return nil, writer.failure()
+	case <-writer.done:
+		return nil, writer.failure()
+	default:
+	}
+	slot, err := ring.reserve(false)
+	if err != nil {
+		// Do not flush old traffic while a reset is pending, or wait for
+		// output when retention already cannot admit this send. Preflight and
+		// abort leave reservation bookkeeping unchanged during the wait.
+		if ring.resetPending.Load() || ring.scheduledResetPending.Load() {
+			return nil, ErrOutboundResetPending
+		}
+		messageType, reject := message.Header.GetBytes(tagMsgType)
+		if reject != nil {
+			return nil, reject
+		}
+		if bytes.Equal(messageType, msgTypeLogon) && message.Body.Has(tagResetSeqNumFlag) {
+			if reset, _ := message.Body.GetBool(tagResetSeqNumFlag); reset {
+				// Reset/replacement admission must not flush bytes it intends to
+				// discard. Keep its original immediate capacity boundary.
+				return nil, ErrOutboundCapacity
+			}
+		}
+		if journal := ring.journal; journal != nil && !s.DisableMessagePersist {
+			reservation, err := journal.reserve(s.store.NextSenderMsgSeqNum())
+			if err != nil {
+				return nil, err
+			}
+			journal.abort(reservation)
+		}
+		// A full pending queue can still have a vacant progress slot. Drain
+		// pending entries first so acquiring that slot can safely enqueue.
+		if err := s.flushOutbound(true); err != nil {
+			return nil, err
+		}
+		select {
+		case slot = <-ring.vacant:
+		case <-writer.failed:
+			return nil, writer.failure()
+		case <-writer.done:
+			return nil, writer.failure()
+		}
+	}
+	// Failure is published before the writer returns its slot, independently
+	// of done, which remains the full connection-owner join barrier.
+	select {
+	case <-writer.failed:
+		slot.release()
+		return nil, writer.failure()
+	case <-writer.done:
+		slot.release()
+		return nil, writer.failure()
+	default:
+		return slot, nil
+	}
+}
+
 func (s *session) finishPreparedSendStage(stage string, messageType []byte, started time.Time, success bool) {
 	if messageType != nil {
 		s.finishSendStage(stage, messageType, started, success)
@@ -286,6 +363,8 @@ func (s *session) flushOutbound(blockUntilSent bool) error {
 	}
 	for s.outbound.count != 0 {
 		select {
+		case <-writer.failed:
+			return writer.failure()
 		case <-writer.done:
 			return writer.failure()
 		default:
@@ -294,6 +373,8 @@ func (s *session) flushOutbound(blockUntilSent bool) error {
 		if blockUntilSent {
 			select {
 			case <-writer.permits:
+			case <-writer.failed:
+				return writer.failure()
 			case <-writer.done:
 				return writer.failure()
 			}
@@ -306,6 +387,11 @@ func (s *session) flushOutbound(blockUntilSent bool) error {
 				}
 				return nil
 			}
+		}
+		select {
+		case <-writer.failed:
+			return writer.failure()
+		default:
 		}
 		slot := s.outbound.pop()
 		var messageType string
@@ -332,6 +418,8 @@ func (s *session) reserveResendOutput() (*outboundSlot, error) {
 		writer := s.writeConnection
 		if writer != nil {
 			select {
+			case <-writer.failed:
+				return nil, writer.failure()
 			case <-writer.done:
 				if writer.err != nil {
 					return nil, writer.err
@@ -351,6 +439,8 @@ func (s *session) reserveResendOutput() (*outboundSlot, error) {
 			return nil, err
 		}
 		select {
+		case <-writer.failed:
+			return nil, writer.failure()
 		case <-writer.done:
 			if writer.err != nil {
 				return nil, writer.err

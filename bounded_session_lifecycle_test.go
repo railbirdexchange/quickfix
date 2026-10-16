@@ -161,21 +161,24 @@ func TestBoundedSessionLifecycleFullOutputFailureIsAtomic(t *testing.T) {
 	f := newBoundedFullSession(t, true)
 	require.NoError(t, f.prepareSlowConsumer())
 	require.NoError(t, f.configure(func(a *boundedFullApplication) { a.session.ResetOnDisconnect = true }))
-	f.slowGate.armed <- struct{}{}
-	for index := 0; index < 33; index++ {
-		require.NoError(t, f.sendOrder(f.sendSequence))
-		admission := <-f.application.admissions
-		require.NoError(t, admission.err)
-		require.Equal(t, 1, admission.accepted)
-		if index == 0 {
-			<-f.slowGate.entered
-		}
-	}
-	require.NoError(t, f.sendOrder(f.sendSequence))
-	failure := <-f.application.admissions
-	require.ErrorIs(t, failure.err, ErrOutboundCapacity)
-	require.Equal(t, failure.before, failure.after)
+	_, blocked, err := f.blockSlowConsumer()
+	require.NoError(t, err)
 	f.slowGate.decision <- io.ErrClosedPipe
+	var failure boundedFullAdmission
+	select {
+	case failure = <-f.application.admissions:
+	case <-f.slowTimer.C:
+		t.Fatal("blocked send did not return after writer failure")
+	}
+	require.ErrorIs(t, failure.err, io.ErrClosedPipe)
+	require.Zero(t, failure.accepted)
+	require.Equal(t, blocked.before, failure.before)
+	require.Equal(t, failure.before, failure.after)
+	select {
+	case <-f.application.preparations:
+		t.Fatal("failed blocked send reached ToApp")
+	default:
+	}
 	require.NoError(t, f.disconnect())
 	assertBoundedLifecycleDisconnected(t, f.session)
 	require.ErrorIs(t, f.writer.err, io.ErrClosedPipe)

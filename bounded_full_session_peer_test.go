@@ -132,7 +132,7 @@ type boundedFullSession struct {
 
 func newBoundedFullSession(tb testing.TB, groups bool) *boundedFullSession {
 	tb.Helper()
-	application := &boundedFullApplication{groups: groups, response: newBoundedFullResponse(groups), checkpoints: make(chan boundedFullCheckpoint, 1), logons: make(chan struct{}, 1), logouts: make(chan struct{}, 1), admissions: make(chan boundedFullAdmission, 1), commands: make(chan func(*boundedFullApplication), 1)}
+	application := &boundedFullApplication{groups: groups, response: newBoundedFullResponse(groups), checkpoints: make(chan boundedFullCheckpoint, 1), logons: make(chan struct{}, 1), logouts: make(chan struct{}, 1), admissions: make(chan boundedFullAdmission, 1), admissionStarts: make(chan boundedFullAdmissionStart, 1), preparations: make(chan boundedFullStoreFingerprint, 1), commands: make(chan func(*boundedFullApplication), 1)}
 	settings := NewSessionSettings()
 	settings.Set(config.DataDictionary, "spec/FIX44.xml")
 	settings.Set(config.TimeStampPrecision, "MILLIS")
@@ -581,48 +581,115 @@ func (f *boundedFullSession) prepareSlowConsumer() error {
 	})
 }
 
-// One response per ordinary request. A test-owned gate delays one real TCP
-// Write while the session keeps processing requests and fills all output slots.
-// This simulates a stalled consumer deterministically, without changing send's
-// admission behavior or counting a queued response as a completed write.
-func (f *boundedFullSession) slowConsumer() error {
+func (f *boundedFullSession) startSlowAdmission() (boundedFullAdmissionStart, error) {
+	if err := f.sendOrder(f.sendSequence); err != nil {
+		return boundedFullAdmissionStart{}, err
+	}
+	select {
+	case attempt := <-f.application.admissionStarts:
+		return attempt, nil
+	case <-f.slowTimer.C:
+		return boundedFullAdmissionStart{}, errBoundedFullFixture
+	}
+}
+
+func (f *boundedFullSession) completeSlowAdmission(attempt boundedFullAdmissionStart) error {
+	var admission boundedFullAdmission
+	select {
+	case admission = <-f.application.admissions:
+	case <-f.slowTimer.C:
+		return errBoundedFullFixture
+	}
+	if admission.err != nil {
+		return admission.err
+	}
+	if admission.accepted != 1 || admission.before != attempt.before || admission.after.nextSender != attempt.before.nextSender+1 {
+		return errBoundedFullFixture
+	}
+	var prepared boundedFullStoreFingerprint
+	select {
+	case prepared = <-f.application.preparations:
+	case <-f.slowTimer.C:
+		return errBoundedFullFixture
+	}
+	// ToApp follows successful output admission and the ordinary journal
+	// reservation. Committed history and both counters must still match the
+	// owner's pre-Send copy, including after a blocked admission resumes.
+	if prepared.reservedIndex < 0 || prepared.reservedSequence != attempt.before.nextSender || prepared.reservedReset {
+		return errBoundedFullFixture
+	}
+	prepared.reservedIndex = attempt.before.reservedIndex
+	prepared.reservedSequence = attempt.before.reservedSequence
+	prepared.reservedReset = attempt.before.reservedReset
+	if prepared != attempt.before {
+		return errBoundedFullFixture
+	}
+	return nil
+}
+
+// The peer owns the gate release independently of the session sending owner.
+// All slots stay occupied until that release. A reusable timer establishes an
+// observed blocked interval; neither ToApp nor SendToTarget may complete in it.
+// Every store observation is copied by the owner, never read concurrently.
+func (f *boundedFullSession) blockSlowConsumer() (int, boundedFullAdmissionStart, error) {
 	f.slowGate.armed <- struct{}{}
 	f.slowTimer.Reset(10 * time.Second)
 	first := f.sendSequence
-	accepted := 0
-	for attempt := 0; attempt < 34; attempt++ {
-		if err := f.sendOrder(f.sendSequence); err != nil {
-			return err
+	for index := 0; index < 33; index++ {
+		attempt, err := f.startSlowAdmission()
+		if err != nil {
+			return 0, boundedFullAdmissionStart{}, err
 		}
-		var admission boundedFullAdmission
-		select {
-		case admission = <-f.application.admissions:
-		case <-f.slowTimer.C:
-			return errBoundedFullFixture
+		if attempt.freeOutputs != 33-index {
+			return 0, boundedFullAdmissionStart{}, errBoundedFullFixture
 		}
-		if attempt == 0 {
+		if err := f.completeSlowAdmission(attempt); err != nil {
+			return 0, boundedFullAdmissionStart{}, err
+		}
+		if index == 0 {
 			select {
 			case <-f.slowGate.entered:
 			case <-f.slowTimer.C:
-				return errBoundedFullFixture
+				return 0, boundedFullAdmissionStart{}, errBoundedFullFixture
 			}
 		}
-		if admission.err != nil {
-			if admission.err != ErrOutboundCapacity || admission.before != admission.after || admission.accepted != 0 || accepted != 33 {
-				return errBoundedFullFixture
-			}
-			break
-		}
-		if admission.accepted != 1 {
-			return errBoundedFullFixture
-		}
-		accepted++
 	}
-	if accepted != 33 {
-		return errBoundedFullFixture
+	attempt, err := f.startSlowAdmission()
+	if err != nil {
+		return 0, boundedFullAdmissionStart{}, err
+	}
+	if attempt.freeOutputs != 0 || attempt.before.reservedIndex != -1 {
+		return 0, boundedFullAdmissionStart{}, errBoundedFullFixture
+	}
+	f.slowTimer.Reset(time.Millisecond)
+	select {
+	case admission := <-f.application.admissions:
+		if admission.err != nil {
+			return 0, boundedFullAdmissionStart{}, admission.err
+		}
+		return 0, boundedFullAdmissionStart{}, errBoundedFullFixture
+	case <-f.application.preparations:
+		return 0, boundedFullAdmissionStart{}, errBoundedFullFixture
+	case <-f.slowTimer.C:
+	}
+	f.slowTimer.Reset(10 * time.Second)
+	return first, attempt, nil
+}
+
+// One response per ordinary request. The gate delays one real TCP Write while
+// the session fills all 33 output slots; request 34 must block before preparation.
+// Release and drain then prove every request completed, with no application retry.
+// The measured cycle includes the deliberate one-millisecond blocked interval.
+func (f *boundedFullSession) slowConsumer() error {
+	first, blocked, err := f.blockSlowConsumer()
+	if err != nil {
+		return err
 	}
 	f.slowGate.decision <- nil
-	for index := 0; index < accepted; index++ {
+	if err := f.completeSlowAdmission(blocked); err != nil {
+		return err
+	}
+	for index := 0; index < 34; index++ {
 		report, err := f.readReport()
 		if err != nil {
 			return err
@@ -635,29 +702,6 @@ func (f *boundedFullSession) slowConsumer() error {
 		if id != first+index || !bytes.Equal(value, f.payload) {
 			return errBoundedFullFixture
 		}
-	}
-	if _, err := f.acknowledge(false); err != nil {
-		return err
-	}
-	// Retry the rejected business identifier under a fresh FIX sequence from an
-	// ordinary callback after completed writes returned capacity.
-	if err := f.sendOrderWithID(f.sendSequence, first+33); err != nil {
-		return err
-	}
-	admission := <-f.application.admissions
-	if admission.err != nil || admission.accepted != 1 {
-		return errBoundedFullFixture
-	}
-	report, err := f.readReport()
-	if err != nil {
-		return err
-	}
-	identifier, reject := report.Body.GetInt(11)
-	if reject != nil {
-		return reject
-	}
-	if identifier != first+33 {
-		return errBoundedFullFixture
 	}
 	f.slowTimer.Stop()
 	_, err = f.acknowledge(false)

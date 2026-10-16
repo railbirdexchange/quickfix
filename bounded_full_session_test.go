@@ -30,6 +30,11 @@ type boundedFullAdmission struct {
 	err           error
 }
 
+type boundedFullAdmissionStart struct {
+	before      boundedFullStoreFingerprint
+	freeOutputs int
+}
+
 // A fixed-size digest keeps capacity assertions inside measured intervals free
 // of snapshot allocation. It includes every retained byte and both counters.
 type boundedFullStoreFingerprint struct {
@@ -71,19 +76,29 @@ type boundedFullApplication struct {
 	checkpoints                    chan boundedFullCheckpoint
 	logons, logouts                chan struct{}
 	admissions                     chan boundedFullAdmission
+	admissionStarts                chan boundedFullAdmissionStart
+	preparations                   chan boundedFullStoreFingerprint
 	commands                       chan func(*boundedFullApplication)
 	onOrder                        func(*Message) MessageRejectError
 	orders, groupReads, queueWaits int
 	reportsPerOrder                int
 	measureAdmission               bool
+	observePreparation             bool
 	failure                        boundedFullReject
 }
 
-func (*boundedFullApplication) OnCreate(SessionID)              {}
-func (a *boundedFullApplication) OnLogon(SessionID)             { a.logons <- struct{}{} }
-func (a *boundedFullApplication) OnLogout(SessionID)            { a.logouts <- struct{}{} }
-func (*boundedFullApplication) ToAdmin(*Message, SessionID)     {}
-func (*boundedFullApplication) ToApp(*Message, SessionID) error { return nil }
+func (*boundedFullApplication) OnCreate(SessionID)          {}
+func (a *boundedFullApplication) OnLogon(SessionID)         { a.logons <- struct{}{} }
+func (a *boundedFullApplication) OnLogout(SessionID)        { a.logouts <- struct{}{} }
+func (*boundedFullApplication) ToAdmin(*Message, SessionID) {}
+func (a *boundedFullApplication) ToApp(*Message, SessionID) error {
+	if a.observePreparation {
+		// SendToTarget invokes this on the sending owner, after output admission
+		// and journal reservation but before sequence or stored bytes change.
+		a.preparations <- fingerprintBoundedFullStore(a.session.store.(*BoundedStore))
+	}
+	return nil
+}
 func (a *boundedFullApplication) fail(err error) MessageRejectError {
 	a.failure.err = err
 	return &a.failure
@@ -139,17 +154,24 @@ func (a *boundedFullApplication) FromApp(message *Message, _ SessionID) MessageR
 
 func (a *boundedFullApplication) handleOrder(message *Message) MessageRejectError {
 	accepted := 0
+	var before boundedFullStoreFingerprint
 	for range max(1, a.reportsPerOrder) {
-		var before boundedFullStoreFingerprint
 		if a.measureAdmission {
 			before = fingerprintBoundedFullStore(a.session.store.(*BoundedStore))
-		}
-		if reject := a.handleReport(message); reject != nil {
-			if a.measureAdmission && reject == &a.failure && errors.Is(a.failure.err, ErrOutboundCapacity) {
+			freeOutputs := len(a.session.outbound.vacant)
+			if freeOutputs == 0 {
 				a.queueWaits++
+			}
+			a.admissionStarts <- boundedFullAdmissionStart{before: before, freeOutputs: freeOutputs}
+		}
+		a.observePreparation = a.measureAdmission
+		reject := a.handleReport(message)
+		a.observePreparation = false
+		if reject != nil {
+			if a.measureAdmission && reject == &a.failure {
 				a.admissions <- boundedFullAdmission{accepted: accepted, before: before, after: fingerprintBoundedFullStore(a.session.store.(*BoundedStore)), err: a.failure.err}
-				// Application backpressure is handled by retrying after the peer
-				// drains the accepted prefix; it must not become a FIX reject.
+				// The driver observes ordinary send failures, including a writer
+				// disconnect during capacity backpressure, without a FIX reject.
 				return nil
 			}
 			return reject
@@ -157,7 +179,7 @@ func (a *boundedFullApplication) handleOrder(message *Message) MessageRejectErro
 		accepted++
 	}
 	if a.measureAdmission {
-		a.admissions <- boundedFullAdmission{accepted: accepted}
+		a.admissions <- boundedFullAdmission{accepted: accepted, before: before, after: fingerprintBoundedFullStore(a.session.store.(*BoundedStore))}
 	}
 	return nil
 }

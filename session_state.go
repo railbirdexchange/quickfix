@@ -29,6 +29,7 @@ type stateMachine struct {
 }
 
 func (sm *stateMachine) Start(s *session) {
+	s.outboundLoggedOn.Store(false)
 	sm.pendingStop = false
 	sm.stopped = false
 
@@ -258,6 +259,13 @@ func (sm *stateMachine) CheckResetTime(session *session, now time.Time) {
 }
 
 func (sm *stateMachine) setState(session *session, nextState sessionState) {
+	loggedOn := nextState.IsLoggedOn()
+	if !loggedOn {
+		// Stop external senders from flushing application traffic before any
+		// logout/disconnect callbacks or teardown. The state interface itself
+		// remains owned by the processing goroutine.
+		session.outboundLoggedOn.Store(false)
+	}
 	if session.boundedIn != nil && isResendRecovery(sm.State) && !isResendRecovery(nextState) {
 		session.boundedIn.ring.clearStash()
 	}
@@ -273,6 +281,11 @@ func (sm *stateMachine) setState(session *session, nextState sessionState) {
 	}
 
 	sm.State = nextState
+	if loggedOn && !session.outboundLoggedOn.Load() {
+		// OnLogon runs inside handleLogon before this transition. Its messages
+		// must remain queued until negotiation has actually finished.
+		session.outboundLoggedOn.Store(true)
+	}
 }
 
 func (sm *stateMachine) notifyInSessionTime() {
@@ -283,6 +296,7 @@ func (sm *stateMachine) notifyInSessionTime() {
 }
 
 func (sm *stateMachine) handleDisconnectState(s *session) {
+	s.outboundLoggedOn.Store(false)
 	doOnLogout := s.IsLoggedOn()
 
 	switch s.State.(type) {
