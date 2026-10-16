@@ -108,3 +108,11 @@ unmet and [legacy callback lifetime compatibility](../callback-lifetime-audit.md
 is unresolved. These measurements use synchronous callbacks that do not retain
 incoming message/byte views; they do not qualify unchanged pointer-retaining
 applications.
+
+All 17 integration CI jobs passed at PR 1362 head
+`b71e166249c847f7cf1fb3e11e53b82041b5495b`, which pins runtime `a2fb11b9`.
+The last [Omaha workflow](https://github.com/railbirdexchange/draftkings-exchange/actions/runs/38862667720)
+completed at 2026-10-16 07:03:59 UTC; [fix-server tests and image build](https://github.com/railbirdexchange/draftkings-exchange/actions/runs/38862668113)
+also passed. The complete set includes service tests/image builds, both race
+jobs and formatting. These checks qualify that dependency pin, not a different
+lifetime contract or the unmet latency target.
