@@ -3,6 +3,7 @@ package quickfix
 import (
 	"bytes"
 	"testing"
+	"time"
 )
 
 func inboundRingTestLimits() ParseLimits {
@@ -20,17 +21,14 @@ func inboundRingTestAcquire(t *testing.T, ring *inboundRing) *inboundSlot {
 	}
 }
 
-func inboundRingTestParse(t *testing.T, slot *inboundSlot, wire []byte) {
+func inboundRingTestFill(t *testing.T, slot *inboundSlot, wire []byte) {
 	t.Helper()
 	if len(wire) > cap(slot.frame) {
 		t.Fatal("fixture exceeds frame capacity")
 	}
 	slot.frame = slot.frame[:len(wire)]
 	copy(slot.frame, wire)
-	if err := slot.parsed.Parse(slot.frame); err != nil {
-		t.Fatal(err)
-	}
-	slot.parsed.message.inbound = slot
+	slot.receiveTime = time.Date(2026, time.October, 15, 12, 0, 0, 0, time.UTC)
 }
 
 func assertInboundRingVacant(t *testing.T, ring *inboundRing) {
@@ -45,11 +43,8 @@ func assertInboundRingVacant(t *testing.T, ring *inboundRing) {
 			t.Fatal("vacant channel contains a slot more than once")
 		}
 		seen[slot] = true
-		if slot.retained || len(slot.frame) != 0 || slot.parsed.Message() != nil || slot.parsed.message.inbound != nil {
-			t.Fatal("released slot retained frame, parsed message, or ownership state")
-		}
-		if slot.parsed.message.rawMessage != nil || len(slot.parsed.message.fields) != 0 {
-			t.Fatal("released slot retained parsed input references")
+		if slot.retained || len(slot.frame) != 0 || !slot.receiveTime.IsZero() {
+			t.Fatal("released slot retained frame, receive time, or ownership state")
 		}
 		slot.release()
 	}
@@ -58,7 +53,7 @@ func assertInboundRingVacant(t *testing.T, ring *inboundRing) {
 func TestInboundRingFixedCapacity(t *testing.T) {
 	limits := inboundRingTestLimits()
 	for _, size := range []struct{ queue, stash int }{{0, 0}, {1, 2}, {3, 4}} {
-		ring, err := newInboundRing(nil, nil, limits, size.queue, size.stash)
+		ring, err := newInboundRing(limits, size.queue, size.stash)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -70,7 +65,7 @@ func TestInboundRingFixedCapacity(t *testing.T) {
 		for index := range owned {
 			owned[index] = inboundRingTestAcquire(t, ring)
 			slot := owned[index]
-			if slot != &ring.slots[index] || slot.ring != ring || len(slot.frame) != 0 || cap(slot.frame) != limits.MaxFrameBytes || slot.parsed == nil {
+			if slot != &ring.slots[index] || slot.ring != ring || len(slot.frame) != 0 || cap(slot.frame) != limits.MaxFrameBytes {
 				t.Fatal("slot does not own the expected fixed storage")
 			}
 			slot.frame = slot.frame[:cap(slot.frame)]
@@ -96,30 +91,31 @@ func TestInboundRingInvalidLimits(t *testing.T) {
 	for _, size := range []struct{ queue, stash int }{
 		{-1, 0}, {0, -1}, {maximum, 0}, {0, maximum}, {maximum / 2, maximum / 2}, {maximum / 2, 0},
 	} {
-		if ring, err := newInboundRing(nil, nil, inboundRingTestLimits(), size.queue, size.stash); ring != nil || err != ErrInvalidInboundLimits {
+		if ring, err := newInboundRing(inboundRingTestLimits(), size.queue, size.stash); ring != nil || err != ErrInvalidInboundLimits {
 			t.Fatalf("queue=%d stash=%d: ring=%v, error=%v", size.queue, size.stash, ring, err)
 		}
 	}
 	invalidParse := inboundRingTestLimits()
 	invalidParse.MaxFields = 0
-	if ring, err := newInboundRing(nil, nil, invalidParse, 0, 0); ring != nil || err != ErrInvalidParseLimits {
+	if ring, err := newInboundRing(invalidParse, 0, 0); ring != nil || err != ErrInvalidParseLimits {
 		t.Fatalf("invalid parse limits: ring=%v, error=%v", ring, err)
 	}
 	invalidFrames := inboundRingTestLimits()
 	invalidFrames.MaxFrameBytes = maximum
-	if ring, err := newInboundRing(nil, nil, invalidFrames, 0, 0); ring != nil || err != ErrInvalidInboundLimits {
+	if ring, err := newInboundRing(invalidFrames, 0, 0); ring != nil || err != ErrInvalidInboundLimits {
 		t.Fatalf("overflowing frame slab: ring=%v, error=%v", ring, err)
 	}
 }
 
 func TestInboundRingRetainTakeAndRelease(t *testing.T) {
-	ring, err := newInboundRing(nil, nil, inboundRingTestLimits(), 0, 1)
+	ring, err := newInboundRing(inboundRingTestLimits(), 0, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	wire := buildFIXT11Wire("35=D\x01", "11=retained\x01")
 	slot := inboundRingTestAcquire(t, ring)
-	inboundRingTestParse(t, slot, wire)
+	inboundRingTestFill(t, slot, wire)
+	received := slot.receiveTime
 	index, err := ring.stashIndex(7)
 	if err != nil {
 		t.Fatal(err)
@@ -140,8 +136,8 @@ func TestInboundRingRetainTakeAndRelease(t *testing.T) {
 	if taken := ring.take(7); taken != slot {
 		t.Fatal("take did not transfer the retained slot")
 	}
-	if slot.retained || !bytes.Equal(slot.frame, wire) || slot.parsed.Message() == nil || slot.parsed.message.inbound != slot {
-		t.Fatal("take changed retained frame, parsed message, or active ownership")
+	if slot.retained || !bytes.Equal(slot.frame, wire) || !slot.receiveTime.Equal(received) {
+		t.Fatal("take changed retained frame, receive time, or active ownership")
 	}
 	if ring.take(7) != nil || len(ring.vacant) != len(ring.slots)-1 {
 		t.Fatal("take either retained or prematurely returned the active slot")
@@ -151,13 +147,13 @@ func TestInboundRingRetainTakeAndRelease(t *testing.T) {
 }
 
 func TestInboundRingDuplicateReplacement(t *testing.T) {
-	ring, err := newInboundRing(nil, nil, inboundRingTestLimits(), 0, 2)
+	ring, err := newInboundRing(inboundRingTestLimits(), 0, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, seq := range []int{7, 8} {
 		slot := inboundRingTestAcquire(t, ring)
-		inboundRingTestParse(t, slot, buildFIXT11Wire("35=D\x01", "11=original\x01"))
+		inboundRingTestFill(t, slot, buildFIXT11Wire("35=D\x01", "11=original\x01"))
 		index, err := ring.stashIndex(seq)
 		if err != nil {
 			t.Fatal(err)
@@ -173,7 +169,7 @@ func TestInboundRingDuplicateReplacement(t *testing.T) {
 	}
 	replacement := inboundRingTestAcquire(t, ring)
 	wire := buildFIXT11Wire("35=D\x01", "11=replacement\x01")
-	inboundRingTestParse(t, replacement, wire)
+	inboundRingTestFill(t, replacement, wire)
 	before := len(ring.vacant)
 	ring.retain(index, 8, replacement)
 	if len(ring.vacant) != before+1 || !replacement.retained {
@@ -188,7 +184,7 @@ func TestInboundRingDuplicateReplacement(t *testing.T) {
 }
 
 func TestInboundRingDiscardAndClear(t *testing.T) {
-	ring, err := newInboundRing(nil, nil, inboundRingTestLimits(), 0, 3)
+	ring, err := newInboundRing(inboundRingTestLimits(), 0, 3)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,7 +214,7 @@ func TestInboundRingDiscardAndClear(t *testing.T) {
 
 func TestInboundRingStashLeavesReaderAndSessionHeadroom(t *testing.T) {
 	const queueDepth, maxStash = 3, 2
-	ring, err := newInboundRing(nil, nil, inboundRingTestLimits(), queueDepth, maxStash)
+	ring, err := newInboundRing(inboundRingTestLimits(), queueDepth, maxStash)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -259,7 +255,7 @@ func TestInboundRingStashLeavesReaderAndSessionHeadroom(t *testing.T) {
 }
 
 func TestInboundRingZeroStashAndSteadyStateAllocations(t *testing.T) {
-	withoutStash, err := newInboundRing(nil, nil, inboundRingTestLimits(), 0, 0)
+	withoutStash, err := newInboundRing(inboundRingTestLimits(), 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -269,7 +265,7 @@ func TestInboundRingZeroStashAndSteadyStateAllocations(t *testing.T) {
 	withoutStash.discardBefore(2)
 	withoutStash.clearStash()
 	assertInboundRingVacant(t, withoutStash)
-	ring, err := newInboundRing(nil, nil, inboundRingTestLimits(), 0, 1)
+	ring, err := newInboundRing(inboundRingTestLimits(), 0, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,10 +274,6 @@ func TestInboundRingZeroStashAndSteadyStateAllocations(t *testing.T) {
 		slot := <-ring.vacant
 		slot.frame = slot.frame[:len(wire)]
 		copy(slot.frame, wire)
-		if err := slot.parsed.Parse(slot.frame); err != nil {
-			t.Fatal(err)
-		}
-		slot.parsed.message.inbound = slot
 		index, err := ring.stashIndex(1)
 		if err != nil {
 			t.Fatal(err)
@@ -293,7 +285,7 @@ func TestInboundRingZeroStashAndSteadyStateAllocations(t *testing.T) {
 		slot.release()
 	})
 	if allocations != 0 {
-		t.Fatalf("slot acquire/parse/retain/take/release allocated %g objects, want 0", allocations)
+		t.Fatalf("raw-slot acquire/retain/take/release allocated %g objects, want 0", allocations)
 	}
 	assertInboundRingVacant(t, ring)
 }

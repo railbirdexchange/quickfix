@@ -689,11 +689,7 @@ func (s *session) verifySelect(msg *Message, checkTooHigh bool, checkTooLow bool
 }
 
 func (s *session) verifyMsgAgainstAppImpl(msg *Message) MessageRejectError {
-	if msg.inbound != nil {
-		if reject := s.boundedIn.validator.validateWithinCapacity(msg); reject != nil {
-			return reject
-		}
-	} else if s.Validator != nil {
+	if s.Validator != nil {
 		if reject := s.Validator.Validate(msg); reject != nil {
 			return reject
 		}
@@ -707,13 +703,6 @@ func (s *session) fromCallback(msg *Message) MessageRejectError {
 	if err != nil {
 		return err
 	}
-	if msg.inbound != nil {
-		if isAdminMessageType(msgType) {
-			return s.boundedIn.application.FromAdminBorrowed(msg.inbound.parsed, s.sessionID)
-		}
-		return s.boundedIn.application.FromAppBorrowed(msg.inbound.parsed, s.sessionID)
-	}
-
 	if isAdminMessageType(msgType) {
 		return s.application.FromAdmin(msg, s.sessionID)
 	}

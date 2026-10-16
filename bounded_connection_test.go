@@ -50,11 +50,15 @@ func boundedConnectionTestPipe(t *testing.T) net.Conn {
 func boundedConnectionTestInbound(t *testing.T, queue int) *boundedInboundSession {
 	t.Helper()
 	limits := inboundRingTestLimits()
-	ring, err := newInboundRing(nil, nil, limits, queue, 0)
+	ring, err := newInboundRing(limits, queue, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &boundedInboundSession{limits: limits, ring: ring, log: nullLog{}}
+	parsed, err := NewMessageSlot(nil, nil, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &boundedInboundSession{limits: limits, ring: ring, parsed: parsed, log: nullLog{}}
 }
 
 func boundedConnectionTestWait(t *testing.T, done <-chan struct{}, description string) {
@@ -175,10 +179,12 @@ func TestBoundedConnectionSlowConsumerAndReconnect(t *testing.T) {
 	if len(inbound.ring.vacant) != 0 {
 		t.Fatal("reader exposed an extra vacant slot while consumer owns every slot")
 	}
-	if err := first.slot.parsed.Parse(first.slot.frame); err != nil {
+	s := &session{boundedIn: inbound}
+	active, err := s.parseInboundSlot(first.slot)
+	if err != nil {
 		t.Fatal(err)
 	}
-	borrowedType, reject := first.slot.parsed.Message().Header.GetBytes(tagMsgType)
+	borrowedType, reject := active.Header.GetBytes(tagMsgType)
 	if reject != nil || string(borrowedType) != "0" {
 		t.Fatalf("borrowed message type = %q, reject = %v", borrowedType, reject)
 	}
@@ -188,8 +194,12 @@ func TestBoundedConnectionSlowConsumerAndReconnect(t *testing.T) {
 	if len(inbound.ring.vacant) != 0 || !bytes.Equal(first.slot.frame, firstWire) || !bytes.Equal(second.slot.frame, secondWire) || string(borrowedType) != "0" {
 		t.Fatal("shutdown changed a consumer-owned frame or borrowed field")
 	}
-	first.slot.release()
 	second.slot.release()
+	if inbound.parsed.Message() != active || string(borrowedType) != "0" {
+		t.Fatal("returning another raw slot reset active session scratch")
+	}
+	inbound.parsed.Reset()
+	first.slot.release()
 	assertInboundRingVacant(t, inbound.ring)
 
 	// A new connection reuses exactly the same ring after the old reader exits.
@@ -200,6 +210,35 @@ func TestBoundedConnectionSlowConsumerAndReconnect(t *testing.T) {
 	}
 	message.slot.release()
 	stopReconnected()
+	assertInboundRingVacant(t, inbound.ring)
+}
+
+func TestScopedInboundReaderCancellationDoesNotResetActiveScratch(t *testing.T) {
+	inbound := boundedConnectionTestInbound(t, 0)
+	connection := boundedConnectionTestPipe(t)
+	observed := &boundedConnectionObservedReader{reader: connection, started: make(chan struct{})}
+	_, incoming, stop := boundedConnectionTestStart(t, connection, newParser(observed), inbound, 0,
+		[]byte(boundedHeartbeatFrame), time.Now())
+	message := boundedConnectionTestReceive(t, incoming)
+	boundedConnectionTestWait(t, observed.started, "reader owning another slot during a blocked read")
+	s := &session{boundedIn: inbound}
+	active, err := s.parseInboundSlot(message.slot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	value, reject := active.Header.GetBytes(tagMsgType)
+	if reject != nil {
+		t.Fatal(reject)
+	}
+	stop()
+	if inbound.parsed.Message() != active || active.inbound != message.slot || string(value) != "0" || string(active.Bytes()) != boundedHeartbeatFrame {
+		t.Fatal("cancelling and releasing the reader-owned slot changed active session scratch")
+	}
+	if len(inbound.ring.vacant) != len(inbound.ring.slots)-1 {
+		t.Fatal("reader cancellation returned the active frame or leaked its own frame")
+	}
+	inbound.parsed.Reset()
+	message.slot.release()
 	assertInboundRingVacant(t, inbound.ring)
 }
 
@@ -359,20 +398,20 @@ func boundedOwnershipFixture(t testing.TB, groups bool) ([]byte, *datadictionary
 	return []byte(allocationBaselineRepeatingGroupMessage), dictionary
 }
 
-func boundedOwnershipHandle(t testing.TB, slot *inboundSlot, validator *BoundedValidator, groups bool) {
-	if err := slot.parsed.Parse(slot.frame); err != nil {
+func boundedOwnershipHandle(t testing.TB, slot *inboundSlot, parsed *MessageSlot, validator Validator, groups bool) {
+	if err := parsed.Parse(slot.frame); err != nil {
 		t.Fatal(err)
 	}
-	if reject, err := validator.Validate(slot.parsed.Message()); reject != nil || err != nil {
-		t.Fatalf("reject = %v, error = %v", reject, err)
+	if reject := validator.Validate(parsed.Message()); reject != nil {
+		t.Fatal(reject)
 	}
-	value, reject := slot.parsed.Message().Body.GetBytes(11)
+	value, reject := parsed.Message().Body.GetBytes(11)
 	if reject != nil || len(value) == 0 {
 		t.Fatalf("borrowed ClOrdID = %q, reject = %v", value, reject)
 	}
 	boundedOwnershipValue = value[0]
 	if groups {
-		group, err := slot.parsed.Group(453)
+		group, err := parsed.Group(453)
 		if err != nil || group.Len() != 1 {
 			t.Fatalf("borrowed Parties length = %d, error = %v", group.Len(), err)
 		}
@@ -390,6 +429,7 @@ func boundedOwnershipHandle(t testing.TB, slot *inboundSlot, validator *BoundedV
 			t.Fatal("borrowed Parties has an extra entry")
 		}
 	}
+	parsed.Reset()
 	slot.release()
 }
 
@@ -397,26 +437,28 @@ func TestBoundedOwnershipFixtures(t *testing.T) {
 	for _, groups := range []bool{false, true} {
 		wire, dictionary := boundedOwnershipFixture(t, groups)
 		limits := inboundRingTestLimits()
-		ring, err := newInboundRing(dictionary, dictionary, limits, 2, 0)
+		ring, err := newInboundRing(limits, 2, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
-		validator, err := NewBoundedValidator(defaultValidatorSettings, dictionary, nil, limits.MaxFields)
+		parsed, err := NewMessageSlot(dictionary, dictionary, limits)
 		if err != nil {
 			t.Fatal(err)
 		}
+		validator := NewValidator(defaultValidatorSettings, dictionary, nil)
 		for range ring.slots {
 			slot := inboundRingTestAcquire(t, ring)
 			slot.frame = slot.frame[:len(wire)]
 			copy(slot.frame, wire)
-			boundedOwnershipHandle(t, slot, validator, groups)
+			boundedOwnershipHandle(t, slot, parsed, validator, groups)
 		}
 		assertInboundRingVacant(t, ring)
 	}
 }
 
 // BenchmarkBoundedInboundOwnership measures framing, channel ownership transfer,
-// dictionary/group parsing, validation, borrowed handler reads, and slot return.
+// dictionary/group parsing using one session scratch, ordinary validation,
+// borrowed handler reads, and raw-slot return.
 // It does not exercise session sequence/store state or socket writes; those need
 // the separate full-session qualification. Every timed iteration ends only once
 // its slot has been returned. Setup, all-slot warm-up, and shutdown are untimed.
@@ -430,19 +472,20 @@ func BenchmarkBoundedInboundOwnership(b *testing.B) {
 			wire, dictionary := boundedOwnershipFixture(b, groups)
 			limits := DefaultParseLimits()
 			const queueDepth, stashCapacity = 32, 32
-			ring, err := newInboundRing(dictionary, dictionary, limits, queueDepth, stashCapacity)
+			ring, err := newInboundRing(limits, queueDepth, stashCapacity)
 			if err != nil {
 				b.Fatal(err)
 			}
-			validator, err := NewBoundedValidator(defaultValidatorSettings, dictionary, nil, limits.MaxFields)
+			parsed, err := NewMessageSlot(dictionary, dictionary, limits)
 			if err != nil {
 				b.Fatal(err)
 			}
+			validator := NewValidator(defaultValidatorSettings, dictionary, nil)
 			for range ring.slots {
 				slot := <-ring.vacant
 				slot.frame = slot.frame[:len(wire)]
 				copy(slot.frame, wire)
-				boundedOwnershipHandle(b, slot, validator, groups)
+				boundedOwnershipHandle(b, slot, parsed, validator, groups)
 			}
 			parser, err := newBoundedParser(&allocationBaselineRepeatingReader{message: wire}, limits.MaxFrameBytes)
 			if err != nil {
@@ -466,7 +509,7 @@ func BenchmarkBoundedInboundOwnership(b *testing.B) {
 				if message.slot == nil {
 					b.Fatal("reader stopped during warm-up")
 				}
-				boundedOwnershipHandle(b, message.slot, validator, groups)
+				boundedOwnershipHandle(b, message.slot, parsed, validator, groups)
 			}
 			b.ReportAllocs()
 			b.SetBytes(int64(len(wire)))
@@ -476,7 +519,7 @@ func BenchmarkBoundedInboundOwnership(b *testing.B) {
 				if message.slot == nil {
 					b.Fatal("reader stopped during measurement")
 				}
-				boundedOwnershipHandle(b, message.slot, validator, groups)
+				boundedOwnershipHandle(b, message.slot, parsed, validator, groups)
 			}
 		})
 	}

@@ -1,142 +1,198 @@
-# Phase 5: inbound frame ownership
+# Phase 5: ordinary inbound frame ownership
 
-The opt-in bounded inbound path frames into fixed storage and transfers an entire
-frame/message slot through the existing inbound channel. The session parses and
-validates through that slot, calls explicit borrowed application/logger methods,
-and returns ownership only after processing or retained-message replay completes.
-Legacy callbacks and the allocating `ReadMessage` API keep their original lifetime.
+Ordinary sessions now read into a fixed raw-frame ring and use one session-owned
+parse scratch. They dispatch the existing `Application.FromAdmin` and `FromApp`
+callbacks through the ordinary validator. There is no mode flag or required new
+application interface. Storage belongs to one owner at a time; channels transfer
+raw slots, and the session alone accesses parse scratch.
 
 ```mermaid
 sequenceDiagram
-    participant Vacant as Vacant slot channel
+    participant Vacant as Vacant raw-slot channel
     participant Reader as Connection reader
     participant Inbound as Existing inbound channel
-    participant Session as Session owner
-    participant Stash as Fixed out-of-order stash
-    Vacant->>Reader: Exclusive frame and MessageSlot
+    participant Session as Session owner and parse scratch
+    participant Stash as Fixed raw-frame stash
+    Vacant->>Reader: Exclusive raw slot
     Reader->>Reader: Frame into fixed storage
-    Reader->>Inbound: Transfer filled slot
+    Reader->>Inbound: Transfer filled slot and receive time
     Inbound->>Session: Transfer slot
-    Session->>Session: Parse, validate, borrowed log and callback
+    Session->>Session: Parse, validate, ordinary callback, final engine use
     alt Sequence is ahead of target
-        Session->>Stash: Retain complete slot
-        Stash->>Session: Replay or discard
+        Session->>Stash: Retain raw frame and receive time
+        Stash->>Session: Take missing sequence for replay
+        Session->>Session: Reparse with same scratch, process without relogging
     end
-    Session->>Vacant: Return after final use
-    Note over Reader,Session: Disconnect cancels reads and sends, drains, then joins reader
+    Session->>Session: Reset scratch after final use
+    Session->>Vacant: Return raw slot after replay or discard
+    Note over Reader,Session: Reader cancellation releases raw slots without touching active scratch
 ```
 
-## Configuration and lifetime
-
-Set `BoundedInbound=Y`; setup requires `BorrowedApplication` and `BorrowedLog`.
-Their borrowed methods must consume or copy bytes synchronously and cannot mutate
-or retain the slot, message, field bytes or group views. Legacy methods remain
-available when bounded mode is off. `Message.CopyInto` does not deeply copy
-borrowed field values and is not a retention adapter. The existing null logger
-implements the borrowed interface; other loggers explicitly opt in. Allocations
-inside a caller-provided logger or handler are outside the guarantee.
+## Configuration, ownership and compatibility
 
 | Setting | Default |
 |---|---:|
 | `BoundedMaxFrameBytes` | 16,384 |
 | `BoundedMaxFields` | 512 |
-| `BoundedMaxGroupEntries` | 128 |
+| `BoundedMaxGroupEntries` | 128 across the whole message |
 | `BoundedMaxGroupDepth` | 8 |
-| `InChanCapacity` in bounded mode | 32 |
+| `InboundFrameQueueCapacity` | `min(InChanCapacity, 32)` |
 | `BoundedInboundStashCapacity` | 32 |
 
-The ring contains `InChanCapacity + BoundedInboundStashCapacity + 2` slots: 66 by
-default. The two extra slots cover reader and active session ownership. Stashed
-messages cannot consume the slots needed to receive missing resend frames.
-Stash entries replace duplicate sequences explicitly and release previous owners.
-Gap fills, completed replay, failed recovery and disconnect return retained slots.
+`InChanCapacity` keeps its existing default of one and remains an upper bound on
+queued frames. The numeric frame-queue allowance is clamped to that channel
+capacity. The raw ring has `allowance + stash capacity + 2` slots; the extra slots
+cover reader and active-session ownership. Thus the default channel uses 35 raw
+slots, while a channel configured for 30,000 messages uses 66 raw slots unless the
+frame allowance is explicitly increased. It does not allocate 30,000 parse slabs.
+For the 66-slot case the frame arena is 1.031 MiB, plus one parse slab and indexes;
+channel storage, dictionaries, reader buffers and other session state are additional.
 
-A full channel or no vacant slot applies backpressure. Frame, field, group, depth
-or stash exhaustion disconnects with a static capacity error, before assigning a
-sequence or persisting a response for that input. Stash capacity is reserved before
-sending a ResendRequest. Capacity failures preserve existing store and sequence
-state, including when `ResetOnDisconnect=Y`; the exception applies to that failure
-only. A subsequent ordinary disconnect still applies the configured reset policy.
-There is no silent growth, automatic retention eviction, or mutex/pool addition.
+Incoming messages and byte views are scoped to synchronous callback processing.
+The original `*Message`, `GetBytes`, `Bytes`, and explicitly borrowed group views
+must not be retained after their scope or used concurrently with the session.
+Engine processing continues after callback return: reject construction and resend
+handling finish before the raw slot is released. A stashed message retains its raw
+frame until replay or discard. Arbitrary applications that previously retained the
+original message pointer or byte views must copy their retained data; this is a
+lifetime contract change, despite unchanged callback signatures.
 
-Bounded framing checks positive, overflow-safe BodyLength arithmetic and requires
-the three-digit checksum field at the declared boundary. Fragmented/coalesced
-frames fit without growth, including a frame exactly equal to capacity. A short
-destination leaves its bytes and the complete buffered frame intact for retry.
-The bounded session uses configured full-size destinations.
+Owned string APIs (`GetString`, `FIXString`, `Message.String`) remain owned.
+`Message.CopyInto`, section `CopyInto`, and ordinary `GetGroup` from scoped input
+detach the copied bytes, including repeating groups. Copies from ordinary
+non-session messages retain their existing semantics. Legacy setters remain
+mutable during the callback. If such a setter exhausts a section's fixed capacity,
+that section detaches to an ordinary allocating map; the next input restores the
+original fixed scratch. These allocating convenience operations are outside the
+zero-allocation contract. Parsing, dictionary groups, validation and stash handling
+never use that fallback.
 
-The acceptor's initial session-discovery read precedes selection of session limits
-and remains setup work. Once selected, its first frame is checked and copied into
-a slot; read-ahead bytes transfer to the bounded reader. Connection establishment,
-discovery and allocation of connection controls/scratch are outside warmed timing.
-Disconnect cancels blocked reads, vacant acquisition and channel sends, drains all
-transfers and joins the reader before reconnect can reuse the ring. Failed initiator
-Logon preparation also reclaims an accepted reader even if state stayed latent.
+Reset clears only touched field-map entries and the highest used parse-field
+prefix, including failed extraction and group lookahead. Removed entries remain
+tracked until cleared, so tag collisions and remove/reinsert cycles cannot retain
+old byte references. Legacy convenience reparsing conservatively marks the entire
+original field slab for cleanup; parsing and reset restore the original field and
+group-stack storage so a convenience operation cannot enlarge the next input's
+configured limits.
 
-## Evidence
+The existing null logger consumes incoming bytes without allocation. Optional
+`BorrowedLog` support permits other synchronous loggers to do the same. Every other
+existing `Log` receives an owned incoming-byte copy, preserving its retention
+contract; that adapter and arbitrary logger allocations are outside the guarantee.
+Diagnostic event arguments remain owned strings where necessary for retention.
 
-Before source: `64484313d9aadbb62ea8f7a3180a01ecf565f2ae` (phase 4).
-Measured October 15, 2026, Go 1.25.3, darwin/arm64, Apple M4 Pro.
-The original controlled harness remains unchanged, blob
-`80bc8bf1fd51732a053235c53bdd76ab173cdabf`:
+A full channel or no vacant raw slot applies reader backpressure. Frame, field,
+group, depth or stash exhaustion disconnects with a static capacity error before
+sequence/store side effects for that input. Stash space is reserved before sending
+a ResendRequest. Capacity failures preserve existing store and sequence state even
+with `ResetOnDisconnect=Y`; later ordinary disconnects still follow that setting.
+Duplicate stashes replace and release the previous raw slot. Gap fill, completed
+replay, failed recovery and disconnect release retained slots. There is no implicit
+eviction, parsing growth, pool, reference count or added hot-path mutex.
+
+Framing checks positive, overflow-safe BodyLength arithmetic and requires the
+three-digit checksum field at the declared boundary. Fragmented and coalesced
+frames, including exact-capacity frames, fit without growth. This is stricter than
+the allocating legacy parser's search for a later checksum. The legacy
+`parser.ReadMessage` convenience API remains available and allocating.
+
+Acceptor session discovery occurs before session limits are selected and remains
+setup work. Its first frame is checked and copied into a raw slot; read-ahead bytes
+transfer to the reader. Disconnect cancels blocked reads, slot acquisition and
+channel sends, drains all transfers, and joins the reader before ring reuse on
+reconnect. Failed initiator Logon preparation also returns every accepted slot.
+
+## Allocation and latency evidence
+
+Correction baseline: `32d79fc4955858e96e9a05ae7dd96ecfa1e27464`, including the
+ordinary validator and router corrections. Measurements use Go 1.25.3,
+darwin/arm64, Apple M4 Pro. Setup and warm-up are outside timing.
 
 ```sh
 GOTOOLCHAIN=auto rtk proxy go test . -run '^$' -bench '^BenchmarkAllocationBaseline$' -benchmem -benchtime=1s -count=5 -cpu=1
+GOTOOLCHAIN=auto rtk proxy go test . -run '^$' -bench '^BenchmarkScopedInboundSession$' -benchmem -benchtime=1s -count=5 -cpu=1
 ```
 
-[Before](before-go1.25.3.txt) and [after](after-go1.25.3.txt) preserve the legacy
-API baseline. The additive bounded framing benchmark uses the exact same order
-wire and repeating-reader fixture as the legacy 160 B/op, 2 allocs/op framed read.
+The mandatory [before baseline](scoped-before-go1.25.3.txt) and
+[after baseline](scoped-after-go1.25.3.txt) preserve the original harness and every
+allocation count: all three parsing rows and ordinary validation remain 0 B/op,
+0 allocs/op; legacy building remains 152 B/op, 6 allocs/op; legacy framed reads
+remain 160 B/op, 2 allocs/op. Decimal overflow remains 168 B/op, 5 allocs/op and is
+outside the guarantee. Baseline latency is not claimed unchanged: validation ran
+868.9–899.2 ns before versus 932.0–972.2 ns after, and legacy building ran
+774.0–792.2 ns before versus 832.2–857.1 ns after. These measurements do not establish
+the cause of that timing shift.
 
-| Warmed flow | Legacy/reference B/op | Legacy/reference allocs/op | Bounded B/op | Bounded allocs/op |
-|---|---:|---:|---:|---:|
-| Same-fixture framed read | 160 | 2 | 0 | 0 |
-| Framing through validated order handler and slot return | — | — | 0 | 0 |
-| Framing through validated group handler and slot return | — | — | 0 | 0 |
+The ordinary inbound [before measurement](scoped-session-before-go1.25.3.txt) and
+[after measurement](scoped-session-after-go1.25.3.txt) use the exact same timed
+benchmark implementation. It creates an ordinary
+session with its normal application interface, null logger, dictionary validation,
+latency checking, and memory-store target-sequence accounting. Each operation
+completes framing, inbound-channel transfer, parsing, dictionary/group traversal,
+validation, callback, target-sequence advancement, timer reset and slot return.
+All 66 raw slots are warmed before timing. The fixture is a deterministic in-memory
+connection, not TCP or a completed-write/full-session benchmark.
 
-All five bounded samples report zero allocations: [raw evidence](bounded-go1.25.3.txt).
-The original controlled benchmark remains 0/0 for all parse rows, 936 B/5 for
-legacy validation, 152 B/6 for legacy building and 160 B/2 for legacy framed reads.
-The reduction here is the configured bounded path replacing those allocating
-framed reads, while preserving the legacy API.
+| Ordinary inbound flow | Before ns/op | After ns/op | Before B/op | After B/op | Before allocs/op | After allocs/op |
+|---|---:|---:|---:|---:|---:|---:|
+| NewOrderSingle | 2,314–2,371 | 1,897–1,923 | 2,671 | 0 | 21 | 0 |
+| Repeating groups | 4,705–5,062 | 2,736–2,767 | 5,208 | 0 | 30 | 0 |
 
-```sh
-GOTOOLCHAIN=auto rtk proxy go test . -run '^$' -bench '^BenchmarkBounded(Framing|InboundOwnership)$' -benchmem -benchtime=1s -count=5 -cpu=1
-```
+Each range contains five one-second samples on one CPU. Every final sample reports
+zero allocations, also enforced by `TestScopedInboundSessionAllocations` after
+warm-up with completed callbacks, target-sequence advancement and all raw slots
+returned. The requested sub-microsecond processing target is not met.
 
-The ownership benchmark uses the default 16 KiB/512-field/128-entry/eight-depth
-limits and 66 slots. It includes framing, both ownership channel transfers,
-dictionary/group parsing, validation, borrowed field/group access and slot return.
-Each iteration completes only after its slot is returned; initialization, warming
-every slot and shutdown are outside timing. This harness does not claim session
-sequence/store processing or completed socket writes; those remain qualification
-work in phases 6–7.
+Both callbacks synchronously read ClOrdID with `GetBytes`. The group fixture
+exercises dictionary parsing and validation of groups; it does not invoke the
+allocating legacy `GetGroup` API, generated group getters, or owned string getters.
+The memory store does not persist outbound messages in this inbound measurement.
+Existing unbounded stores are not qualified as zero-allocation journals.
 
-## Correctness
+The [initial candidate](scoped-session-first-after-go1.25.3.txt) achieved 0 B/op and
+0 allocs/op but took 5,619 ns for NewOrderSingle and 6,590 ns for groups. Its
+[CPU profile](scoped-reset-cpu-top.txt) attributed 61.61% of samples to clearing
+memory; full fixed-map clears accounted for 58.51% cumulatively. Those results
+motivated clearing only touched entries and the used parse-field prefix. The
+[final CPU profile](scoped-final-cpu-top.txt) reduces `fixedClear` to 1.86%
+cumulatively. Remaining costs include dictionary validation, parsing, timestamp
+parsing and channel scheduling. Raw profiles and profile-run output accompany the
+text reports; profile timings are separate from the final controlled samples.
 
-Tests cover fragmented/coalesced/partial reads, checked length overflow, exact
-frame capacity, destination retry, stalled readers, held consumer slots, full
-channels, cancellation, discovery read-ahead and reconnect. Session fixtures cover
-`2,3,4,1` replay, duplicate replacement, gap fills, chunked recovery, timeout wrappers,
-later missing ranges, and recovery failure returning the active retained slot
-exactly once. Every capacity category preserves existing store/sequence state.
-Legacy retained callbacks and explicit borrowed logging/handler lifetimes are
-tested separately, including event loggers retaining owned diagnostic strings.
+Earlier `before-*`, `after-*` and `bounded-*` files in this directory describe the
+superseded opt-in implementation. They are retained as historical evidence, not
+qualification of the ordinary path or its current lifetime contract.
+
+## Correctness and remaining scope
+
+Fixtures cover fragmented/coalesced/partial reads, checked length overflow, exact
+frame capacity, retry, stalled readers, held slots, full channels, cancellation,
+discovery read-ahead and reconnect. Session tests exercise `2,3,4,1` replay,
+duplicate replacement, gap fills, chunked recovery, timeout wrappers, later missing
+ranges, replacement/replay receive times, and failure returning the active retained
+slot exactly once. Capacity categories preserve store/sequence state. Additional
+fixtures preserve callback reject data through engine processing, prove reader
+cancellation cannot reset active parse scratch, and retain owned logger bytes,
+strings, copies and legacy group objects across ring reuse. Callback setter
+detachment restores the original bounded parse storage for the next input.
 
 ```sh
 GOTOOLCHAIN=go1.23.12+auto rtk proxy go test ./... -skip '^TestMongoLogTestSuite$' -count=1
 GOTOOLCHAIN=go1.23.12+auto rtk proxy go vet ./...
 GOTOOLCHAIN=auto rtk proxy go test -race . -count=1
-GOTOOLCHAIN=auto rtk proxy go test . -run '^$' -fuzz '^FuzzBoundedFraming$' -fuzztime=30s -parallel=2
 ```
 
-[Package tests](tests-go1.23.12.txt), [race tests](race.txt), vet and
-[656,738 framing fuzz executions](fuzz.txt) passed. Correctness, fuzz and race
-runs were separate from performance measurements. The known optional Mongo
-logging teardown failure is documented in [phase 1](../phase-1/README.md#existing-optional-mongo-logger-test-failure)
-and its integration coverage remains explicitly excluded.
+The [Go 1.23.12 all-package suite](scoped-tests-go1.23.12.txt), Go 1.23.12 vet
+(exit 0, no diagnostics), and [full core race suite](scoped-race.txt) passed.
+The core test package completed in 7.385 seconds, and the race suite in 16.993
+seconds. Focused compatibility and lifecycle tests also passed before qualification.
+The known optional Mongo logger failure is documented in
+[phase 1](../phase-1/README.md#existing-optional-mongo-logger-test-failure) and is
+the only skipped suite. Race and correctness checks are separate from performance
+timing.
 
-This phase bounds inbound storage/lifetime and validates its allocation reduction.
-Outbound construction, writer completion, resend-journal retention and the complete
-supported session path remain subsequent phases. Malformed-input diagnostics and
-legacy convenience APIs are outside the valid-message allocation contract.
+This phase qualifies ordinary inbound processing within the configured limits.
+Outbound construction, persistence/journal retention, completed socket writes,
+arbitrary application work, malformed-input diagnostics and the complete session
+path retain their separate qualification requirements. No whole-library zero
+allocation or sub-microsecond full-session latency claim follows from this phase.
