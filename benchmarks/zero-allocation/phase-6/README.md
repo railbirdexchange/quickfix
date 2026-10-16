@@ -163,10 +163,11 @@ The unchanged harness SHA-256 values are:
 | `scoped_outbound_benchmark_test.go` | `9cadc954f11c1284760eec13eba8abd6b1f282a86ed46822561c4a9a5eaa23fb` |
 
 The [qualified source manifest](scoped-qualified-source.sha256) records root Go
-sources/tests and `config/bounded.go`; its
+sources/tests and `config/bounded.go` at isolated phase-6 commit
+`74902566548297bfdcb598962654a69333b10a2b`, measured on 2026-10-16; its
 [post-measurement verification](scoped-qualified-source-check.txt) passed.
-The current candidate retains the phase-5 `afbd0127` parent; later inbound
-latency changes require separate combined qualification.
+That isolated candidate retains the phase-5 `afbd0127` parent. Its evidence
+does not include the later inbound latency changes.
 
 These completed-write results exceed one microsecond. Full inbound-to-completed-
 write qualification and variable response construction remain phase-7 work;
@@ -197,3 +198,56 @@ both after measurements. `TestOrdinaryOutboundWarmedAllocations` exercises
 The existing optional Mongo logger environment failure remains documented in
 [phase 1](../phase-1/README.md#existing-optional-mongo-logger-test-failure). Only
 that suite is skipped. Race/correctness checks are separate from performance.
+
+## Combined qualification with phase-5 latency changes
+
+On 2026-10-16, phase-5 commit
+`23f58fe592c9699afa8f128924fc0ca4d2a93ec9` was merged into the qualified isolated
+phase-6 commit `74902566548297bfdcb598962654a69333b10a2b`. This section measures
+that combined source, without replacing the isolated before/after evidence.
+The merge retains the private session validator and canonical timestamp fast
+path, and keeps phase-6 scheduled reset retry/preservation. The nil-schedule
+clock optimization still calls `CheckSessionTime` for lifecycle transitions.
+
+The [combined Go 1.23.12 package suite](combined-tests-go1.23.12.txt) passed
+(core 7.616 seconds), [vet](combined-vet-go1.23.12.txt) exited successfully
+without diagnostics, and the [full core race run](combined-race.txt) passed
+in 18.967 seconds. The same optional Mongo logger suite was excluded.
+
+```sh
+GOTOOLCHAIN=auto rtk proxy go test . -run '^$' -bench '^BenchmarkAllocationBaseline$' -benchmem -benchtime=1s -count=5 -cpu=1
+GOTOOLCHAIN=auto rtk proxy go test . -run '^$' -bench '^BenchmarkScoped(Inbound|Outbound)Session$' -benchmem -benchtime=1s -count=5 -cpu=1
+```
+
+Both commands passed: [mandatory baseline](combined-after-go1.25.3.txt) in
+80.010 seconds and [ordinary session components](combined-sessions-after-go1.25.3.txt)
+in 31.918 seconds. CPU-heavy work remained serialized. Go 1.25.3, Apple M4 Pro,
+CPU=1, five repetitions:
+
+| Combined ordinary component | ns/op | B/op | allocs/op |
+|---|---:|---:|---:|
+| Inbound NewOrderSingle | 1,267–1,356 | 0 | 0 |
+| Inbound repeating group | 2,005–2,064 | 0 | 0 |
+| Completed outbound NewOrderSingle | 2,000–2,169 | 0 | 0 |
+| Completed outbound repeating group | 3,119–3,317 | 0 | 0 |
+| Completed outbound long custom message type | 1,947–2,011 | 0 | 0 |
+
+The combined mandatory baseline remains 0 B/op and 0 allocs/op for decimal
+fast parsing, reused parsing and validation. Its parser ranges are
+364.8–370.8 ns without a dictionary, 433.5–445.6 ns with a dictionary, and
+815.4–873.8 ns with groups; public validation is 668.7–691.6 ns. Legacy build
+remains 152 B/6 allocations, legacy framed read 160 B/2, and decimal overflow
+168 B/5.
+
+All three benchmark harnesses are unchanged. The inbound harness SHA-256 is
+`a2131b006ab16692bdd54b072d95456aac5179ae04311ba4568f2178e9101e26`;
+baseline and outbound hashes are listed above. The
+[combined source manifest](combined-qualified-source.sha256) and
+[post-measurement verification](combined-qualified-source-check.txt) identify
+the exact tested source separately from commit `74902566`'s isolated manifest.
+
+The combined inbound samples are higher than phase-5-only measurements
+(1,199–1,237 ns for orders and 1,871–1,938 ns for groups). These are separate
+component measurements and do not establish complete-session or TCP latency.
+The one-microsecond target is still unmet, and full ordinary inbound-to-completed-
+write qualification remains required.

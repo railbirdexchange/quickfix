@@ -188,13 +188,10 @@ func (state inSession) handleResendRequest(session *session, msg *Message) (next
 		return state.processReject(session, msg, err)
 	}
 
-	var err error
-	var beginSeqNoField FIXInt
-	if err = msg.Body.GetField(tagBeginSeqNo, &beginSeqNoField); err != nil {
+	beginSeqNo, err := msg.Body.GetInt(tagBeginSeqNo)
+	if err != nil {
 		return state.processReject(session, msg, RequiredTagMissing(tagBeginSeqNo))
 	}
-
-	beginSeqNo := beginSeqNoField
 
 	endSeqNo, err := msg.Body.GetInt(tagEndSeqNo)
 	if err != nil {
