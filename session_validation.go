@@ -43,6 +43,16 @@ func (metadata *validationRequiredMetadata) allPresent(messageType string, messa
 }
 
 func validationHasRequiredTags(required []Tag, fields *FieldMap) bool {
+	if fields.fixed != nil {
+		// Fixed fields and this private validator share the session owner.
+		// Avoid the public value-receiver copy and legacy lock/defer path.
+		for _, tag := range required {
+			if _, present := fields.fixed.find(tag); !present {
+				return false
+			}
+		}
+		return true
+	}
 	for _, tag := range required {
 		if !fields.Has(tag) {
 			return false

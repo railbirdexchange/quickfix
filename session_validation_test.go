@@ -124,3 +124,34 @@ func TestSessionValidatorFIXTRequiredDictionaries(t *testing.T) {
 		})
 	}
 }
+
+func TestSessionValidatorRequiredFixedLookup(t *testing.T) {
+	_, wire, dictionary := allocationBaselineFIX40Order(t)
+	limits := DefaultParseLimits()
+	slot, err := NewMessageSlot(dictionary, dictionary, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	validator, err := newSessionValidator(defaultValidatorSettings, dictionary, nil, limits.MaxFields)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, missing := range []Tag{tagSendingTime, 11, tagCheckSum} {
+		if err := slot.Parse(wire); err != nil {
+			t.Fatal(err)
+		}
+		message := slot.Message()
+		if reject := validator.Validate(message); reject != nil {
+			t.Fatalf("valid fixed fields rejected after reuse: %v", reject)
+		}
+		switch missing {
+		case tagSendingTime:
+			message.Header.Remove(missing)
+		case tagCheckSum:
+			message.Trailer.Remove(missing)
+		default:
+			message.Body.Remove(missing)
+		}
+		assertBoundedRejectEqual(t, validator.Validate(message), RequiredTagMissing(missing))
+	}
+}

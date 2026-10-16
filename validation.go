@@ -337,7 +337,7 @@ func validateWalkWithTagSet(transportDD, appDD *datadictionary.DataDictionary, s
 }
 
 func validateVisitField(fieldDef *datadictionary.FieldDef, fields []TagValue) ([]TagValue, MessageRejectError) {
-	if fieldDef.IsGroup() {
+	if len(fieldDef.Fields) > 0 {
 		var err MessageRejectError
 		if fields, err = validateVisitGroupField(fieldDef, fields); err != nil {
 			return nil, err

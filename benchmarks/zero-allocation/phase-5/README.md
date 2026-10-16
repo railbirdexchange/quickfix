@@ -258,6 +258,70 @@ recovery, FIXT admin/application dictionaries, all validator setting combination
 and the existing public-validator concurrency and rejection corpus. Performance
 measurement ran only after these checks, with no concurrent builds or load tests.
 
+### Lookup and clock follow-up to 05a6676a
+
+This follow-up starts from `05a6676ab553f1d2e43bc549da6a3c6dba987e3b`.
+The preceding `scoped-latency-after-*` and `scoped-session-latency-after-*`
+samples are the immediate before evidence. The new `scoped-lookups-*` and
+`scoped-session-lookups-after-*` files measure that head with this follow-up
+applied, before its commit. The original phase baseline remains unchanged.
+
+The [NewOrderSingle CPU profile](scoped-latency-nos-cpu-top.txt) and
+[group CPU profile](scoped-latency-groups-cpu-top.txt) were captured at that exact
+head, before these edits. The NewOrderSingle profile attributed 7.70% cumulatively
+to the private required-tag helper, including public `FieldMap.Has` value-copy
+and lock-dispatch overhead. `runtime.duffcopy` accounted for 3.49% flat; the
+[source report](scoped-latency-nos-cpu-lines.txt) identifies private group checks
+among its callers. `time.Now` accounted for 10.61% cumulatively across three
+different callers; only the unused read for an unrestricted session schedule was
+removed. These overlapping profile percentages are not additive savings claims.
+
+```sh
+GOTOOLCHAIN=auto rtk proxy go test . -run '^$' -bench '^BenchmarkScopedInboundSession$/^new_order_single$' -benchmem -benchtime=5s -count=1 -cpu=1 -cpuprofile benchmarks/zero-allocation/phase-5/scoped-latency-nos-cpu.pprof -o benchmarks/zero-allocation/phase-5/scoped-latency-profile.test
+GOTOOLCHAIN=auto rtk proxy go test . -run '^$' -bench '^BenchmarkScopedInboundSession$/^repeating_group$' -benchmem -benchtime=5s -count=1 -cpu=1 -cpuprofile benchmarks/zero-allocation/phase-5/scoped-latency-groups-cpu.pprof -o benchmarks/zero-allocation/phase-5/scoped-latency-profile.test
+```
+
+The session-owned required-tag helper now reads its fixed map directly. Public
+`FieldMap.Has` and shared public-validator behavior are unchanged. Private group
+checks inspect `len(fieldDef.Fields)` directly instead of copying the definition
+through its value-receiver `IsGroup` method. Incoming processing still calls
+`CheckSessionTime` for every input; a nil schedule skips only the clock read whose
+value the unrestricted schedule ignores. Configured schedules, lifecycle
+transitions, session-time notifications, receive timestamps and SendingTime
+latency checks remain active. Focused fixtures cover missing required fields in
+each section, successful scratch reuse after rejection, and entry into session
+time with no schedule and a pending notification.
+
+The same two benchmark files and hashes above remain unchanged. Five one-second
+samples on one CPU, using Go 1.25.3 / Apple M4 Pro, produced:
+
+| Ordinary inbound flow | 05a6676a ns/op | Follow-up ns/op | Before B/op | After B/op | Before allocs/op | After allocs/op |
+|---|---:|---:|---:|---:|---:|---:|
+| NewOrderSingle | 1,358–1,388 | 1,199–1,237 | 0 | 0 | 0 | 0 |
+| Repeating groups | 2,032–2,080 | 1,871–1,938 | 0 | 0 | 0 | 0 |
+
+Median latency changed from 1,382 to 1,211 ns for NewOrderSingle (12.4% lower),
+and from 2,050 to 1,892 ns for groups (7.7% lower). Both remain above one
+microsecond. The [final ordinary results](scoped-session-lookups-after-go1.25.3.txt)
+are separate from the [single diagnostic trial](scoped-session-lookups-trial-go1.25.3.txt).
+The measurement retains the inbound-only, in-memory connection boundary described
+above; it does not qualify TCP, outbound persistence or completed writes.
+
+The [mandatory count-five baseline](scoped-lookups-after-go1.25.3.txt) preserves
+all allocation counts. Parsing without a dictionary measured 370.2–377.1 ns/op,
+dictionary parsing 428.8–434.9 ns/op, group parsing 817.8–842.6 ns/op, and public
+ordinary validation 674.6–695.8 ns/op, all at 0 B/op and 0 allocs/op. Legacy
+building remains 152 B/op and 6 allocs/op, legacy framing 160 B/op and 2 allocs/op,
+and decimal overflow 168 B/op and 5 allocs/op. Those paths remain outside the
+zero-allocation guarantee.
+
+The [Go 1.23.12 all-package suite](scoped-lookups-tests-go1.23.12.txt) passed
+with only the separately documented Mongo logger suite excluded; its core package
+took 7.710 seconds. [Go 1.23.12 vet](scoped-lookups-vet-go1.23.12.txt) exited zero
+with no diagnostics. The [full core race suite](scoped-lookups-race.txt) passed in
+17.384 seconds. The commands above were reused, and performance measurement ran
+after correctness and race testing with no simultaneous builds or load tests.
+
 ## Correctness and remaining scope
 
 Fixtures cover fragmented/coalesced/partial reads, checked length overflow, exact

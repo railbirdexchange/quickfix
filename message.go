@@ -459,7 +459,7 @@ func parseGroup(mp *msgParser, definition *datadictionary.FieldDef, section *Fie
 			}
 		}
 		if child != nil {
-			if child.IsGroup() {
+			if len(child.Fields) > 0 {
 				if err := mp.pushGroup(child); err != nil {
 					return err
 				}
@@ -502,7 +502,7 @@ func parseGroup(mp *msgParser, definition *datadictionary.FieldDef, section *Fie
 
 func (mp *msgParser) groupDefinition(tag Tag) *datadictionary.FieldDef {
 	if mp.messageDef != nil {
-		if field := mp.messageDef.Fields[int(tag)]; field != nil && field.IsGroup() {
+		if field := mp.messageDef.Fields[int(tag)]; field != nil && len(field.Fields) > 0 {
 			return field
 		}
 	}
@@ -518,7 +518,7 @@ func (mp *msgParser) sectionGroup(tag Tag, header bool) *datadictionary.FieldDef
 		section = mp.transportDataDictionary.Header
 	}
 	if section != nil {
-		if definition := section.Fields[int(tag)]; definition != nil && definition.IsGroup() {
+		if definition := section.Fields[int(tag)]; definition != nil && len(definition.Fields) > 0 {
 			return definition
 		}
 	}
