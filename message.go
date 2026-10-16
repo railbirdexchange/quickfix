@@ -127,6 +127,7 @@ type Message struct {
 	// CopyInto must not transfer its input-frame or parse-storage ownership.
 	parseSlot      *MessageSlot
 	outboundFields *outboundFields
+	outboundOwner  *Message // Identifies a prior successful send of this exact representation.
 	arena          *messageArena
 }
 
@@ -159,6 +160,7 @@ func (m *Message) CopyInto(to *Message) {
 	if err := m.constructionError(); err != nil {
 		panic(err)
 	}
+	to.outboundOwner = nil
 	if to.outboundFields != nil && to.outboundFields.owner != to {
 		to.outboundFields = nil
 	}
@@ -218,6 +220,7 @@ func ParseMessageWithDataDictionary(
 	msg.Body.detachArena()
 	msg.Trailer.detachArena()
 	msg.arena = nil
+	msg.outboundOwner = nil
 	if msg.parseSlot != nil {
 		// Convenience parsing may reuse the original slab beyond the bounded
 		// parser's high-water mark, then shrink or replace the visible slice.

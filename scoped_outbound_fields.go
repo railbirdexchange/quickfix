@@ -17,13 +17,18 @@ const (
 	outboundFieldCount
 )
 
-// First-use engine scalar storage belongs to the caller's Message and is never
-// transferred to the socket writer. Repeated ordinary sends attach the full
-// construction arena; explicit copies detach both kinds of reusable storage.
+// Engine scalar storage belongs to a reused caller Message or session parse
+// slot and is never transferred to the socket writer. A fresh ordinary Message
+// uses small owned scalar values until a second send establishes its scope.
 type outboundFields struct {
 	owner   *Message
 	buffers [outboundFieldCount][80]byte
 	values  [outboundFieldCount][80]byte
+}
+
+func (message *Message) hasOutboundScope() bool {
+	return message.arena != nil || message.parseSlot != nil ||
+		message.outboundFields != nil && message.outboundFields.owner == message
 }
 
 func (message *Message) outboundFieldBuffer(index int) []byte {
@@ -50,6 +55,10 @@ func (message *Message) setOutboundField(fields *FieldMap, index int, tag Tag, w
 }
 
 func (message *Message) setOutboundInt(fields *FieldMap, index int, tag Tag, value int) {
+	if !message.hasOutboundScope() {
+		fields.SetInt(tag, value)
+		return
+	}
 	wire := strconv.AppendInt(message.outboundFieldBuffer(index), int64(tag), 10)
 	wire = append(wire, '=')
 	valueOffset := len(wire)
@@ -59,6 +68,10 @@ func (message *Message) setOutboundInt(fields *FieldMap, index int, tag Tag, val
 }
 
 func (message *Message) setOutboundBool(fields *FieldMap, index int, tag Tag, value bool) {
+	if !message.hasOutboundScope() {
+		fields.SetBool(tag, value)
+		return
+	}
 	wire := strconv.AppendInt(message.outboundFieldBuffer(index), int64(tag), 10)
 	wire = append(wire, '=')
 	valueOffset := len(wire)
@@ -71,6 +84,12 @@ func (message *Message) setOutboundBool(fields *FieldMap, index int, tag Tag, va
 }
 
 func (message *Message) setOutboundBytes(fields *FieldMap, index int, tag Tag, value []byte) {
+	if !message.hasOutboundScope() {
+		// Internal values may borrow an input frame or the writer's output
+		// slot. SetBytes copies wire bytes but retains its getter's input.
+		fields.SetBytes(tag, bytes.Clone(value))
+		return
+	}
 	wire := strconv.AppendInt(message.outboundFieldBuffer(index), int64(tag), 10)
 	wire = append(wire, '=')
 	valueOffset := len(wire)
@@ -86,6 +105,10 @@ func (message *Message) setOutboundBytes(fields *FieldMap, index int, tag Tag, v
 }
 
 func (message *Message) setOutboundTime(value time.Time, precision TimestampPrecision) {
+	if !message.hasOutboundScope() {
+		message.Header.SetField(tagSendingTime, FIXUTCTimestamp{Time: value, Precision: precision})
+		return
+	}
 	wire := append(message.outboundFieldBuffer(outboundTimestamp), '5', '2', '=')
 	timestamp := FIXUTCTimestamp{Time: value, Precision: precision}
 	wire, err := timestamp.AppendTo(wire)

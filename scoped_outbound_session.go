@@ -107,7 +107,7 @@ func (s *session) prepareOutbound(message, inReplyTo *Message, replacement bool)
 	// a full fixed arena on single-use legacy builders. Incoming parsed slots
 	// already have their own session-owned storage and reset lifecycle.
 	if message.arena != nil || message.parseSlot == nil && !message.Header.scoped && !message.Body.scoped && !message.Trailer.scoped &&
-		message.outboundFields != nil && message.outboundFields.owner == message {
+		message.outboundOwner == message {
 		if err := message.attachMessageArena(s.boundedIn.limits.MaxFrameBytes, s.boundedIn.limits.MaxFields); err != nil {
 			return nil, err
 		}
@@ -264,6 +264,7 @@ func (s *session) prepareOutbound(message, inReplyTo *Message, replacement bool)
 		ring.scheduledResetPending.Store(false)
 		s.sentReset = sentResetRequested
 	}
+	message.outboundOwner = message
 	return slot, nil
 }
 
