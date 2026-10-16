@@ -123,6 +123,10 @@ type Message struct {
 	fields     []TagValue
 	groupStack []*datadictionary.FieldDef
 	inbound    *inboundSlot
+	// parseSlot identifies the original slot even in Message value copies.
+	// CopyInto must not transfer its input-frame or parse-storage ownership.
+	parseSlot      *MessageSlot
+	outboundFields *outboundFields
 }
 
 // ToMessage returns the message itself.
@@ -145,19 +149,51 @@ func NewMessage() *Message {
 	return m
 }
 
-// CopyInto erases the dest messages and copies the currency message content
-// into it.
+// CopyInto overwrites to with this message. Copies from session callbacks own
+// their field and group bytes and remain valid after the callback returns.
 func (m *Message) CopyInto(to *Message) {
-	m.Header.CopyInto(&to.Header.FieldMap)
-	m.Body.CopyInto(&to.Body.FieldMap)
-	m.Trailer.CopyInto(&to.Trailer.FieldMap)
+	if m == to && m.outboundFields != nil {
+		return
+	}
+	if to.outboundFields != nil && to.outboundFields.owner != to {
+		to.outboundFields = nil
+	}
+	scoped := m.parseSlot != nil && m.parseSlot.scopedFields[0].fixed != nil || m.Header.scoped || m.Body.scoped || m.Trailer.scoped
+	if scoped && m == to {
+		return
+	}
+	if scoped {
+		// A callback may replace an entire section. Its local marker can then
+		// be absent, but the complete scoped message still requires owned copies.
+		header, body, trailer := m.Header.FieldMap, m.Body.FieldMap, m.Trailer.FieldMap
+		header.scoped, body.scoped, trailer.scoped = true, true, true
+		header.CopyInto(&to.Header.FieldMap)
+		body.CopyInto(&to.Body.FieldMap)
+		trailer.CopyInto(&to.Trailer.FieldMap)
+	} else {
+		m.Header.CopyInto(&to.Header.FieldMap)
+		m.Body.CopyInto(&to.Body.FieldMap)
+		m.Trailer.CopyInto(&to.Trailer.FieldMap)
+	}
 
 	to.ReceiveTime = m.ReceiveTime
 	to.bodyBytes = make([]byte, len(m.bodyBytes))
 	copy(to.bodyBytes, m.bodyBytes)
 	to.fields = make([]TagValue, len(m.fields))
 	for i := range to.fields {
-		to.fields[i].init(m.fields[i].tag, m.fields[i].value)
+		value := m.fields[i].value
+		if scoped {
+			value = bytes.Clone(value)
+		}
+		to.fields[i].init(m.fields[i].tag, value)
+	}
+	copiedSlot := to.parseSlot != nil && &to.parseSlot.message != to
+	if scoped || copiedSlot {
+		to.rawMessage = nil
+	}
+	if copiedSlot || scoped && to.parseSlot == nil {
+		to.inbound = nil
+		to.parseSlot = nil
 	}
 }
 
@@ -173,6 +209,11 @@ func ParseMessageWithDataDictionary(
 	transportDataDictionary *datadictionary.DataDictionary,
 	appDataDictionary *datadictionary.DataDictionary,
 ) (err error) {
+	if msg.parseSlot != nil {
+		// Convenience parsing may reuse the original slab beyond the bounded
+		// parser's high-water mark, then shrink or replace the visible slice.
+		msg.parseSlot.fieldsUsed = cap(msg.parseSlot.parseFields)
+	}
 	// Create msgparser before we go any further.
 	mp := &msgParser{
 		msg:                     msg,
@@ -489,7 +530,7 @@ func (mp *msgParser) sectionGroup(tag Tag, header bool) *datadictionary.FieldDef
 
 func (mp *msgParser) pushGroup(definition *datadictionary.FieldDef) error {
 	if mp.limits != nil {
-		if len(mp.msg.groupStack) == cap(mp.msg.groupStack) {
+		if len(mp.msg.groupStack) >= mp.limits.MaxGroupDepth || len(mp.msg.groupStack) == cap(mp.msg.groupStack) {
 			return ErrGroupDepth
 		}
 		count, err := boundedUnsigned(mp.parsedFieldBytes.value, mp.limits.MaxGroupEntries-mp.declaredGroupEntries, ErrGroupCapacity)
@@ -627,6 +668,9 @@ func extractField(parsedFieldBytes *TagValue, buffer []byte) (remBytes []byte, e
 	return buffer[(endIndex + 1):], err
 }
 
+// Bytes returns the wire representation. During a session callback the returned
+// bytes borrow the input frame and expire when the callback returns. CopyInto
+// creates an owned message; String returns an owned string.
 func (m *Message) Bytes() []byte {
 	if m.rawMessage != nil {
 		return m.rawMessage.Bytes()
@@ -635,6 +679,8 @@ func (m *Message) Bytes() []byte {
 	return m.build()
 }
 
+// String returns an owned wire representation that remains valid after a
+// session callback returns.
 func (m *Message) String() string {
 	if m.rawMessage != nil {
 		return m.rawMessage.String()

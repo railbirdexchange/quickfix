@@ -2,6 +2,7 @@ package quickfix
 
 import (
 	"bytes"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -18,24 +19,40 @@ type SendStageEvent struct {
 // SendStageObserver receives synchronous send-stage timing events.
 type SendStageObserver func(SendStageEvent)
 
-// The installed function is immutable; replacement happens outside the send
-// path. Readers need no lock and never share mutable event storage.
-var sendStageObserverState atomic.Pointer[SendStageObserver]
+var sendStageObserverState struct {
+	sync.RWMutex
+	observer SendStageObserver
+	enabled  atomic.Bool
+}
 
 // SetSendStageObserver installs a process-wide observer for FIX send-stage
 // timings. Passing nil disables observation.
 func SetSendStageObserver(observer SendStageObserver) {
-	if observer == nil {
-		sendStageObserverState.Store(nil)
-		return
+	sendStageObserverState.Lock()
+	defer sendStageObserverState.Unlock()
+	sendStageObserverState.observer = observer
+	sendStageObserverState.enabled.Store(observer != nil)
+}
+
+func startSendStage() time.Time {
+	if sendStageObserverState.enabled.Load() {
+		return time.Now()
 	}
-	sendStageObserverState.Store(&observer)
+	return time.Time{}
+}
+
+func (s *session) finishSendStage(stage string, messageType []byte, started time.Time, success bool) {
+	if !started.IsZero() {
+		s.observeSendStage(stage, string(messageType), time.Since(started), success)
+	}
 }
 
 func observeSendStage(event SendStageEvent) {
-	observer := sendStageObserverState.Load()
+	sendStageObserverState.RLock()
+	observer := sendStageObserverState.observer
+	sendStageObserverState.RUnlock()
 	if observer != nil {
-		(*observer)(event)
+		observer(event)
 	}
 }
 

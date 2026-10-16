@@ -27,27 +27,25 @@ type Application interface {
 	// OnLogout notification of a session logging off or disconnecting.
 	OnLogout(sessionID SessionID)
 
-	// ToAdmin notification of admin message being sent to target.
+	// ToAdmin notification of admin message being sent to target. A message
+	// supplied to Send or SendToTarget remains caller-owned after sending.
 	ToAdmin(message *Message, sessionID SessionID)
 
-	// ToApp notification of app message being sent to target.
+	// ToApp notification of app message being sent to target. Ordinary sends
+	// pass the original caller-owned Message synchronously. During resend,
+	// the engine supplies a scoped replay view: retain it with CopyInto, or
+	// retain individual owned GetString/FIXString values, before returning.
 	ToApp(message *Message, sessionID SessionID) error
 
-	// FromAdmin notification of admin message being received from target.
+	// FromAdmin processes an inbound admin message synchronously. The Message,
+	// GetBytes results and explicitly borrowed views are valid only during this callback.
+	// Do not retain them or pass them to asynchronous work. CopyInto detaches
+	// scoped input for retention; GetGroup returns owned group data. GetString,
+	// FIXString and String return owned strings. Ordinary setters remain
+	// available but may allocate.
 	FromAdmin(message *Message, sessionID SessionID) MessageRejectError
 
-	// FromApp notification of app message being received from target.
+	// FromApp processes an inbound application message synchronously, with the
+	// same scoped Message/byte lifetime and retention rules as FromAdmin.
 	FromApp(message *Message, sessionID SessionID) MessageRejectError
-}
-
-// BorrowedApplication opts into the bounded inbound callback lifetime. With
-// BoundedInbound enabled, these methods replace FromAdmin and FromApp. The slot,
-// message, field bytes and group views are read-only and valid only during the
-// callback. Do not retain, reset, mutate or pass them to asynchronous work.
-// Applications needing retention must explicitly copy field bytes. CopyInto
-// alone is not a deep copy of borrowed field values.
-type BorrowedApplication interface {
-	Application
-	FromAdminBorrowed(slot *MessageSlot, sessionID SessionID) MessageRejectError
-	FromAppBorrowed(slot *MessageSlot, sessionID SessionID) MessageRejectError
 }

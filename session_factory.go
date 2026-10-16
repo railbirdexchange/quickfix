@@ -464,15 +464,15 @@ func (f sessionFactory) newSession(
 	if s.log, err = logFactory.CreateSessionLog(s.sessionID); err != nil {
 		return
 	}
-	if err = s.configureBoundedInbound(settings, application, validatorSettings); err != nil {
+	if err = s.configureBoundedInbound(settings); err != nil {
 		return
 	}
 
 	if s.store, err = storeFactory.Create(s.sessionID); err != nil {
 		return
 	}
-	if err = s.configureBoundedOutbound(settings, application); err != nil {
-		_ = s.store.Close()
+	if err = s.configureOutbound(settings); err != nil {
+		s.store.Close()
 		return
 	}
 

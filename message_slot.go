@@ -48,18 +48,17 @@ type MessageSlot struct {
 	transportDictionary *datadictionary.DataDictionary
 	appDictionary       *datadictionary.DataDictionary
 	valid               bool
-	outbound            *boundedOutboundSession
+	scopedFields        [3]FieldMap
+	parseFields         []TagValue
+	parseGroupStack     []*datadictionary.FieldDef
+	fieldsUsed          int
 }
 
 // NewMessageSlot allocates all parse storage once. Dictionaries must remain
 // immutable for the slot's lifetime. No parsing operation grows this storage.
 func NewMessageSlot(transport, application *datadictionary.DataDictionary, limits ParseLimits) (*MessageSlot, error) {
-	// Every field needs at least a tag, '=', and SOH. These relationships also
-	// prevent capacity arithmetic overflow when constructing lookup tables.
-	if limits.MaxFrameBytes < 12 || limits.MaxFields < 4 || limits.MaxFields > limits.MaxFrameBytes/3 || limits.MaxFields > int(^uint(0)>>1)/1024 ||
-		limits.MaxGroupEntries < 0 || limits.MaxGroupEntries > limits.MaxFields ||
-		limits.MaxGroupDepth < 0 || limits.MaxGroupDepth > limits.MaxFields {
-		return nil, ErrInvalidParseLimits
+	if err := validateParseLimits(limits); err != nil {
+		return nil, err
 	}
 	slot := &MessageSlot{limits: limits, transportDictionary: transport, appDictionary: application}
 	slot.message.Header.initFixed(headerFieldOrdering, limits.MaxFields)
@@ -67,7 +66,48 @@ func NewMessageSlot(transport, application *datadictionary.DataDictionary, limit
 	slot.message.Trailer.initFixed(trailerFieldOrdering, limits.MaxFields)
 	slot.message.fields = make([]TagValue, 0, limits.MaxFields)
 	slot.message.groupStack = make([]*datadictionary.FieldDef, 0, limits.MaxGroupDepth)
+	slot.parseFields = slot.message.fields
+	slot.parseGroupStack = slot.message.groupStack
+	slot.message.parseSlot = slot
 	return slot, nil
+}
+
+func validateParseLimits(limits ParseLimits) error {
+	// Every field needs at least a tag, '=', and SOH. These relationships also
+	// prevent capacity arithmetic overflow when constructing lookup tables.
+	if limits.MaxFrameBytes < 12 || limits.MaxFields < 4 || limits.MaxFields > limits.MaxFrameBytes/3 || limits.MaxFields > int(^uint(0)>>1)/1024 ||
+		limits.MaxGroupEntries < 0 || limits.MaxGroupEntries > limits.MaxFields ||
+		limits.MaxGroupDepth < 0 || limits.MaxGroupDepth > limits.MaxFields {
+		return ErrInvalidParseLimits
+	}
+	return nil
+}
+
+// enableScopedCallbacks is session-only compatibility setup. Public message
+// slots remain strict. Save the original storage before any callback can detach
+// a section through allocating setters or replace fields through CopyInto.
+func (slot *MessageSlot) enableScopedCallbacks() {
+	if slot.scopedFields[0].fixed != nil {
+		return
+	}
+	slot.message.Header.scoped = true
+	slot.message.Body.scoped = true
+	slot.message.Trailer.scoped = true
+	slot.scopedFields = [3]FieldMap{slot.message.Header.FieldMap, slot.message.Body.FieldMap, slot.message.Trailer.FieldMap}
+}
+
+func (slot *MessageSlot) restoreScopedFields() {
+	// CopyInto is an allocating convenience operation for every MessageSlot.
+	// Keep its replacement slices separate from the original parse storage.
+	slot.message.fields = slot.parseFields
+	slot.message.groupStack = slot.parseGroupStack
+	slot.message.parseSlot = slot
+	if slot.scopedFields[0].fixed == nil {
+		return
+	}
+	slot.message.Header.FieldMap = slot.scopedFields[0]
+	slot.message.Body.FieldMap = slot.scopedFields[1]
+	slot.message.Trailer.FieldMap = slot.scopedFields[2]
 }
 
 // Parse borrows frame and parses it with the configured dictionaries. On any
@@ -75,6 +115,7 @@ func NewMessageSlot(transport, application *datadictionary.DataDictionary, limit
 // Parsing and subsequent dictionary validation are separate operations.
 func (slot *MessageSlot) Parse(frame []byte) error {
 	slot.valid = false
+	slot.restoreScopedFields()
 	if len(frame) > slot.limits.MaxFrameBytes {
 		return ErrFrameCapacity
 	}
@@ -87,7 +128,12 @@ func (slot *MessageSlot) Parse(frame []byte) error {
 		rawBytes:                frame,
 		limits:                  &slot.limits,
 	}
-	if err := doParsing(&parser); err != nil {
+	err := doParsing(&parser)
+	// A group can extract one boundary field and rewind before an error. Include
+	// that lookahead and retain the high-water mark across shorter parses so no
+	// previously extracted field can hide references to an earlier frame.
+	slot.fieldsUsed = max(slot.fieldsUsed, min(parser.fieldIndex+2, cap(slot.message.fields)))
+	if err != nil {
 		return err
 	}
 	slot.valid = true
@@ -166,14 +212,17 @@ func boundedUnsigned(value []byte, limit int, capacityError error) (int, error) 
 // It retains the slot's fixed storage for reuse.
 func (slot *MessageSlot) Reset() {
 	slot.valid = false
+	slot.restoreScopedFields()
 	slot.message.Header.clearNoLock()
 	slot.message.Body.clearNoLock()
 	slot.message.Trailer.clearNoLock()
-	clear(slot.message.fields[:cap(slot.message.fields)])
+	clear(slot.message.fields[:slot.fieldsUsed])
+	slot.fieldsUsed = 0
 	slot.message.fields = slot.message.fields[:0]
 	clear(slot.message.groupStack[:cap(slot.message.groupStack)])
 	slot.message.groupStack = slot.message.groupStack[:0]
 	slot.message.bodyBytes = nil
 	slot.message.rawMessage = nil
+	slot.message.inbound = nil
 	slot.raw = bytes.Buffer{}
 }
