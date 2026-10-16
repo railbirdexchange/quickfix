@@ -66,6 +66,7 @@ type session struct {
 	outbound                *outboundRing
 	writeConnection         *outboundWriter
 	preserveOnDisconnect    bool
+	controls                scopedControl
 
 	timestampPrecision      TimestampPrecision
 	lastCheckedResetSeqTime time.Time
@@ -193,40 +194,45 @@ func (s *session) sendLogon() error {
 }
 
 func (s *session) sendLogonInReplyTo(setResetSeqNum bool, inReplyTo *Message) error {
-	logon := NewMessage()
-	logon.Header.SetField(tagMsgType, FIXString("A"))
-	logon.Header.SetField(tagBeginString, FIXString(s.sessionID.BeginString))
-	logon.Header.SetField(tagTargetCompID, FIXString(s.sessionID.TargetCompID))
-	logon.Header.SetField(tagSenderCompID, FIXString(s.sessionID.SenderCompID))
-	logon.Body.SetField(tagEncryptMethod, FIXString("0"))
-	logon.Body.SetField(tagHeartBtInt, FIXInt(s.HeartBtInt.Seconds()))
+	logon, err := s.acquireControl("A")
+	if err != nil {
+		return err
+	}
+	defer s.releaseControl()
+	logon.Header.SetString(tagBeginString, s.sessionID.BeginString)
+	logon.Header.SetString(tagTargetCompID, s.sessionID.TargetCompID)
+	logon.Header.SetString(tagSenderCompID, s.sessionID.SenderCompID)
+	logon.Body.SetString(tagEncryptMethod, "0")
+	logon.Body.SetInt(tagHeartBtInt, int(s.HeartBtInt.Seconds()))
 
 	if setResetSeqNum {
-		logon.Body.SetField(tagResetSeqNumFlag, FIXBoolean(true))
+		logon.Body.SetBool(tagResetSeqNumFlag, true)
 	}
 
 	if len(s.DefaultApplVerID) > 0 {
-		logon.Body.SetField(tagDefaultApplVerID, FIXString(s.DefaultApplVerID))
+		logon.Body.SetString(tagDefaultApplVerID, s.DefaultApplVerID)
 	}
 
 	// Evaluate tag 789.
 	if s.EnableNextExpectedMsgSeqNum {
 		if inReplyTo != nil {
-			targetWantsNextSeqNumToBe, getErr := inReplyTo.Body.GetInt(tagNextExpectedMsgSeqNum)
-			if getErr == nil {
-				actualNextNum := s.logonSenderSequence()
-				// // Is the 789 we received too high ??
-				if targetWantsNextSeqNumToBe > actualNextNum {
-					// we can't resend what we never sent! something unrecoverable has happened.
-					return RejectLogon{fmt.Sprintf("Tag 789 (NextExpectedMsgSeqNum) is higher than expected. Expected %d, Received %d", actualNextNum, targetWantsNextSeqNumToBe)}
+			if inReplyTo.Body.Has(tagNextExpectedMsgSeqNum) {
+				targetWantsNextSeqNumToBe, getErr := inReplyTo.Body.GetInt(tagNextExpectedMsgSeqNum)
+				if getErr == nil {
+					actualNextNum := s.logonSenderSequence()
+					// Is the 789 we received too high?
+					if targetWantsNextSeqNumToBe > actualNextNum {
+						// We cannot resend a sequence that was never sent.
+						return RejectLogon{fmt.Sprintf("Tag 789 (NextExpectedMsgSeqNum) is higher than expected. Expected %d, Received %d", actualNextNum, targetWantsNextSeqNumToBe)}
+					}
+					nextSeqNum := s.logonTargetSequence()
+					logon.Body.SetInt(tagNextExpectedMsgSeqNum, nextSeqNum+1)
 				}
-				nextSeqNum := s.logonTargetSequence()
-				logon.Body.SetField(tagNextExpectedMsgSeqNum, FIXInt(nextSeqNum+1))
 			}
 		} else {
 			// We are sending a logon.
 			nextseqnum := s.logonTargetSequence()
-			logon.Body.SetField(tagNextExpectedMsgSeqNum, FIXInt(nextseqnum+1))
+			logon.Body.SetInt(tagNextExpectedMsgSeqNum, nextseqnum+1)
 		}
 	}
 
@@ -237,26 +243,28 @@ func (s *session) sendLogonInReplyTo(setResetSeqNum bool, inReplyTo *Message) er
 	return nil
 }
 
-func (s *session) generateSequenceReset(beginSeqNo int, endSeqNo int, inReplyTo Message) (err error) {
-	sequenceReset := NewMessage()
-	s.fillDefaultHeader(sequenceReset, &inReplyTo)
-
-	sequenceReset.Header.SetField(tagMsgType, FIXString("4"))
-	sequenceReset.Header.SetField(tagMsgSeqNum, FIXInt(beginSeqNo))
-	sequenceReset.Header.SetField(tagPossDupFlag, FIXBoolean(true))
-	sequenceReset.Body.SetField(tagNewSeqNo, FIXInt(endSeqNo))
-	sequenceReset.Body.SetField(tagGapFillFlag, FIXBoolean(true))
-
-	var origSendingTime FIXString
-	if err := sequenceReset.Header.GetField(tagSendingTime, &origSendingTime); err == nil {
-		sequenceReset.Header.SetField(tagOrigSendingTime, origSendingTime)
+func (s *session) generateSequenceReset(beginSeqNo int, endSeqNo int, inReplyTo *Message) (err error) {
+	sequenceReset, err := s.acquireControl("4")
+	if err != nil {
+		return err
+	}
+	defer s.releaseControl()
+	if s.outbound != nil {
+		s.fillOutboundHeader(sequenceReset, inReplyTo)
+	} else {
+		s.fillDefaultHeader(sequenceReset, inReplyTo)
+	}
+	sequenceReset.Header.SetInt(tagMsgSeqNum, beginSeqNo)
+	sequenceReset.Header.SetBool(tagPossDupFlag, true)
+	sequenceReset.Body.SetInt(tagNewSeqNo, endSeqNo)
+	sequenceReset.Body.SetBool(tagGapFillFlag, true)
+	if origSendingTime, present := sequenceReset.Header.getBytesIfPresent(tagSendingTime); present {
+		setControlBytes(&sequenceReset.Header.FieldMap, tagOrigSendingTime, origSendingTime)
 	}
 
 	s.application.ToAdmin(sequenceReset, s.sessionID)
 
-	msgBytes := sequenceReset.build()
-
-	if err = s.EnqueueBytesAndSend(msgBytes); err != nil {
+	if err = s.enqueueControl(sequenceReset); err != nil {
 		return
 	}
 	s.logSequenceEvent(eventSentSequenceReset, endSeqNo, 0)
@@ -264,17 +272,19 @@ func (s *session) generateSequenceReset(beginSeqNo int, endSeqNo int, inReplyTo 
 	return
 }
 
-func (s *session) buildLogout(reason string) *Message {
-	logout := NewMessage()
-	logout.Header.SetField(tagMsgType, FIXString("5"))
-	logout.Header.SetField(tagBeginString, FIXString(s.sessionID.BeginString))
-	logout.Header.SetField(tagTargetCompID, FIXString(s.sessionID.TargetCompID))
-	logout.Header.SetField(tagSenderCompID, FIXString(s.sessionID.SenderCompID))
+func (s *session) buildLogout(reason string) (*Message, error) {
+	logout, err := s.acquireControl("5")
+	if err != nil {
+		return nil, err
+	}
+	logout.Header.SetString(tagBeginString, s.sessionID.BeginString)
+	logout.Header.SetString(tagTargetCompID, s.sessionID.TargetCompID)
+	logout.Header.SetString(tagSenderCompID, s.sessionID.SenderCompID)
 	if reason != "" {
-		logout.Body.SetField(tagText, FIXString(reason))
+		logout.Body.SetString(tagText, reason)
 	}
 
-	return logout
+	return logout, nil
 }
 
 func (s *session) sendLogout(reason string) error {
@@ -282,13 +292,26 @@ func (s *session) sendLogout(reason string) error {
 }
 
 func (s *session) sendLogoutInReplyTo(reason string, inReplyTo *Message) error {
-	logout := s.buildLogout(reason)
+	logout, err := s.buildLogout(reason)
+	if err != nil {
+		return err
+	}
+	defer s.releaseControl()
 	return s.sendInReplyTo(logout, inReplyTo)
+}
+
+func (s *session) dropAndSendLogoutInReplyTo(reason string, inReplyTo *Message) error {
+	logout, err := s.buildLogout(reason)
+	if err != nil {
+		return err
+	}
+	defer s.releaseControl()
+	return s.dropAndSendInReplyTo(logout, inReplyTo)
 }
 
 func (s *session) resend(msg *Message) bool {
 	if s.outbound != nil {
-		msg.setOutboundBytes(&msg.Header.FieldMap, outboundPossDup, tagPossDupFlag, []byte{'Y'})
+		msg.setOutboundBool(&msg.Header.FieldMap, outboundPossDup, tagPossDupFlag, true)
 		if original, found := msg.Header.getBytesIfPresent(tagSendingTime); found {
 			msg.setOutboundBytes(&msg.Header.FieldMap, outboundOriginalTimestamp, tagOrigSendingTime, original)
 		}
@@ -603,10 +626,13 @@ func (s *session) sendResendRequest(beginSeq, endSeq int) (nextState resendState
 			endSeqNo = 0
 		}
 	}
-	resend := NewMessage()
-	resend.Header.SetBytes(tagMsgType, msgTypeResendRequest)
-	resend.Body.SetField(tagBeginSeqNo, FIXInt(beginSeq))
-	resend.Body.SetField(tagEndSeqNo, FIXInt(endSeqNo))
+	resend, err := s.acquireControl("2")
+	if err != nil {
+		return nextState, err
+	}
+	defer s.releaseControl()
+	resend.Body.SetInt(tagBeginSeqNo, beginSeq)
+	resend.Body.SetInt(tagEndSeqNo, endSeqNo)
 	if err = s.send(resend); err != nil {
 		return
 	}
@@ -704,7 +730,7 @@ func (s *session) handleLogon(msg *Message) error {
 		if getErr == nil {
 			if targetWantsNextSeqNumToBe != nextSenderMsgNumAtLogonReceived {
 				if !s.DisableMessagePersist {
-					seqResetErr := s.generateSequenceReset(targetWantsNextSeqNumToBe, nextSenderMsgNumAtLogonReceived+1, *msg)
+					seqResetErr := s.generateSequenceReset(targetWantsNextSeqNumToBe, nextSenderMsgNumAtLogonReceived+1, msg)
 					if seqResetErr != nil {
 						return seqResetErr
 					}
@@ -916,51 +942,55 @@ func (s *session) drainMessageIn() {
 }
 
 func (s *session) doReject(msg *Message, rej MessageRejectError) error {
-	reply := msg.reverseRoute()
+	reply, err := s.acquireControl("3")
+	if err != nil {
+		return err
+	}
+	defer s.releaseControl()
+	reverseControlRoute(msg, reply)
 
 	if s.sessionID.BeginString >= BeginStringFIX42 {
 
 		if rej.IsBusinessReject() {
-			reply.Header.SetField(tagMsgType, FIXString("j"))
-			reply.Body.SetField(tagBusinessRejectReason, FIXInt(rej.RejectReason()))
+			reply.Header.SetString(tagMsgType, "j")
+			reply.Body.SetInt(tagBusinessRejectReason, rej.RejectReason())
 			if refID := rej.BusinessRejectRefID(); refID != "" {
-				reply.Body.SetField(tagBusinessRejectRefID, FIXString(refID))
+				reply.Body.SetString(tagBusinessRejectRefID, refID)
 			}
 		} else {
-			reply.Header.SetField(tagMsgType, FIXString("3"))
 			switch {
 			default:
-				reply.Body.SetField(tagSessionRejectReason, FIXInt(rej.RejectReason()))
+				reply.Body.SetInt(tagSessionRejectReason, rej.RejectReason())
 			case rej.RejectReason() > rejectReasonInvalidMsgType && s.sessionID.BeginString == BeginStringFIX42:
 				// Fix42 knows up to invalid msg type.
 			}
 
 			if refTagID := rej.RefTagID(); refTagID != nil {
-				reply.Body.SetField(tagRefTagID, FIXInt(*refTagID))
+				reply.Body.SetInt(tagRefTagID, int(*refTagID))
 			}
 		}
-		reply.Body.SetField(tagText, FIXString(rej.Error()))
+		reply.Body.SetString(tagText, rej.Error())
 
-		var msgType FIXString
-		if err := msg.Header.GetField(tagMsgType, &msgType); err == nil {
-			reply.Body.SetField(tagRefMsgType, msgType)
+		if msgType, present := msg.Header.getBytesIfPresent(tagMsgType); present {
+			setControlBytes(&reply.Body.FieldMap, tagRefMsgType, msgType)
 		}
 	} else {
-		reply.Header.SetField(tagMsgType, FIXString("3"))
-
 		if refTagID := rej.RefTagID(); refTagID != nil {
-			reply.Body.SetField(tagText, FIXString(fmt.Sprintf("%s (%d)", rej.Error(), *refTagID)))
+			if err := s.setControlRejectText(reply, rej.Error(), *refTagID); err != nil {
+				return err
+			}
 		} else {
-			reply.Body.SetField(tagText, FIXString(rej.Error()))
+			reply.Body.SetString(tagText, rej.Error())
 		}
 	}
 
-	seqNum := new(FIXInt)
-	if err := msg.Header.GetField(tagMsgSeqNum, seqNum); err == nil {
-		reply.Body.SetField(tagRefSeqNum, seqNum)
+	if msg.Header.Has(tagMsgSeqNum) {
+		if seqNum, reject := msg.Header.GetInt(tagMsgSeqNum); reject == nil {
+			reply.Body.SetInt(tagRefSeqNum, seqNum)
+		}
 	}
 
-	s.log.OnEventf("Message Rejected: %v", rej.Error())
+	s.logControlReject(rej.Error())
 	return s.sendInReplyTo(reply, msg)
 }
 

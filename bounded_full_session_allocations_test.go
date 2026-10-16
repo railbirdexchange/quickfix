@@ -15,26 +15,18 @@ import (
 func TestBoundedFullSessionExactAllocations(t *testing.T) {
 	previous := runtime.GOMAXPROCS(1)
 	defer runtime.GOMAXPROCS(previous)
-	for _, scenario := range []string{"ordinary", "groups", "outbound_resend", "inbound_gap", "slow_consumer", "warmed_post_reconnect"} {
+	for _, scenario := range []string{"ordinary", "groups", "outbound_resend", "inbound_gap", "slow_consumer", "warmed_post_reconnect", "heartbeat_test_request"} {
 		t.Run(scenario, func(t *testing.T) {
 			fixture := newBoundedFullSession(t, scenario != "ordinary")
 			require.NoError(t, fixture.warm())
-			var cycle func() error
 			switch scenario {
-			case "outbound_resend":
-				cycle = fixture.outboundResend
-			case "inbound_gap":
-				cycle = fixture.inboundGap
 			case "slow_consumer":
 				require.NoError(t, fixture.prepareSlowConsumer())
-				cycle = fixture.slowConsumer
 			case "warmed_post_reconnect":
 				require.NoError(t, fixture.reconnect())
 				require.NoError(t, fixture.warm())
-				cycle = func() error { return fixture.ordinaryBatch(32, false) }
-			default:
-				cycle = func() error { return fixture.ordinaryBatch(32, false) }
 			}
+			cycle := fixture.scenario(scenario)
 			require.NoError(t, cycle())
 
 			var before, after runtime.MemStats

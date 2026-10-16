@@ -17,9 +17,9 @@ const (
 	outboundFieldCount
 )
 
-// Only engine-owned scalar fields use this workspace. It belongs to the
-// caller's Message and is never transferred to the socket writer. Ordinary
-// setters retain their allocating semantics; explicit copies detach the bytes.
+// First-use engine scalar storage belongs to the caller's Message and is never
+// transferred to the socket writer. Repeated ordinary sends attach the full
+// construction arena; explicit copies detach both kinds of reusable storage.
 type outboundFields struct {
 	owner   *Message
 	buffers [outboundFieldCount][80]byte
@@ -34,6 +34,12 @@ func (message *Message) outboundFieldBuffer(index int) []byte {
 }
 
 func (message *Message) setOutboundField(fields *FieldMap, index int, tag Tag, wire []byte, valueOffset int) {
+	if arena := fields.mutableArena(); arena != nil {
+		// Engine buffers are disjoint from the arena, including its value plane.
+		// Account the field before later body/header mutations move those planes.
+		arena.setScalar(fields, tag, wire[valueOffset:len(wire)-1], "", nil, true)
+		return
+	}
 	// Legacy scalar setters keep the getter value separate from encoded wire.
 	// Mutating GetBytes in a callback must not silently rewrite the encoding.
 	valueBytes := message.outboundFields.values[index][:len(wire)-valueOffset-1]
@@ -49,6 +55,18 @@ func (message *Message) setOutboundInt(fields *FieldMap, index int, tag Tag, val
 	valueOffset := len(wire)
 	wire = strconv.AppendInt(wire, int64(value), 10)
 	wire = append(wire, '\x01')
+	message.setOutboundField(fields, index, tag, wire, valueOffset)
+}
+
+func (message *Message) setOutboundBool(fields *FieldMap, index int, tag Tag, value bool) {
+	wire := strconv.AppendInt(message.outboundFieldBuffer(index), int64(tag), 10)
+	wire = append(wire, '=')
+	valueOffset := len(wire)
+	encoded := byte('N')
+	if value {
+		encoded = 'Y'
+	}
+	wire = append(wire, encoded, '\x01')
 	message.setOutboundField(fields, index, tag, wire, valueOffset)
 }
 

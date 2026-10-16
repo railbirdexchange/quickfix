@@ -81,9 +81,8 @@ func (s logonState) Stop(_ *session) (nextState sessionState) {
 
 func shutdownWithReason(session *session, msg *Message, incrNextTargetMsgSeqNum bool, reason string) (nextState sessionState) {
 	session.log.OnEvent(reason)
-	logout := session.buildLogout(reason)
 
-	if err := session.dropAndSendInReplyTo(logout, msg); err != nil {
+	if err := session.dropAndSendLogoutInReplyTo(reason, msg); err != nil {
 		if isOutboundCapacityError(err) {
 			return handleStateError(session, err)
 		}

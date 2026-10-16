@@ -29,6 +29,9 @@ type Application interface {
 
 	// ToAdmin notification of admin message being sent to target. A message
 	// supplied to Send or SendToTarget remains caller-owned after sending.
+	// Engine-generated controls are session-owned callback views: retain their
+	// contents with CopyInto or owned string getters before returning. Their
+	// Message and GetBytes results must not be retained for asynchronous work.
 	ToAdmin(message *Message, sessionID SessionID)
 
 	// ToApp notification of app message being sent to target. Ordinary sends

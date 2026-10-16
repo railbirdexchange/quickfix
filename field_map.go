@@ -62,6 +62,8 @@ type FieldMap struct {
 	reusable     bool
 	arena        *messageArena
 	arenaSection int
+	// constructionErr preserves a failed section through cold arena detachment.
+	constructionErr error
 }
 
 // ascending tags.
@@ -78,6 +80,7 @@ func (m *FieldMap) initWithOrdering(ordering tagOrder) {
 	}
 	m.fixed = nil
 	m.reusable = false
+	m.constructionErr = nil
 	m.rwLock = &sync.RWMutex{}
 	m.tagLookup = make(map[Tag]field)
 	m.compare = ordering
@@ -282,11 +285,15 @@ func (m *FieldMap) SetField(tag Tag, field FieldValueWriter) *FieldMap {
 	return m.SetBytes(tag, field.Write())
 }
 
-// SetBytes sets bytes. It is an allocating compatibility API. A bounded map
-// panics with ErrFieldCapacity before mutation if no field slot is available.
-// Session callback maps instead detach to ordinary storage on setter exhaustion.
+// SetBytes sets bytes. Repeatedly sent caller messages use fixed construction
+// storage and report capacity errors at send/append. Standalone maps allocate;
+// strict parse maps panic on exhaustion, and callback maps detach to owned data.
 func (m *FieldMap) SetBytes(tag Tag, value []byte) *FieldMap {
-	if arena := m.mutableArena(); arena != nil {
+	arena := m.mutableArena()
+	if m.constructionErr != nil {
+		return m
+	}
+	if arena != nil {
 		arena.setBytes(m, tag, value)
 		return m
 	}
@@ -297,7 +304,11 @@ func (m *FieldMap) SetBytes(tag Tag, value []byte) *FieldMap {
 
 // SetBool is a SetField wrapper for bool fields.
 func (m *FieldMap) SetBool(tag Tag, value bool) *FieldMap {
-	if arena := m.mutableArena(); arena != nil {
+	arena := m.mutableArena()
+	if m.constructionErr != nil {
+		return m
+	}
+	if arena != nil {
 		text := "N"
 		if value {
 			text = "Y"
@@ -310,7 +321,11 @@ func (m *FieldMap) SetBool(tag Tag, value bool) *FieldMap {
 
 // SetInt is a SetField wrapper for int fields.
 func (m *FieldMap) SetInt(tag Tag, value int) *FieldMap {
-	if arena := m.mutableArena(); arena != nil {
+	arena := m.mutableArena()
+	if m.constructionErr != nil {
+		return m
+	}
+	if arena != nil {
 		var buffer [24]byte
 		arena.setScalar(m, tag, strconv.AppendInt(buffer[:0], int64(value), 10), "", nil, true)
 		return m
@@ -321,7 +336,11 @@ func (m *FieldMap) SetInt(tag Tag, value int) *FieldMap {
 
 // SetString is a SetField wrapper for string fields.
 func (m *FieldMap) SetString(tag Tag, value string) *FieldMap {
-	if arena := m.mutableArena(); arena != nil {
+	arena := m.mutableArena()
+	if m.constructionErr != nil {
+		return m
+	}
+	if arena != nil {
 		arena.setScalar(m, tag, nil, value, nil, true)
 		return m
 	}
@@ -360,6 +379,7 @@ func (m *FieldMap) clearNoLock() {
 		arena.clear(m)
 		return
 	}
+	m.constructionErr = nil
 	if m.fixed != nil {
 		m.fixedClear()
 		return
@@ -376,10 +396,11 @@ func (m *FieldMap) CopyInto(to *FieldMap) {
 	if m == to {
 		return
 	}
-	if m.arena != nil && m.arena.errors[m.arenaSection] != nil {
-		panic(m.arena.errors[m.arenaSection])
+	if err := m.constructionError(); err != nil {
+		panic(err)
 	}
 	to.detachArena()
+	to.constructionErr = nil
 	m.rlock()
 	defer m.runlock()
 	if to.fixed != nil && to.scoped {
@@ -472,23 +493,26 @@ func (m *FieldMap) getOrCreate(tag Tag) field {
 
 // Set is a setter for fields.
 func (m *FieldMap) Set(field FieldWriter) *FieldMap {
-	if arena := m.mutableArena(); arena != nil {
-		arena.setBytes(m, field.Tag(), field.Write())
-		return m
-	}
-	f := m.getOrCreate(field.Tag())
-	initField(f, field.Tag(), field.Write())
-	return m
+	tag := field.Tag()
+	value := field.Write()
+	return m.SetBytes(tag, value)
 }
 
 // SetGroup is a setter specific to group fields.
 func (m *FieldMap) SetGroup(field FieldGroupWriter) *FieldMap {
-	if arena := m.mutableArena(); arena != nil {
-		arena.setGroup(m, field.Tag(), field.Write())
+	// Custom Write may call public initialization/copy APIs on its destination.
+	// Resolve the current storage only after that compatibility callback returns.
+	tag, values := field.Tag(), field.Write()
+	arena := m.mutableArena()
+	if m.constructionErr != nil {
+		return m
+	}
+	if arena != nil {
+		arena.setGroup(m, tag, values)
 		return m
 	}
 	if m.fixed != nil {
-		if _, found := m.lookup(field.Tag()); !found && m.fieldCount() == cap(m.fixed.tags) {
+		if _, found := m.lookup(tag); !found && m.fieldCount() == cap(m.fixed.tags) {
 			if !m.scoped {
 				panic(ErrFieldCapacity)
 			}
@@ -497,7 +521,7 @@ func (m *FieldMap) SetGroup(field FieldGroupWriter) *FieldMap {
 	}
 	m.lock()
 	defer m.unlock()
-	if !m.put(field.Tag(), field.Write()) {
+	if !m.put(tag, values) {
 		panic(ErrFieldCapacity)
 	}
 	return m

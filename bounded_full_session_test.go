@@ -1,134 +1,168 @@
 package quickfix
 
 import (
+	"bytes"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
 
 var (
 	errBoundedFullFixture = errors.New("quickfix test: unexpected full-session fixture or sequence")
-	errBoundedFullWire    = errors.New("quickfix test: invalid full-session checksum")
-	boundedFullReport     = []byte("8")
-	boundedFullParties    = [...]OutboundField{
-		{Tag: 453, Value: []byte("1")}, {Tag: 448, Value: []byte("party")},
-		{Tag: 447, Value: []byte("D")}, {Tag: 452, Value: []byte("1")},
-		{Tag: 802, Value: []byte("1")}, {Tag: 523, Value: []byte("sub-party")},
-		{Tag: 803, Value: []byte("1")},
-	}
+	errBoundedFullWire    = errors.New("quickfix test: invalid full-session wire framing")
+	boundedFullPartyWire  = []byte("453=1\x01448=party\x01447=D\x01452=1\x01802=1\x01523=sub-party\x01803=1\x01")
 )
 
-// The session owner copies a checkpoint only after every write has completed
-// and acknowledged history has been retired. Observers never read live state.
+// A checkpoint is copied by the session owner after completed writes and explicit
+// peer acknowledgement. The test never observes a concurrently mutated session.
 type boundedFullCheckpoint struct {
-	nextSender, nextTarget int
-	freeOutputs, retained  int
-	orders, groupReads     int
-	queueWaits             int
-	err                    error
+	nextSender, nextTarget         int
+	freeOutputs, retained          int
+	orders, groupReads, queueWaits int
+	err                            error
 }
 
+type boundedFullAdmission struct {
+	accepted      int
+	before, after boundedFullStoreFingerprint
+	err           error
+}
+
+// A fixed-size digest keeps capacity assertions inside measured intervals free
+// of snapshot allocation. It includes every retained byte and both counters.
+type boundedFullStoreFingerprint struct {
+	nextSender, nextTarget, floor, entries int
+	reservedIndex, reservedSequence        int
+	reservedReset                          bool
+	creation                               time.Time
+	digest                                 uint64
+}
+
+func fingerprintBoundedFullStore(store *BoundedStore) boundedFullStoreFingerprint {
+	result := boundedFullStoreFingerprint{nextSender: store.NextSenderMsgSeqNum(), nextTarget: store.NextTargetMsgSeqNum(), floor: store.floor, reservedIndex: store.reservedIndex, reservedSequence: store.reservedSequence, reservedReset: store.reservedReset, creation: store.creationTime, digest: 14695981039346656037}
+	for _, entry := range store.entries {
+		if entry.sequence == 0 {
+			continue
+		}
+		result.entries++
+		result.digest = (result.digest ^ uint64(entry.sequence)) * 1099511628211
+		wire, _ := store.message(entry.sequence)
+		for _, value := range wire {
+			result.digest = (result.digest ^ uint64(value)) * 1099511628211
+		}
+	}
+	return result
+}
+
+type boundedFullReject struct{ err error }
+
+func (e *boundedFullReject) Error() string             { return e.err.Error() }
+func (*boundedFullReject) RejectReason() int           { return 0 }
+func (*boundedFullReject) BusinessRejectRefID() string { return "" }
+func (*boundedFullReject) RefTagID() *Tag              { return nil }
+func (*boundedFullReject) IsBusinessReject() bool      { return false }
+
 type boundedFullApplication struct {
-	session            *session
-	groups             bool
-	checkpoints        chan boundedFullCheckpoint
-	logons, logouts    chan struct{}
-	slowReady          chan struct{}
-	commands           chan func(*boundedFullApplication)
-	onOrder            func(*MessageSlot) MessageRejectError
-	orders, groupReads int
-	reportsPerOrder    int
-	queueWaits         int
-	failure            boundedOutboundReject
+	session                        *session
+	response                       *Message
+	groups                         bool
+	checkpoints                    chan boundedFullCheckpoint
+	logons, logouts                chan struct{}
+	admissions                     chan boundedFullAdmission
+	commands                       chan func(*boundedFullApplication)
+	onOrder                        func(*Message) MessageRejectError
+	orders, groupReads, queueWaits int
+	reportsPerOrder                int
+	measureAdmission               bool
+	failure                        boundedFullReject
 }
 
 func (*boundedFullApplication) OnCreate(SessionID)              {}
 func (a *boundedFullApplication) OnLogon(SessionID)             { a.logons <- struct{}{} }
 func (a *boundedFullApplication) OnLogout(SessionID)            { a.logouts <- struct{}{} }
 func (*boundedFullApplication) ToAdmin(*Message, SessionID)     {}
-func (*boundedFullApplication) ToApp(*Message, SessionID) error { return errBoundedFullFixture }
-func (*boundedFullApplication) FromAdmin(*Message, SessionID) MessageRejectError {
-	return IncorrectDataFormatForValue(tagMsgType)
-}
-func (*boundedFullApplication) FromApp(*Message, SessionID) MessageRejectError {
-	return IncorrectDataFormatForValue(tagMsgType)
-}
-func (*boundedFullApplication) ToAdminBorrowed(*OutboundMessage, SessionID) error { return nil }
-func (*boundedFullApplication) ToAppBorrowed(*OutboundMessage, SessionID) error   { return nil }
+func (*boundedFullApplication) ToApp(*Message, SessionID) error { return nil }
 func (a *boundedFullApplication) fail(err error) MessageRejectError {
 	a.failure.err = err
 	return &a.failure
 }
 
-func boundedFullCheckGroups(slot *MessageSlot) error {
-	parties, err := slot.Group(453)
-	if err != nil {
-		return err
+func newBoundedFullResponse(groups bool) *Message {
+	message := NewMessage()
+	message.Header.SetString(tagMsgType, "8")
+	for _, field := range []struct {
+		tag   Tag
+		value string
+	}{
+		{150, "0"}, {39, "0"}, {55, "SYMABC"}, {54, "1"}, {14, "0"}, {6, "0"},
+	} {
+		message.Body.SetString(field.tag, field.value)
 	}
-	if parties.Len() != 1 {
-		return errBoundedFullFixture
+	if groups {
+		subParties := NewRepeatingGroup(802, GroupTemplate{GroupElement(523), GroupElement(803)})
+		subParty := subParties.Add()
+		subParty.SetString(523, "sub-party")
+		subParty.SetInt(803, 1)
+		parties := NewRepeatingGroup(453, GroupTemplate{GroupElement(448), GroupElement(447), GroupElement(452), subParties})
+		party := parties.Add()
+		party.SetString(448, "party")
+		party.SetString(447, "D")
+		party.SetInt(452, 1)
+		party.SetGroup(subParties)
+		message.Body.SetGroup(parties)
 	}
-	iterator := parties.Iter()
-	party, ok := iterator.Next()
-	if !ok {
-		return errBoundedFullFixture
+	return message
+}
+
+// The ordinary count accessor participates in the callback. Exact nested field
+// bytes are checked independently, without a production-only Group API. Legacy
+// GetGroup/SetGroup reconstruction is deliberately not claimed allocation-free.
+func boundedFullCheckGroups(message *Message) error {
+	count, reject := message.Body.GetInt(453)
+	if reject != nil {
+		return reject
 	}
-	identifier, ok := party.GetBytes(448)
-	if !ok || string(identifier) != "party" {
-		return errBoundedFullFixture
-	}
-	subParties, err := party.Group(802)
-	if err != nil {
-		return err
-	}
-	if subParties.Len() != 1 {
-		return errBoundedFullFixture
-	}
-	subIterator := subParties.Iter()
-	subParty, ok := subIterator.Next()
-	if !ok {
-		return errBoundedFullFixture
-	}
-	identifier, ok = subParty.GetBytes(523)
-	if !ok || string(identifier) != "sub-party" {
-		return errBoundedFullFixture
-	}
-	if _, ok = iterator.Next(); ok {
-		return errBoundedFullFixture
-	}
-	if _, ok = subIterator.Next(); ok {
+	if count != 1 || bytes.Count(message.bodyBytes, boundedFullPartyWire) != 1 {
 		return errBoundedFullFixture
 	}
 	return nil
 }
 
-func (a *boundedFullApplication) FromAppBorrowed(slot *MessageSlot, _ SessionID) MessageRejectError {
+func (a *boundedFullApplication) FromApp(message *Message, _ SessionID) MessageRejectError {
 	if a.onOrder != nil {
-		return a.onOrder(slot)
+		return a.onOrder(message)
 	}
-	return a.handleOrder(slot)
+	return a.handleOrder(message)
 }
 
-func (a *boundedFullApplication) handleOrder(slot *MessageSlot) MessageRejectError {
-	notified := false
+func (a *boundedFullApplication) handleOrder(message *Message) MessageRejectError {
+	accepted := 0
 	for range max(1, a.reportsPerOrder) {
-		if len(a.session.boundedOut.ready) == cap(a.session.boundedOut.ready) {
-			a.queueWaits++
-			if a.reportsPerOrder > 1 && !notified {
-				a.slowReady <- struct{}{}
-				notified = true
-			}
+		var before boundedFullStoreFingerprint
+		if a.measureAdmission {
+			before = fingerprintBoundedFullStore(a.session.store.(*BoundedStore))
 		}
-		if reject := a.handleReport(slot); reject != nil {
+		if reject := a.handleReport(message); reject != nil {
+			if a.measureAdmission && reject == &a.failure && errors.Is(a.failure.err, ErrOutboundCapacity) {
+				a.queueWaits++
+				a.admissions <- boundedFullAdmission{accepted: accepted, before: before, after: fingerprintBoundedFullStore(a.session.store.(*BoundedStore)), err: a.failure.err}
+				// Application backpressure is handled by retrying after the peer
+				// drains the accepted prefix; it must not become a FIX reject.
+				return nil
+			}
 			return reject
 		}
+		accepted++
+	}
+	if a.measureAdmission {
+		a.admissions <- boundedFullAdmission{accepted: accepted}
 	}
 	return nil
 }
 
-func (a *boundedFullApplication) handleReport(slot *MessageSlot) MessageRejectError {
-	message := slot.Message()
+func (a *boundedFullApplication) handleReport(message *Message) MessageRejectError {
 	kind, reject := message.Header.GetBytes(tagMsgType)
 	if reject != nil {
 		return reject
@@ -140,48 +174,44 @@ func (a *boundedFullApplication) handleReport(slot *MessageSlot) MessageRejectEr
 	if reject != nil {
 		return reject
 	}
-	sequence, reject := message.Header.GetInt(tagMsgSeqNum)
+	identifier, reject := message.Body.GetInt(11)
+	if reject != nil {
+		return reject
+	}
+	quantity, reject := message.Body.GetInt(38)
 	if reject != nil {
 		return reject
 	}
 	if a.groups {
-		if err := boundedFullCheckGroups(slot); err != nil {
+		if err := boundedFullCheckGroups(message); err != nil {
 			return a.fail(err)
 		}
-		a.groupReads++
 	}
-	builder, err := slot.BeginOutbound(boundedFullReport)
-	if err != nil {
-		return a.fail(err)
-	}
-	body := builder.Body()
+	// This is the ordinary public API on one caller-owned message. Variable
+	// fields change every request; only static group construction is untimed.
+	body := &a.response.Body
 	body.SetBytes(11, id)
 	body.SetBytes(37, id)
-	body.SetInt(17, sequence)
-	body.SetString(150, "0")
-	body.SetString(39, "0")
-	body.SetString(55, "SYMABC")
-	body.SetString(54, "1")
-	body.SetString(38, "10")
-	body.SetString(151, "10")
-	body.SetString(14, "0")
-	body.SetString(6, "0")
-	if a.groups {
-		body.SetGroup(453, boundedFullParties[:])
-	}
+	body.SetInt(17, identifier)
+	body.SetInt(38, quantity)
+	body.SetInt(151, quantity)
 	if message.Body.Has(58) {
-		text, _ := message.Body.GetBytes(58)
-		body.SetBytes(58, text)
+		value, _ := message.Body.GetBytes(58)
+		body.SetBytes(58, value)
+	} else {
+		body.Remove(58)
 	}
-	if err := builder.Send(); err != nil {
+	if err := SendToTarget(a.response, a.session.sessionID); err != nil {
 		return a.fail(err)
 	}
 	a.orders++
+	if a.groups {
+		a.groupReads++
+	}
 	return nil
 }
 
-func (a *boundedFullApplication) FromAdminBorrowed(slot *MessageSlot, _ SessionID) MessageRejectError {
-	message := slot.Message()
+func (a *boundedFullApplication) FromAdmin(message *Message, _ SessionID) MessageRejectError {
 	kind, reject := message.Header.GetBytes(tagMsgType)
 	if reject != nil {
 		return reject
@@ -193,46 +223,47 @@ func (a *boundedFullApplication) FromAdminBorrowed(slot *MessageSlot, _ SessionI
 	if reject != nil {
 		return reject
 	}
-	out := a.session.boundedOut
-	var completionError error
-	// This benchmark-only barrier executes on the actual session owner and
-	// uses the same reclaim operation as session.run. There is no competing
-	// consumer of completed while the synchronous callback is running.
-	for len(out.free) < cap(out.free) {
-		returned := <-out.completed
-		if err := out.reclaim(returned); err != nil && completionError == nil {
-			completionError = err
-		}
-	}
+	s := a.session
+	s.resendMutex.RLock()
+	s.sendMutex.Lock()
+	completionError := s.flushOutbound(true)
+	var returned [33]*outboundSlot
+	n := 0
 	if completionError == nil {
-		completionError = slot.RetireOutboundBefore(acknowledged + 1)
-	}
-	if message.Body.Has(tagTestReqID) {
-		marker, _ := message.Body.GetBytes(tagTestReqID)
-		if string(marker) != "warm" {
-			return a.fail(errBoundedFullFixture)
+		for n < len(s.outbound.slots) {
+			select {
+			case returned[n] = <-s.outbound.vacant:
+				n++
+			case <-s.writeConnection.done:
+				completionError = s.writeConnection.failure()
+			}
+			if completionError != nil {
+				break
+			}
 		}
-		// Rotate the LIFO free stack during untimed warm-up to visit every slot.
-		last := len(out.free) - 1
-		warmed := out.free[last]
-		copy(out.free[1:], out.free[:last])
-		out.free[0] = warmed
 	}
+	for index := 0; index < n; index++ {
+		s.outbound.vacant <- returned[index]
+	}
+	store := s.store.(*BoundedStore)
+	if completionError == nil {
+		completionError = store.RetireBefore(acknowledged + 1)
+	}
+	retained := 0
+	for _, entry := range store.entries {
+		if entry.sequence != 0 {
+			retained++
+		}
+	}
+	checkpoint := boundedFullCheckpoint{nextSender: store.NextSenderMsgSeqNum(), nextTarget: store.NextTargetMsgSeqNum(), freeOutputs: len(s.outbound.vacant), retained: retained, orders: a.orders, groupReads: a.groupReads, queueWaits: a.queueWaits, err: completionError}
+	s.sendMutex.Unlock()
+	s.resendMutex.RUnlock()
 	select {
 	case command := <-a.commands:
 		command(a)
 	default:
 	}
-	retained := 0
-	for _, entry := range out.store.entries {
-		if entry.sequence != 0 {
-			retained++
-		}
-	}
-	a.checkpoints <- boundedFullCheckpoint{
-		nextSender: out.store.NextSenderMsgSeqNum(), nextTarget: out.store.NextTargetMsgSeqNum(),
-		freeOutputs: len(out.free), retained: retained, orders: a.orders, groupReads: a.groupReads, queueWaits: a.queueWaits, err: completionError,
-	}
+	a.checkpoints <- checkpoint
 	if completionError != nil {
 		return a.fail(completionError)
 	}
@@ -251,6 +282,7 @@ func TestBoundedFullSession(t *testing.T) {
 			require.NoError(t, fixture.ordinaryBatch(32, false))
 			require.NoError(t, fixture.outboundResend())
 			require.NoError(t, fixture.inboundGap())
+			require.NoError(t, fixture.heartbeatTestRequest())
 			require.Greater(t, fixture.lastCheckpoint.orders, 1024)
 			if groups {
 				require.Equal(t, fixture.lastCheckpoint.orders, fixture.lastCheckpoint.groupReads)
@@ -279,67 +311,52 @@ func TestBoundedFullSessionWarmedPostReconnect(t *testing.T) {
 	require.Greater(t, fixture.lastCheckpoint.nextTarget, before.nextTarget)
 }
 
-// Real TCP requests, dictionary/group parsing, validation, borrowed callbacks,
-// persistence, peer validation and acknowledgement, completed writes and slot
-// return are timed. Setup, all-slot warm-up and shutdown are untimed.
+// Real TCP, dictionary/groups, validation, ordinary callbacks and variable-field
+// construction, persistence, peer validation, completed writes and slot return
+// are timed. Setup and warm-up are excluded. This is not sub-microsecond engine
+// latency: the measurement includes the independent peer and acknowledgement.
+// Ordinary/groups/post-reconnect operations each process a batch of 32 requests.
 func BenchmarkBoundedFullSession(b *testing.B) {
-	for _, scenario := range []struct {
-		name                                 string
-		groups, resend, gap, slow, reconnect bool
-	}{
-		{name: "ordinary"}, {name: "groups", groups: true}, {name: "outbound_resend", groups: true, resend: true},
-		{name: "inbound_gap", groups: true, gap: true},
-		{name: "slow_consumer", groups: true, slow: true},
-		{name: "warmed_post_reconnect", groups: true, reconnect: true},
-	} {
-		b.Run(scenario.name, func(b *testing.B) {
+	for _, scenario := range []string{"ordinary", "groups", "outbound_resend", "inbound_gap", "slow_consumer", "warmed_post_reconnect", "heartbeat_test_request"} {
+		b.Run(scenario, func(b *testing.B) {
 			b.StopTimer()
-			fixture := newBoundedFullSession(b, scenario.groups)
+			fixture := newBoundedFullSession(b, scenario != "ordinary")
 			require.NoError(b, fixture.warm())
-			if scenario.reconnect {
+			if scenario == "warmed_post_reconnect" {
 				require.NoError(b, fixture.reconnect())
 				require.NoError(b, fixture.warm())
 			}
-			if scenario.slow {
+			if scenario == "slow_consumer" {
 				require.NoError(b, fixture.prepareSlowConsumer())
-				require.NoError(b, fixture.slowConsumer())
 			}
-			if scenario.gap {
-				require.NoError(b, fixture.inboundGap())
-			}
+			cycle := fixture.scenario(scenario)
+			require.NoError(b, cycle())
 			fixture.bytes = 0
 			b.ReportAllocs()
 			b.ResetTimer()
 			b.StartTimer()
-			if scenario.slow {
-				for range b.N {
-					if err := fixture.slowConsumer(); err != nil {
-						b.Fatal(err)
-					}
-				}
-			} else if scenario.gap {
-				for range b.N {
-					if err := fixture.inboundGap(); err != nil {
-						b.Fatal(err)
-					}
-				}
-			} else if scenario.resend {
-				for range b.N {
-					if err := fixture.outboundResend(); err != nil {
-						b.Fatal(err)
-					}
-				}
-			} else {
-				for completed := 0; completed < b.N; {
-					count := min(32, b.N-completed)
-					if err := fixture.ordinaryBatch(count, false); err != nil {
-						b.Fatal(err)
-					}
-					completed += count
+			for range b.N {
+				if err := cycle(); err != nil {
+					b.Fatal(err)
 				}
 			}
 			b.StopTimer()
 			b.SetBytes(fixture.bytes / int64(b.N))
 		})
+	}
+}
+
+func (f *boundedFullSession) scenario(name string) func() error {
+	switch name {
+	case "outbound_resend":
+		return f.outboundResend
+	case "inbound_gap":
+		return f.inboundGap
+	case "slow_consumer":
+		return f.slowConsumer
+	case "heartbeat_test_request":
+		return f.heartbeatTestRequest
+	default:
+		return func() error { return f.ordinaryBatch(32, false) }
 	}
 }

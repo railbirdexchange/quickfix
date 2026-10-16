@@ -193,6 +193,114 @@ func TestMessageArenaCannotChangeLimitsAfterAttachment(t *testing.T) {
 	}
 }
 
+func TestMessageArenaPublicSectionReplacementDetachesSurvivors(t *testing.T) {
+	for _, operation := range []string{"remove", "clear", "scalar", "reattach"} {
+		t.Run(operation, func(t *testing.T) {
+			message := newArenaTestMessage(t, 512, 16)
+			message.Body.SetString(11, "old body")
+			message.Trailer.SetString(9000, "preserved trailer")
+			replacement := NewMessage()
+			replacement.Body.SetString(11, "replacement")
+			message.Body = replacement.Body
+			switch operation {
+			case "remove":
+				message.Header.Remove(tagMsgType)
+			case "clear":
+				message.Header.Clear()
+			case "scalar":
+				message.Header.SetString(tagMsgType, "longer message type")
+			case "reattach":
+				if err := message.attachMessageArena(512, 16); err != nil {
+					t.Fatal(err)
+				}
+			}
+			assertArenaValue(t, &message.Body.FieldMap, 11, "replacement")
+			assertArenaValue(t, &message.Trailer.FieldMap, 9000, "preserved trailer")
+			if operation == "reattach" {
+				if message.arena == nil || !message.arena.intact() {
+					t.Fatal("ordinary reattachment did not reconcile all sections")
+				}
+			} else if message.arena != nil || message.Header.arena != nil || message.Trailer.arena != nil {
+				t.Fatal("public section replacement left a stale sibling arena")
+			}
+		})
+	}
+}
+
+func TestMessageArenaErrorSurvivesUnrelatedDetachment(t *testing.T) {
+	for _, operation := range []string{"init", "copy", "assignment"} {
+		t.Run(operation, func(t *testing.T) {
+			message := newArenaTestMessage(t, 512, 16)
+			message.Body.SetString(11, "preserved")
+			message.Body.SetString(11, strings.Repeat("x", 512))
+			replacement := NewMessage()
+			switch operation {
+			case "init":
+				message.Header.Init()
+			case "copy":
+				replacement.Header.CopyInto(&message.Header.FieldMap)
+			case "assignment":
+				message.Header = replacement.Header
+				message.Trailer.Remove(9000)
+			}
+			message.Body.SetString(11, "must not replace after failed setter")
+			assertArenaValue(t, &message.Body.FieldMap, 11, "preserved")
+			if err := message.constructionError(); err != ErrFrameCapacity {
+				t.Fatalf("unrelated section dropped Body error: %v", err)
+			}
+			if _, err := message.AppendTo(make([]byte, 0, 512)); err != ErrFrameCapacity {
+				t.Fatalf("append failed to report prior setter failure: %v", err)
+			}
+			message.Body.Clear()
+			if err := message.constructionError(); err != nil {
+				t.Fatalf("explicit Body clear did not recover: %v", err)
+			}
+		})
+	}
+}
+
+type arenaReplacingScalarWriter struct {
+	destination, source *FieldMap
+}
+
+func (writer arenaReplacingScalarWriter) Tag() Tag { return 11 }
+func (writer arenaReplacingScalarWriter) Write() []byte {
+	writer.source.CopyInto(writer.destination)
+	return []byte("written after copy")
+}
+
+type arenaReplacingGroupWriter struct {
+	destination, source *FieldMap
+	group               *RepeatingGroup
+}
+
+func (writer arenaReplacingGroupWriter) Tag() Tag { return 453 }
+func (writer arenaReplacingGroupWriter) Write() []TagValue {
+	writer.source.CopyInto(writer.destination)
+	return writer.group.Write()
+}
+
+func TestMessageArenaCustomWriterCanReplaceDestination(t *testing.T) {
+	for _, group := range []bool{false, true} {
+		message := newArenaTestMessage(t, 512, 16)
+		replacement := NewMessage()
+		replacement.Body.SetString(55, "copied symbol")
+		if group {
+			values := NewRepeatingGroup(453, GroupTemplate{GroupElement(448)})
+			values.Add().SetString(448, "party")
+			message.Body.SetGroup(arenaReplacingGroupWriter{&message.Body.FieldMap, &replacement.Body.FieldMap, values})
+			encoded, present := message.Body.lookup(453)
+			if !present || len(encoded) != 2 || string(encoded[1].value) != "party" {
+				t.Fatal("custom group writer lost normal dispatch after destination replacement")
+			}
+		} else {
+			message.Body.Set(arenaReplacingScalarWriter{&message.Body.FieldMap, &replacement.Body.FieldMap})
+			assertArenaValue(t, &message.Body.FieldMap, 11, "written after copy")
+		}
+		assertArenaValue(t, &message.Body.FieldMap, 55, "copied symbol")
+	}
+}
+
 func TestMessageArenaCapacityIsAtomicAndLatched(t *testing.T) {
 	message := newArenaTestMessage(t, 64, 8)
 	message.Body.SetString(11, "original")
@@ -212,7 +320,7 @@ func TestMessageArenaCapacityIsAtomicAndLatched(t *testing.T) {
 	if got, err := message.AppendTo(destination); err != ErrFrameCapacity || !bytes.Equal(got, destination) {
 		t.Fatalf("append did not preserve destination: %q %v", got, err)
 	}
-	for _, encode := range []func(){func() { message.Bytes() }, func() { message.String() }, func() { message.build() }, func() { message.buildWithBodyBytes(nil) }} {
+	for _, encode := range []func(){func() { _ = message.Bytes() }, func() { _ = message.String() }, func() { _ = message.build() }, func() { _ = message.buildWithBodyBytes(nil) }} {
 		func() {
 			defer func() {
 				if got := recover(); got != ErrFrameCapacity {

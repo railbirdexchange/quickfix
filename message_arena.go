@@ -16,6 +16,7 @@ var errMessageArenaLimits = errors.New("quickfix: reused message has different c
 type messageArena struct {
 	owner         *Message
 	sections      [3]*FieldMap
+	backings      [3]*fixedFieldMap
 	errors        [3]error
 	bytes         []byte
 	values        []byte
@@ -45,11 +46,19 @@ func (message *Message) attachMessageArena(maxFrameBytes, maxFields int) error {
 	if maxFrameBytes < 12 || maxFrameBytes > int(^uint(0)>>1)/3 || maxFields < 4 || maxFields > maxFrameBytes/3 || maxFields > int(^uint(0)>>1)/1024 {
 		return ErrInvalidParseLimits
 	}
+	if err := message.constructionError(); err != nil {
+		return err
+	}
 	if message.arena != nil && message.arena.owner == message {
-		if len(message.arena.bytes) != maxFrameBytes || message.arena.maxFields != maxFields {
+		if !message.arena.intact() {
+			// Public Header/Body/Trailer assignment is an allocating ownership
+			// boundary. Preserve the replacement and detach surviving sections.
+			message.arena.detach()
+		} else if len(message.arena.bytes) != maxFrameBytes || message.arena.maxFields != maxFields {
 			return errMessageArenaLimits
+		} else {
+			return message.constructionError()
 		}
-		return message.constructionError()
 	}
 	sections := [3]*FieldMap{&message.Header.FieldMap, &message.Body.FieldMap, &message.Trailer.FieldMap}
 	used, count, beginLength, bodyLength, wireFields := 0, 0, 0, 0, 0
@@ -100,6 +109,7 @@ func (message *Message) attachMessageArena(maxFrameBytes, maxFields int) error {
 		original := *fields
 		fields.initFixed(original.compare, maxFields)
 		fields.arena, fields.arenaSection, fields.reusable = arena, section, true
+		arena.backings[section] = fields.fixed
 		arena.recordIndexes[section] = make([]int, len(fields.fixed.entries))
 		original.eachField(func(tag Tag, values field) {
 			// This cold copy preserves group ranges and leaves caller-owned
@@ -131,11 +141,19 @@ func (message *Message) attachMessageArena(maxFrameBytes, maxFields int) error {
 
 func (message *Message) constructionError() error {
 	for _, fields := range [...]*FieldMap{&message.Header.FieldMap, &message.Body.FieldMap, &message.Trailer.FieldMap} {
-		if fields.arena != nil {
-			if err := fields.arena.errors[fields.arenaSection]; err != nil {
-				return err
-			}
+		if err := fields.constructionError(); err != nil {
+			return err
 		}
+	}
+	return nil
+}
+
+func (fields *FieldMap) constructionError() error {
+	if fields.constructionErr != nil {
+		return fields.constructionErr
+	}
+	if fields.arena != nil {
+		return fields.arena.errors[fields.arenaSection]
 	}
 	return nil
 }
@@ -148,7 +166,20 @@ func (fields *FieldMap) mutableArena() *messageArena {
 		fields.detachArena()
 		return nil
 	}
+	if !fields.arena.intact() {
+		fields.arena.detach()
+		return nil
+	}
 	return fields.arena
+}
+
+func (arena *messageArena) intact() bool {
+	for index, section := range arena.sections {
+		if section.arena != arena || section.arenaSection != index || section.fixed != arena.backings[index] {
+			return false
+		}
+	}
+	return true
 }
 
 // detachArena is an allocating convenience boundary. Detaching an original
@@ -163,6 +194,10 @@ func (fields *FieldMap) detachArena() {
 		fields.detachArenaSection()
 		return
 	}
+	arena.detach()
+}
+
+func (arena *messageArena) detach() {
 	for _, section := range arena.sections {
 		if section.arena == arena {
 			section.detachArenaSection()
@@ -173,9 +208,11 @@ func (fields *FieldMap) detachArena() {
 
 func (fields *FieldMap) detachArenaSection() {
 	original := *fields
+	constructionErr := fields.constructionError()
 	fields.arena = nil
 	fields.tags = nil
 	fields.initWithOrdering(original.compare)
+	fields.constructionErr = constructionErr
 	original.eachField(func(tag Tag, values field) { fields.put(tag, cloneOwnedField(values)) })
 }
 

@@ -55,6 +55,9 @@ func (s *session) configureOutbound(settings *SessionSettings) error {
 		ring.journal = journal
 	}
 	ring.log, _ = s.log.(BorrowedLog)
+	if err := s.controls.init(s, s.boundedIn.limits); err != nil {
+		return err
+	}
 	s.outbound = ring
 	return nil
 }
@@ -97,6 +100,18 @@ func (s *session) fillOutboundHeader(message *Message, inReplyTo *Message) {
 // existing sendMutex/resendMutex ownership is held. It never hands the caller's
 // Message to the writer. The returned slot already owns independent wire bytes.
 func (s *session) prepareOutbound(message, inReplyTo *Message, replacement bool) (result *outboundSlot, err error) {
+	if err := message.constructionError(); err != nil {
+		return nil, err
+	}
+	// A second ordinary send establishes a reusable caller scope. Avoid imposing
+	// a full fixed arena on single-use legacy builders. Incoming parsed slots
+	// already have their own session-owned storage and reset lifecycle.
+	if message.arena != nil || message.parseSlot == nil && !message.Header.scoped && !message.Body.scoped && !message.Trailer.scoped &&
+		message.outboundFields != nil && message.outboundFields.owner == message {
+		if err := message.attachMessageArena(s.boundedIn.limits.MaxFrameBytes, s.boundedIn.limits.MaxFields); err != nil {
+			return nil, err
+		}
+	}
 	ring := s.outbound
 	slot, err := ring.reserve(replacement)
 	if err != nil {
@@ -112,6 +127,14 @@ func (s *session) prepareOutbound(message, inReplyTo *Message, replacement bool)
 		return nil, reject
 	}
 	logon := bytes.Equal(messageType, msgTypeLogon)
+	admin := isAdminMessageType(messageType)
+	// Header construction can move arena bytes. An enabled observer retains an
+	// owned snapshot; disabled observation needs only the booleans above.
+	if sendStageObserverState.enabled.Load() {
+		messageType = bytes.Clone(messageType)
+	} else {
+		messageType = nil
+	}
 	pendingReset := ring.resetPending.Load()
 	if pendingReset && !logon {
 		return nil, ErrOutboundResetPending
@@ -122,7 +145,7 @@ func (s *session) prepareOutbound(message, inReplyTo *Message, replacement bool)
 	}
 	resetStore := pendingReset
 	sentResetRequested := false
-	if logon {
+	if logon && message.Body.Has(tagResetSeqNumFlag) {
 		if reset, reject := message.Body.GetBool(tagResetSeqNumFlag); reject == nil && reset {
 			resetStore = true
 		}
@@ -143,10 +166,10 @@ func (s *session) prepareOutbound(message, inReplyTo *Message, replacement bool)
 	}
 	s.fillOutboundHeader(message, inReplyTo)
 	message.setOutboundInt(&message.Header.FieldMap, outboundSequence, tagMsgSeqNum, sequence)
-	if isAdminMessageType(messageType) {
+	if admin {
 		started := startSendStage()
 		s.application.ToAdmin(message, s.sessionID)
-		s.finishSendStage("to_admin", messageType, started, true)
+		s.finishPreparedSendStage("to_admin", messageType, started, true)
 		if logon {
 			reset := false
 			if message.Body.Has(tagResetSeqNumFlag) {
@@ -167,7 +190,7 @@ func (s *session) prepareOutbound(message, inReplyTo *Message, replacement bool)
 	} else {
 		started := startSendStage()
 		err = s.application.ToApp(message, s.sessionID)
-		s.finishSendStage("to_app", messageType, started, err == nil)
+		s.finishPreparedSendStage("to_app", messageType, started, err == nil)
 		if err != nil {
 			return nil, err
 		}
@@ -187,10 +210,13 @@ func (s *session) prepareOutbound(message, inReplyTo *Message, replacement bool)
 	started := startSendStage()
 	slot.wire, err = message.AppendTo(slot.wire[:0])
 	if err != nil {
-		s.finishSendStage("build_message", messageType, started, false)
+		s.finishPreparedSendStage("build_message", messageType, started, false)
 		return nil, err
 	}
 	message.retainOutboundFraming(slot.wire)
+	if err := message.constructionError(); err != nil {
+		return nil, err
+	}
 	if reservation >= 0 {
 		// A valid retained frame must fit the configured replay metadata as
 		// well as its byte slot. This is capacity admission, not new outgoing
@@ -199,11 +225,11 @@ func (s *session) prepareOutbound(message, inReplyTo *Message, replacement bool)
 		parseError := ring.replay.Parse(slot.wire)
 		ring.replay.Reset()
 		if isInboundCapacityError(parseError) {
-			s.finishSendStage("build_message", messageType, started, false)
+			s.finishPreparedSendStage("build_message", messageType, started, false)
 			return nil, parseError
 		}
 	}
-	s.finishSendStage("build_message", messageType, started, true)
+	s.finishPreparedSendStage("build_message", messageType, started, true)
 	started = startSendStage()
 	if reservation >= 0 {
 		if resetStore {
@@ -223,7 +249,7 @@ func (s *session) prepareOutbound(message, inReplyTo *Message, replacement bool)
 			}
 		}
 	}
-	s.finishSendStage("persist", messageType, started, err == nil)
+	s.finishPreparedSendStage("persist", messageType, started, err == nil)
 	if err != nil {
 		return nil, err
 	}
@@ -233,6 +259,12 @@ func (s *session) prepareOutbound(message, inReplyTo *Message, replacement bool)
 		s.sentReset = sentResetRequested
 	}
 	return slot, nil
+}
+
+func (s *session) finishPreparedSendStage(stage string, messageType []byte, started time.Time, success bool) {
+	if messageType != nil {
+		s.finishSendStage(stage, messageType, started, success)
+	}
 }
 
 func (s *session) logOutgoingFrame(wire []byte) {
@@ -350,7 +382,7 @@ func (s *session) enqueueReplay(message *Message, body []byte) error {
 }
 
 func isOutboundCapacityError(err error) bool {
-	return err == ErrOutboundCapacity || err == ErrOutboundResetPending || err == ErrBufferTooSmall || err == ErrJournalFull || err == ErrJournalMessageCapacity || err == ErrJournalRangeUnavailable || isInboundCapacityError(err)
+	return err == ErrOutboundCapacity || err == ErrOutboundResetPending || err == ErrBufferTooSmall || err == ErrJournalFull || err == ErrJournalMessageCapacity || err == ErrJournalRangeUnavailable || err == errMessageArenaLimits || isInboundCapacityError(err)
 }
 
 func (s *session) refreshStore() error {
