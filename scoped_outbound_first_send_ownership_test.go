@@ -2,10 +2,102 @@ package quickfix
 
 import (
 	"bytes"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestScopedOutboundColdScalarOwnsSeparateRegions(t *testing.T) {
+	message := NewMessage()
+	input := []byte("first")
+	message.setOutboundBytes(&message.Header.FieldMap, outboundOriginalTimestamp, tagOrigSendingTime, input)
+	first, _ := message.Header.lookup(tagOrigSendingTime)
+	oldValue, oldWire := first[0].value, first[0].bytes
+	require.Equal(t, len(oldValue), cap(oldValue))
+	require.Equal(t, len(oldWire), cap(oldWire))
+	input[0] = 'X'
+	require.Equal(t, "first", string(oldValue))
+	oldValue[0] = 'Y'
+	require.Equal(t, "122=first\x01", string(oldWire))
+	appended := append(oldWire, 'Z')
+	require.Equal(t, "122=first\x01Z", string(appended))
+	require.Equal(t, "Yirst", string(oldValue), "wire append crossed into the getter region")
+	message.setOutboundBytes(&message.Header.FieldMap, outboundOriginalTimestamp, tagOrigSendingTime, []byte("longer replacement"))
+	require.Equal(t, "Yirst", string(oldValue), "replacement rewrote the retained prior getter")
+	require.Equal(t, "122=first\x01", string(oldWire), "replacement rewrote the retained prior wire")
+	message.setOutboundBytes(&message.Header.FieldMap, outboundOriginalTimestamp, tagOrigSendingTime, nil)
+	empty, _ := message.Header.lookup(tagOrigSendingTime)
+	require.Empty(t, empty[0].value)
+	require.Zero(t, cap(empty[0].value))
+	require.Equal(t, "122=\x01", string(empty[0].bytes))
+}
+
+func TestScopedOutboundColdScalarFormatting(t *testing.T) {
+	message := NewMessage()
+	maximum := int(^uint(0) >> 1)
+	for _, number := range []int{0, 1, -1, maximum, -maximum - 1} {
+		message.setOutboundInt(&message.Header.FieldMap, outboundSequence, tagMsgSeqNum, number)
+		field, _ := message.Header.lookup(tagMsgSeqNum)
+		expected := strconv.Itoa(number)
+		require.Equal(t, expected, string(field[0].value))
+		require.Equal(t, "34="+expected+"\x01", string(field[0].bytes))
+	}
+	for _, boolean := range []bool{false, true} {
+		message.setOutboundBool(&message.Header.FieldMap, outboundPossDup, tagPossDupFlag, boolean)
+		field, _ := message.Header.lookup(tagPossDupFlag)
+		expected := "N"
+		if boolean {
+			expected = "Y"
+		}
+		require.Equal(t, expected, string(field[0].value))
+		require.Equal(t, "43="+expected+"\x01", string(field[0].bytes))
+	}
+	stamp := time.Date(2026, time.October, 16, 12, 34, 56, 987654321, time.UTC)
+	for _, scenario := range []struct {
+		stamp     time.Time
+		precision TimestampPrecision
+		expected  string
+	}{
+		{stamp, Seconds, "20261016-12:34:56"},
+		{stamp, Millis, "20261016-12:34:56.987"},
+		{stamp, Micros, "20261016-12:34:56.987654"},
+		{stamp, Nanos, "20261016-12:34:56.987654321"},
+		{stamp, TimestampPrecision(99), "20261016-12:34:56.987"},
+		{stamp.AddDate(7974, 0, 0), Millis, "100001016-12:34:56.987"},
+		{stamp.AddDate(-2027, 0, 0), Millis, "-00011016-12:34:56.987"},
+	} {
+		message.setOutboundTime(scenario.stamp, scenario.precision)
+		field, _ := message.Header.lookup(tagSendingTime)
+		require.Equal(t, scenario.expected, string(field[0].value))
+		require.Equal(t, "52="+scenario.expected+"\x01", string(field[0].bytes))
+	}
+	require.Nil(t, message.outboundFields)
+	require.Nil(t, message.arena)
+}
+
+func TestScopedOutboundColdScalarSingleAllocation(t *testing.T) {
+	message := NewMessage()
+	message.setOutboundInt(&message.Header.FieldMap, outboundSequence, tagMsgSeqNum, 1)
+	message.setOutboundBool(&message.Header.FieldMap, outboundPossDup, tagPossDupFlag, false)
+	message.setOutboundBytes(&message.Trailer.FieldMap, outboundChecksum, tagCheckSum, []byte("123"))
+	message.setOutboundTime(time.Unix(1, 0), Nanos)
+	checksum := []byte("234")
+	stamp := time.Unix(2, 123456789)
+	for name, set := range map[string]func(){
+		"integer":   func() { message.setOutboundInt(&message.Header.FieldMap, outboundSequence, tagMsgSeqNum, 1234567) },
+		"boolean":   func() { message.setOutboundBool(&message.Header.FieldMap, outboundPossDup, tagPossDupFlag, true) },
+		"bytes":     func() { message.setOutboundBytes(&message.Trailer.FieldMap, outboundChecksum, tagCheckSum, checksum) },
+		"timestamp": func() { message.setOutboundTime(stamp, Nanos) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			if allocations := testing.AllocsPerRun(100, set); allocations != 1 {
+				t.Fatalf("cold replacement allocated %v objects, want one owned scalar", allocations)
+			}
+		})
+	}
+}
 
 func TestScopedOutboundFirstSendEstablishesScopeOnlyOnReuse(t *testing.T) {
 	fixture := newScopedOutboundBenchmark(t, false, "")
