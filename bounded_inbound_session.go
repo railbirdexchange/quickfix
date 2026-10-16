@@ -17,6 +17,12 @@ type boundedInboundSession struct {
 	validator   *BoundedValidator
 	application BorrowedApplication
 	log         BorrowedLog
+	recovery    resendState
+	pending     pendingTimeout
+	tooHigh     targetTooHigh
+	tooLow      targetTooLow
+	events      boundedEventBuffer
+	eventLog    BorrowedEventLog
 }
 
 func (s *session) configureBoundedInbound(settings *SessionSettings, application Application, validation ValidatorSettings) error {
@@ -67,6 +73,9 @@ func (s *session) configureBoundedInbound(settings *SessionSettings, application
 		return err
 	}
 	s.boundedIn = &boundedInboundSession{limits: limits, ring: ring, validator: validator, application: borrowedApplication, log: borrowedLog}
+	// Resolve the optional interface once. A hot interface assertion may lazily
+	// allocate its runtime cache even after many otherwise allocation-free calls.
+	s.boundedIn.eventLog, _ = s.log.(BorrowedEventLog)
 	return nil
 }
 
@@ -79,7 +88,11 @@ func boundedResendState(state sessionState) (resendState, bool) {
 	switch state := state.(type) {
 	case resendState:
 		return state, true
+	case *resendState:
+		return *state, true
 	case pendingTimeout:
+		return boundedResendState(state.sessionState)
+	case *pendingTimeout:
 		return boundedResendState(state.sessionState)
 	}
 	return resendState{}, false

@@ -30,11 +30,11 @@ func (s resendState) Timeout(session *session, event internal.Event) (nextState 
 	nextState = inSession{}.Timeout(session, event)
 	switch nextState.(type) {
 	case inSession:
-		nextState = s
-	case pendingTimeout:
+		nextState = session.recoveryState(s)
+	case pendingTimeout, *pendingTimeout:
 		// Wrap pendingTimeout in resend. prevents us falling back to inSession if recovering
 		// from pendingTimeout.
-		nextState = pendingTimeout{s}
+		nextState = session.timeoutState(session.recoveryState(s))
 	}
 
 	return
@@ -56,12 +56,16 @@ func (s resendState) FixMsgIn(session *session, msg *Message) (nextState session
 			return handleStateError(session, err)
 		}
 		nextResendState.messageStash = s.messageStash
-		return nextResendState
+		return session.recoveryState(nextResendState)
 	}
 
 	var gapFillFlag FIXBoolean
 	if msg.Body.Has(tagGapFillFlag) {
-		if err := msg.Body.GetField(tagGapFillFlag, &gapFillFlag); err != nil {
+		value, err := msg.Body.GetBytes(tagGapFillFlag)
+		if err == nil && gapFillFlag.Read(value) != nil {
+			err = IncorrectDataFormatForValue(tagGapFillFlag)
+		}
+		if err != nil {
 			return handleStateError(session, err)
 		}
 	}
@@ -72,11 +76,11 @@ func (s resendState) FixMsgIn(session *session, msg *Message) (nextState session
 			return handleStateError(session, err)
 		}
 		nextResendState.messageStash = s.messageStash
-		return nextResendState
+		return session.recoveryState(nextResendState)
 	}
 
 	if s.resendRangeEnd >= session.store.NextTargetMsgSeqNum() {
-		return s
+		return session.recoveryState(s)
 	}
 	if session.boundedIn != nil {
 		ring := session.boundedIn.ring
@@ -106,7 +110,7 @@ func (s resendState) FixMsgIn(session *session, msg *Message) (nextState session
 			if err != nil {
 				return handleStateError(session, err)
 			}
-			return state
+			return session.recoveryState(state)
 		}
 		return
 	}

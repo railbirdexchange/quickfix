@@ -80,7 +80,7 @@ func (out *boundedOutboundSession) resendRange(begin, end int, inReplyTo *Messag
 				return err
 			}
 		}
-		out.session.log.OnEventf("Resending Message: %v", sequence)
+		out.session.logSequenceEvent(eventResendingMessage, sequence, 0)
 		// Legacy resend also preserves the stored body regardless of ToApp
 		// body mutations, including its original repeating-group field order.
 		body := message.bodyBytes
@@ -128,7 +128,7 @@ func (out *boundedOutboundSession) gapFill(begin, end int, inReplyTo *Message) e
 	if err := out.sendBuilder(inReplyTo, nil, begin); err != nil {
 		return err
 	}
-	out.session.log.OnEventf("Sent SequenceReset TO: %v", end)
+	out.session.logSequenceEvent(eventSentSequenceReset, end, 0)
 	return nil
 }
 
@@ -155,7 +155,7 @@ func (state inSession) boundedTimeout(session *session, event internal.Event) se
 		}
 		session.log.OnEvent("Sent test request TEST")
 		session.peerTimer.Reset(time.Duration(float64(1.2) * float64(session.HeartBtInt)))
-		return pendingTimeout{state}
+		return session.timeoutState(state)
 	}
 	return state
 }

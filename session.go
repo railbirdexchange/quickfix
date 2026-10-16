@@ -256,7 +256,7 @@ func (s *session) generateSequenceReset(beginSeqNo int, endSeqNo int, inReplyTo 
 	msgBytes := sequenceReset.build()
 
 	s.EnqueueBytesAndSend(msgBytes)
-	s.log.OnEventf("Sent SequenceReset TO: %v", endSeqNo)
+	s.logSequenceEvent(eventSentSequenceReset, endSeqNo, 0)
 
 	return
 }
@@ -532,16 +532,12 @@ func (s *session) observeSendStage(stage, msgType string, duration time.Duration
 }
 
 func (s *session) doTargetTooHigh(reject targetTooHigh) (nextState resendState, err error) {
-	s.log.OnEventf("MsgSeqNum too high, expecting %v but received %v", reject.ExpectedTarget, reject.ReceivedTarget)
+	s.logSequenceEvent(eventSequenceTooHigh, reject.ExpectedTarget, reject.ReceivedTarget)
 	return s.sendResendRequest(reject.ExpectedTarget, reject.ReceivedTarget-1)
 }
 
 func (s *session) sendResendRequest(beginSeq, endSeq int) (nextState resendState, err error) {
 	nextState.resendRangeEnd = endSeq
-
-	resend := NewMessage()
-	resend.Header.SetBytes(tagMsgType, msgTypeResendRequest)
-	resend.Body.SetField(tagBeginSeqNo, FIXInt(beginSeq))
 
 	var endSeqNo int
 	if s.ResendRequestChunkSize != 0 {
@@ -559,12 +555,27 @@ func (s *session) sendResendRequest(beginSeq, endSeq int) (nextState resendState
 			endSeqNo = 0
 		}
 	}
-	resend.Body.SetField(tagEndSeqNo, FIXInt(endSeqNo))
-
-	if err = s.send(resend); err != nil {
-		return
+	if s.boundedOut != nil {
+		var builder *OutboundMessage
+		if builder, err = s.boundedOut.begin(msgTypeResendRequest); err != nil {
+			return
+		}
+		defer s.boundedOut.abort()
+		builder.Body().SetInt(tagBeginSeqNo, beginSeq)
+		builder.Body().SetInt(tagEndSeqNo, endSeqNo)
+		if err = s.boundedOut.sendMessage(builder, nil, nil, 0, false); err != nil {
+			return
+		}
+	} else {
+		resend := NewMessage()
+		resend.Header.SetBytes(tagMsgType, msgTypeResendRequest)
+		resend.Body.SetField(tagBeginSeqNo, FIXInt(beginSeq))
+		resend.Body.SetField(tagEndSeqNo, FIXInt(endSeqNo))
+		if err = s.send(resend); err != nil {
+			return
+		}
 	}
-	s.log.OnEventf("Sent ResendRequest FROM: %v TO: %v", beginSeq, endSeqNo)
+	s.logSequenceEvent(eventSentResendRequest, beginSeq, endSeqNo)
 
 	return
 }
@@ -716,7 +727,7 @@ func (s *session) verifySelect(msg *Message, checkTooHigh bool, checkTooLow bool
 	}
 
 	switch s.stateMachine.State.(type) {
-	case resendState:
+	case resendState, *resendState:
 		//Don't check staleness of a replay
 	default:
 		if reject := s.checkSendingTime(msg); reject != nil {
@@ -806,7 +817,7 @@ func (s *session) checkTargetTooLow(msg *Message) MessageRejectError {
 	}
 
 	if seqNum < s.store.NextTargetMsgSeqNum() {
-		return targetTooLow{ReceivedTarget: seqNum, ExpectedTarget: s.store.NextTargetMsgSeqNum()}
+		return s.sequenceTooLow(seqNum, s.store.NextTargetMsgSeqNum())
 	}
 
 	return nil
@@ -823,7 +834,7 @@ func (s *session) checkTargetTooHigh(msg *Message) MessageRejectError {
 	}
 
 	if seqNum > s.store.NextTargetMsgSeqNum() {
-		return targetTooHigh{ReceivedTarget: seqNum, ExpectedTarget: s.store.NextTargetMsgSeqNum()}
+		return s.sequenceTooHigh(seqNum, s.store.NextTargetMsgSeqNum())
 	}
 
 	return nil
@@ -882,7 +893,7 @@ func (s *session) checkBeginString(msg *Message) MessageRejectError {
 }
 
 func (s *session) drainMessageIn() {
-	s.log.OnEventf("Draining %d messages from inbound channel...", len(s.messageIn))
+	s.logSequenceEvent(eventDrainingInbound, len(s.messageIn), 0)
 	for {
 		select {
 		case message, ok := <-s.messageIn:

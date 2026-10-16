@@ -180,7 +180,7 @@ func (state inSession) handleSequenceReset(session *session, msg *Message) (next
 
 	if newSeqNo, err := msg.Body.GetInt(tagNewSeqNo); err == nil {
 		expectedSeqNum := session.store.NextTargetMsgSeqNum()
-		session.log.OnEventf("Received SequenceReset FROM: %v TO: %v", expectedSeqNum, newSeqNo)
+		session.logSequenceEvent(eventReceivedSequenceReset, expectedSeqNum, newSeqNo)
 
 		switch {
 		case newSeqNo > expectedSeqNum:
@@ -211,7 +211,7 @@ func (state inSession) handleResendRequest(session *session, msg *Message) (next
 		return state.processReject(session, msg, RequiredTagMissing(tagEndSeqNo))
 	}
 
-	session.log.OnEventf("Received ResendRequest FROM: %d TO: %d", beginSeqNo, endSeqNo)
+	session.logSequenceEvent(eventReceivedResendRequest, beginSeqNo, endSeqNo)
 	expectedSeqNum := session.store.NextSenderMsgSeqNum()
 
 	if (session.sessionID.BeginString >= BeginStringFIX42 && endSeqNo == 0) ||
@@ -220,8 +220,15 @@ func (state inSession) handleResendRequest(session *session, msg *Message) (next
 		endSeqNo = expectedSeqNum - 1
 	}
 
-	if err := state.resendMessages(session, beginSeqNo, endSeqNo, *msg); err != nil {
-		return handleStateError(session, err)
+	// Dispatch before the legacy by-value argument escapes into its iterator.
+	var resendErr error
+	if session.boundedOut != nil {
+		resendErr = session.boundedOut.resendRange(beginSeqNo, endSeqNo, msg)
+	} else {
+		resendErr = state.resendMessages(session, beginSeqNo, endSeqNo, *msg)
+	}
+	if resendErr != nil {
+		return handleStateError(session, resendErr)
 	}
 
 	if err := session.checkTargetTooLow(msg); err != nil {
@@ -279,7 +286,7 @@ func (state inSession) resendMessages(session *session, beginSeqNo, endSeqNo int
 			}
 		}
 
-		session.log.OnEventf("Resending Message: %v", sentMessageSeqNum)
+		session.logSequenceEvent(eventResendingMessage, sentMessageSeqNum, 0)
 		msgBytes = msg.buildWithBodyBytes(msg.bodyBytes) // workaround for maintaining repeating group field order
 		session.EnqueueBytesAndSend(msgBytes)
 
@@ -306,43 +313,13 @@ func (state inSession) processReject(session *session, msg *Message, rej Message
 	case *boundedOutboundReject:
 		return session.failBoundedInbound(TypedError)
 	case targetTooHigh:
-		stashIndex := -1
-		if msg.inbound != nil {
-			var err error
-			stashIndex, err = session.boundedIn.ring.stashIndex(TypedError.ReceivedTarget)
-			if err != nil {
-				return session.failBoundedInbound(err)
-			}
-		}
-
-		var nextState resendState
-		currentState, recovering := session.State.(resendState)
-		if msg.inbound != nil {
-			currentState, recovering = boundedResendState(session.State)
-		}
-		if recovering {
-			nextState = currentState
-		} else {
-			var err error
-			if nextState, err = session.doTargetTooHigh(TypedError); err != nil {
-				return handleStateError(session, err)
-			}
-		}
-
-		if msg.inbound != nil {
-			session.boundedIn.ring.retain(stashIndex, TypedError.ReceivedTarget, msg.inbound)
-			return nextState
-		}
-		if nextState.messageStash == nil {
-			nextState.messageStash = make(map[int]*Message)
-		}
-
-		nextState.messageStash[TypedError.ReceivedTarget] = msg
-
-		return nextState
-
+		return state.stashTooHigh(session, msg, TypedError)
+	case *targetTooHigh:
+		return state.stashTooHigh(session, msg, *TypedError)
 	case targetTooLow:
 		return state.doTargetTooLow(session, msg, TypedError)
+	case *targetTooLow:
+		return state.doTargetTooLow(session, msg, *TypedError)
 	case incorrectBeginString:
 		if err := session.initiateLogout(rej.Error()); err != nil {
 			return handleStateError(session, err)
@@ -370,6 +347,39 @@ func (state inSession) processReject(session *session, msg *Message, rej Message
 		}
 		return state
 	}
+}
+
+func (state inSession) stashTooHigh(session *session, msg *Message, reject targetTooHigh) sessionState {
+	stashIndex := -1
+	if msg.inbound != nil {
+		var err error
+		stashIndex, err = session.boundedIn.ring.stashIndex(reject.ReceivedTarget)
+		if err != nil {
+			return session.failBoundedInbound(err)
+		}
+	}
+	var nextState resendState
+	currentState, recovering := session.State.(resendState)
+	if msg.inbound != nil {
+		currentState, recovering = boundedResendState(session.State)
+	}
+	if recovering {
+		nextState = currentState
+	} else {
+		var err error
+		if nextState, err = session.doTargetTooHigh(reject); err != nil {
+			return handleStateError(session, err)
+		}
+	}
+	if msg.inbound != nil {
+		session.boundedIn.ring.retain(stashIndex, reject.ReceivedTarget, msg.inbound)
+		return session.recoveryState(nextState)
+	}
+	if nextState.messageStash == nil {
+		nextState.messageStash = make(map[int]*Message)
+	}
+	nextState.messageStash[reject.ReceivedTarget] = msg
+	return nextState
 }
 
 func (state inSession) doTargetTooLow(session *session, msg *Message, rej targetTooLow) (nextState sessionState) {
@@ -459,7 +469,7 @@ func (state *inSession) generateSequenceReset(session *session, beginSeqNo int, 
 	msgBytes := sequenceReset.build()
 
 	session.EnqueueBytesAndSend(msgBytes)
-	session.log.OnEventf("Sent SequenceReset TO: %v", endSeqNo)
+	session.logSequenceEvent(eventSentSequenceReset, endSeqNo, 0)
 
 	return
 }
