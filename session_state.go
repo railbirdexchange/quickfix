@@ -117,7 +117,13 @@ func (sm *stateMachine) Incoming(session *session, m fixIn) {
 			return
 		}
 	}
-	sm.CheckSessionTime(session, time.Now())
+	var sessionTime time.Time
+	if session.SessionTime != nil {
+		sessionTime = time.Now()
+	}
+	// An unrestricted schedule ignores the clock, but still needs the same
+	// lifecycle transitions and notifications in CheckSessionTime.
+	sm.CheckSessionTime(session, sessionTime)
 	if !sm.IsConnected() {
 		return
 	}

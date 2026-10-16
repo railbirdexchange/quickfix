@@ -243,11 +243,13 @@ func doParsing(mp *msgParser) (err error) {
 	mp.msg.groupStack = mp.msg.groupStack[:0]
 
 	// Allocate expected message fields in one chunk.
-	fieldCount := bytes.Count(mp.rawBytes, []byte{'\001'})
+	var fieldCount int
 	if mp.limits != nil {
 		// A binary XMLData value may itself contain SOH bytes. Bound actual
 		// extracted fields instead of treating those data bytes as fields.
 		fieldCount = cap(mp.msg.fields)
+	} else {
+		fieldCount = bytes.Count(mp.rawBytes, []byte{'\001'})
 	}
 	if fieldCount == 0 {
 		return parseError{OrigError: fmt.Sprintf("No Fields detected in %s", string(mp.rawBytes))}
@@ -340,14 +342,16 @@ func doParsing(mp *msgParser) (err error) {
 				mp.msg.Trailer.add(mp.msg.fields[mp.fieldIndex : mp.fieldIndex+1])
 			}
 			mp.foundTrailer = true
-		case mp.groupDefinition(mp.parsedFieldBytes.tag) != nil:
-			if err = parseGroup(mp, mp.groupDefinition(mp.parsedFieldBytes.tag), &mp.msg.Body.FieldMap); err != nil {
-				return err
-			}
 		default:
-			mp.foundBody = true
-			mp.trailerBytes = mp.rawBytes
-			mp.msg.Body.add(mp.msg.fields[mp.fieldIndex : mp.fieldIndex+1])
+			if group := mp.groupDefinition(mp.parsedFieldBytes.tag); group != nil {
+				if err = parseGroup(mp, group, &mp.msg.Body.FieldMap); err != nil {
+					return err
+				}
+			} else {
+				mp.foundBody = true
+				mp.trailerBytes = mp.rawBytes
+				mp.msg.Body.add(mp.msg.fields[mp.fieldIndex : mp.fieldIndex+1])
+			}
 		}
 		if mp.parsedFieldBytes.tag == tagCheckSum {
 			break
@@ -462,7 +466,7 @@ func parseGroup(mp *msgParser, definition *datadictionary.FieldDef, section *Fie
 			}
 		}
 		if child != nil {
-			if child.IsGroup() {
+			if len(child.Fields) > 0 {
 				if err := mp.pushGroup(child); err != nil {
 					return err
 				}
@@ -505,7 +509,7 @@ func parseGroup(mp *msgParser, definition *datadictionary.FieldDef, section *Fie
 
 func (mp *msgParser) groupDefinition(tag Tag) *datadictionary.FieldDef {
 	if mp.messageDef != nil {
-		if field := mp.messageDef.Fields[int(tag)]; field != nil && field.IsGroup() {
+		if field := mp.messageDef.Fields[int(tag)]; field != nil && len(field.Fields) > 0 {
 			return field
 		}
 	}
@@ -521,7 +525,7 @@ func (mp *msgParser) sectionGroup(tag Tag, header bool) *datadictionary.FieldDef
 		section = mp.transportDataDictionary.Header
 	}
 	if section != nil {
-		if definition := section.Fields[int(tag)]; definition != nil && definition.IsGroup() {
+		if definition := section.Fields[int(tag)]; definition != nil && len(definition.Fields) > 0 {
 			return definition
 		}
 	}
