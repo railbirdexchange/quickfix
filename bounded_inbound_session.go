@@ -7,16 +7,16 @@ import (
 )
 
 type boundedInboundSession struct {
-	limits      ParseLimits
-	ring        *inboundRing
-	parsed      *MessageSlot
-	log         BorrowedLog
-	recovery    resendState
-	pending     pendingTimeout
-	tooHigh     targetTooHigh
-	tooLow      targetTooLow
-	events      boundedEventBuffer
-	eventLog    BorrowedEventLog
+	limits   ParseLimits
+	ring     *inboundRing
+	parsed   *MessageSlot
+	log      BorrowedLog
+	recovery resendState
+	pending  pendingTimeout
+	tooHigh  targetTooHigh
+	tooLow   targetTooLow
+	events   boundedEventBuffer
+	eventLog BorrowedEventLog
 }
 
 func (s *session) configureBoundedInbound(settings *SessionSettings) error {

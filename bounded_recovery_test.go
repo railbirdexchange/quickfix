@@ -5,41 +5,27 @@ import (
 	"testing"
 	"time"
 
+	"github.com/quickfixgo/quickfix/config"
 	"github.com/quickfixgo/quickfix/internal"
 	"github.com/stretchr/testify/require"
 )
 
-type boundedRecoveryApplication struct{ *inboundRecordingApplication }
-
-func (application *boundedRecoveryApplication) ToAdminBorrowed(message *OutboundMessage, id SessionID) error {
-	application.ToAdmin(message.Message(), id)
-	return nil
-}
-
-func (*boundedRecoveryApplication) ToAppBorrowed(*OutboundMessage, SessionID) error {
-	return nil
-}
-
 // The test goroutine is the session owner. A separate writer owns each output
 // until completion; the fixed sink is inspected only after joining that writer.
-func newBoundedRecoverySession(t *testing.T, boundedOutput bool) (*session, *inboundRecordingApplication) {
+func newBoundedRecoverySession(t *testing.T, boundedStore bool) (*session, *inboundRecordingApplication) {
 	t.Helper()
-	s, recorder, _, _ := newInboundIntegrationSession(t, true, 1, 3)
-	if !boundedOutput {
-		return s, recorder
+	s, recorder, _, _ := newInboundIntegrationSession(t, 1, 3)
+	if boundedStore {
+		store, err := NewBoundedStore(64, 1024)
+		require.NoError(t, err)
+		s.store = store
 	}
-	application := &boundedRecoveryApplication{recorder}
-	store, err := NewBoundedStore(64, 1024)
-	require.NoError(t, err)
-	s.application, s.store = application, store
-	s.boundedIn.application = application
-	out, err := newBoundedOutbound(s, application, store, 4, 2048, time.Second)
-	require.NoError(t, err)
-	s.boundedOut = out
-	for index := range s.boundedIn.ring.slots {
-		s.boundedIn.ring.slots[index].parsed.outbound = out
-	}
-	startBoundedOutboundTestWriter(t, out, &boundedOutboundTestConn{wire: make([]byte, 64*1024)})
+	settings := NewSessionSettings()
+	settings.Set(config.OutboundFrameQueueCapacity, "4")
+	require.NoError(t, s.configureOutbound(settings))
+	connection := &scopedOutboundBenchmarkConnection{wire: make([]byte, 64*1024)}
+	s.writeConnection = newOutboundWriter(connection, 4, time.Second, nil)
+	go s.writeConnection.run()
 	return s, recorder
 }
 
@@ -148,10 +134,7 @@ func TestBoundedRecoveryPendingPeerTimeoutReleasesStash(t *testing.T) {
 			require.Equal(t, 1, application.logouts)
 			require.Empty(t, application.borrowed)
 			assertInboundRingVacant(t, s.boundedIn.ring)
-			if s.boundedOut != nil {
-				require.Nil(t, s.boundedOut.writer)
-				assertBoundedOutboundSlotsReturned(t, s.boundedOut)
-			}
+			assertScopedOutboundVacant(t, s)
 		})
 	}
 }
@@ -179,5 +162,5 @@ func TestBoundedRecoveryInSessionPendingCellReuse(t *testing.T) {
 	require.Equal(t, 2, s.store.NextTargetMsgSeqNum())
 	require.Equal(t, 1, application.logouts)
 	assertInboundRingVacant(t, s.boundedIn.ring)
-	assertBoundedOutboundSlotsReturned(t, s.boundedOut)
+	assertScopedOutboundVacant(t, s)
 }

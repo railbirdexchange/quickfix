@@ -32,7 +32,7 @@ func (state latentState) Timeout(*session, internal.Event) (nextState sessionSta
 	return state
 }
 
-func (state latentState) ShutdownNow(*session) {}
+func (state latentState) ShutdownNow(*session) error { return nil }
 func (state latentState) Stop(*session) (nextState sessionState) {
 	return state
 }

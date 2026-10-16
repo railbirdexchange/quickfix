@@ -365,28 +365,22 @@ func (a *Acceptor) handleConnection(netConn net.Conn) {
 		return
 	}
 	msgIn := make(chan fixIn, session.InChanCapacity)
-	msgOut := make(chan []byte, outboundBufferSize)
-	var writerControl *boundedWriteConnection
-	if session.boundedOut != nil {
-		writerControl = newBoundedWriteConnection(netConn, session.boundedOut)
-	}
 	readerControl, err := startBoundedRead(netConn, parser, session.boundedIn, msgIn, msgBytes.Bytes(), parser.lastRead)
 	if err != nil {
 		a.globalLog.OnEvent(err.Error())
 		return
 	}
 
-	if err := session.connectWithIO(msgIn, msgOut, readerControl, writerControl); err != nil {
+	writer := newOutboundWriter(netConn, min(outboundBufferSize, len(session.outbound.pending)), session.outbound.writeTimeout, session.messageEvent)
+	go writer.run()
+	if err := session.connectWithWriter(msgIn, readerControl, writer); err != nil {
 		readerControl.stopAndDrain(msgIn)
+		_ = writer.finish()
 		a.globalLog.OnEventf("Unable to accept session %v connection: %v", sessID, err.Error())
 		return
 	}
 
-	if writerControl != nil {
-		writerControl.run()
-	} else {
-		writeLoop(netConn, msgOut, a.globalLog)
-	}
+	<-writer.done
 }
 
 func (a *Acceptor) socketOutboundBufferSize(sessionID SessionID) (int, error) {

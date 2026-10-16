@@ -27,10 +27,14 @@ type Application interface {
 	// OnLogout notification of a session logging off or disconnecting.
 	OnLogout(sessionID SessionID)
 
-	// ToAdmin notification of admin message being sent to target.
+	// ToAdmin notification of admin message being sent to target. A message
+	// supplied to Send or SendToTarget remains caller-owned after sending.
 	ToAdmin(message *Message, sessionID SessionID)
 
-	// ToApp notification of app message being sent to target.
+	// ToApp notification of app message being sent to target. Ordinary sends
+	// pass the original caller-owned Message synchronously. During resend,
+	// the engine supplies a scoped replay view: retain it with CopyInto, or
+	// retain individual owned GetString/FIXString values, before returning.
 	ToApp(message *Message, sessionID SessionID) error
 
 	// FromAdmin processes an inbound admin message synchronously. The Message,

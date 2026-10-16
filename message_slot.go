@@ -48,7 +48,6 @@ type MessageSlot struct {
 	transportDictionary *datadictionary.DataDictionary
 	appDictionary       *datadictionary.DataDictionary
 	valid               bool
-	outbound            *boundedOutboundSession
 	scopedFields        [3]FieldMap
 	parseFields         []TagValue
 	parseGroupStack     []*datadictionary.FieldDef

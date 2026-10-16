@@ -58,6 +58,9 @@ type FieldMap struct {
 	rwLock *sync.RWMutex
 	fixed  *fixedFieldMap
 	scoped bool
+	// reusable marks engine scalar storage owned by the enclosing Message.
+	// Explicit field copies must detach it before that Message is sent again.
+	reusable bool
 }
 
 // ascending tags.
@@ -329,7 +332,7 @@ func (m *FieldMap) clearNoLock() {
 // CopyInto overwrites the given FieldMap with this one. Copying from a session
 // callback allocates owned field and group bytes that survive callback return.
 func (m *FieldMap) CopyInto(to *FieldMap) {
-	if m.scoped && m == to {
+	if (m.scoped || m.reusable) && m == to {
 		return
 	}
 	m.rlock()
@@ -342,7 +345,7 @@ func (m *FieldMap) CopyInto(to *FieldMap) {
 	}
 	if to.fixed != nil {
 		if m.fixed == to.fixed {
-			if !m.scoped {
+			if !m.scoped && !m.reusable {
 				return
 			}
 			// A copied FieldMap value still shares the session backing. Detach
@@ -355,7 +358,7 @@ func (m *FieldMap) CopyInto(to *FieldMap) {
 	if to.fixed != nil {
 		to.fixedClear()
 		m.eachField(func(tag Tag, values field) {
-			if m.scoped {
+			if m.scoped || m.reusable {
 				to.put(tag, cloneOwnedField(values))
 			} else {
 				to.fixedGetOrCreate(tag)[0] = values[0]
@@ -367,7 +370,7 @@ func (m *FieldMap) CopyInto(to *FieldMap) {
 
 	to.tagLookup = make(map[Tag]field)
 	m.eachField(func(tag Tag, f field) {
-		if m.scoped {
+		if m.scoped || m.reusable {
 			to.tagLookup[tag] = cloneOwnedField(f)
 			return
 		}

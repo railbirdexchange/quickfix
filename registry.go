@@ -54,6 +54,12 @@ func Send(m Messagable) (err error) {
 }
 
 // SendToTarget sends a message based on the sessionID. Convenient for use in FromApp since it provides a session ID for incoming messages.
+// Preparation, application callbacks and persistence finish synchronously; the
+// writer receives independent encoded bytes. The caller retains ownership of m
+// and may mutate it after return. Engine-managed header/trailer byte views may
+// change on a later send of the same Message; CopyInto and owned string getters
+// detach values that must survive that reuse. Successful return means queued,
+// not that the socket write has completed.
 func SendToTarget(m Messagable, sessionID SessionID) error {
 	msg := m.ToMessage()
 	session, ok := lookupSession(sessionID)
@@ -71,7 +77,9 @@ func ResetSession(sessionID SessionID) error {
 		return errUnknownSession
 	}
 	session.log.OnEvent("Session reset")
-	session.State.ShutdownNow(session)
+	if err := session.State.ShutdownNow(session); isOutboundCapacityError(err) {
+		return err
+	}
 	if err := session.dropAndReset(); err != nil {
 		session.logError(err)
 		return err
@@ -103,11 +111,17 @@ func SetNextTargetMsgSeqNum(sessionID SessionID, seqNum int) error {
 }
 
 // SetNextSenderMsgSeqNum sets the next outgoing message sequence number for the session matching the session id.
+// It waits for pending send preparation and resend iteration. Call it outside
+// application send callbacks, which already execute under sender ownership.
 func SetNextSenderMsgSeqNum(sessionID SessionID, seqNum int) error {
 	session, ok := lookupSession(sessionID)
 	if !ok {
 		return errUnknownSession
 	}
+	session.resendMutex.Lock()
+	defer session.resendMutex.Unlock()
+	session.sendMutex.Lock()
+	defer session.sendMutex.Unlock()
 	return session.store.SetNextSenderMsgSeqNum(seqNum)
 }
 

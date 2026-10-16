@@ -2,6 +2,7 @@ package quickfix
 
 import (
 	"errors"
+	"sync/atomic"
 	"time"
 )
 
@@ -20,16 +21,21 @@ type boundedJournalEntry struct {
 }
 
 // BoundedStore is a fixed-capacity, in-memory resend journal. Construct it with
-// NewBoundedStore. The session owns the store exclusively; callers must not use
-// it concurrently or mutate it from an IterateMessages callback. It is not a
-// durable store. Neither completed writes nor new messages evict retained data.
-// Only an explicit RetireBefore acknowledgement or Reset releases old entries.
+// NewBoundedStore. The session serializes sender and journal operations using
+// its existing send and resend locks. Sequence getters and target-counter
+// operations may run concurrently with sender operations; they do not borrow
+// journal storage. Direct journal, retirement, reset and creation-time operations
+// require a quiescent owner, and journal callbacks must not mutate the store.
+// The store is not durable. Neither completed writes nor new messages evict
+// retained data. Only an explicit RetireBefore acknowledgement or Reset releases
+// old entries. Capacity bounds the sequence window starting at the recovery floor,
+// including gaps, rather than merely the number of populated entries.
 type BoundedStore struct {
 	entries          []boundedJournalEntry
 	arena            []byte
 	maxMessageBytes  int
-	nextSender       int
-	nextTarget       int
+	nextSender       atomic.Int64
+	nextTarget       atomic.Int64
 	floor            int
 	creationTime     time.Time
 	reservedIndex    int
@@ -45,38 +51,44 @@ func NewBoundedStore(capacity, maxMessageBytes int) (*BoundedStore, error) {
 	if capacity <= 0 || maxMessageBytes <= 0 || capacity > maximum/1024 || maxMessageBytes > maximum/1024 || capacity > maximum/maxMessageBytes {
 		return nil, ErrInvalidJournalLimits
 	}
-	return &BoundedStore{
+	store := &BoundedStore{
 		entries:         make([]boundedJournalEntry, capacity),
 		arena:           make([]byte, capacity*maxMessageBytes),
 		maxMessageBytes: maxMessageBytes,
-		nextSender:      1, nextTarget: 1, floor: 1,
-		creationTime: time.Now(), reservedIndex: -1,
-	}, nil
+		floor:           1,
+		creationTime:    time.Now(), reservedIndex: -1,
+	}
+	store.nextSender.Store(1)
+	store.nextTarget.Store(1)
+	return store, nil
 }
 
-func (store *BoundedStore) NextSenderMsgSeqNum() int { return store.nextSender }
-func (store *BoundedStore) NextTargetMsgSeqNum() int { return store.nextTarget }
+func (store *BoundedStore) NextSenderMsgSeqNum() int { return int(store.nextSender.Load()) }
+func (store *BoundedStore) NextTargetMsgSeqNum() int { return int(store.nextTarget.Load()) }
+
+func (store *BoundedStore) preparedStoreOwner() MessageStore { return store }
+
+func incrementJournalSequence(sequence *atomic.Int64) error {
+	for {
+		next := sequence.Load()
+		if next == int64(int(^uint(0)>>1)) {
+			return ErrInvalidJournalSequence
+		}
+		if sequence.CompareAndSwap(next, next+1) {
+			return nil
+		}
+	}
+}
 
 func (store *BoundedStore) IncrNextSenderMsgSeqNum() error {
 	if store.reservedIndex >= 0 {
 		return ErrJournalReservation
 	}
-	if store.nextSender == int(^uint(0)>>1) {
-		return ErrInvalidJournalSequence
-	}
-	store.nextSender++
-	return nil
+	return incrementJournalSequence(&store.nextSender)
 }
 
 func (store *BoundedStore) IncrNextTargetMsgSeqNum() error {
-	if store.reservedIndex >= 0 {
-		return ErrJournalReservation
-	}
-	if store.nextTarget == int(^uint(0)>>1) {
-		return ErrInvalidJournalSequence
-	}
-	store.nextTarget++
-	return nil
+	return incrementJournalSequence(&store.nextTarget)
 }
 
 func (store *BoundedStore) SetNextSenderMsgSeqNum(next int) error {
@@ -89,18 +101,15 @@ func (store *BoundedStore) SetNextSenderMsgSeqNum(next int) error {
 	if next < store.floor {
 		return ErrJournalRangeUnavailable
 	}
-	store.nextSender = next
+	store.nextSender.Store(int64(next))
 	return nil
 }
 
 func (store *BoundedStore) SetNextTargetMsgSeqNum(next int) error {
-	if store.reservedIndex >= 0 {
-		return ErrJournalReservation
-	}
 	if next < 1 {
 		return ErrInvalidJournalSequence
 	}
-	store.nextTarget = next
+	store.nextTarget.Store(int64(next))
 	return nil
 }
 
@@ -109,7 +118,8 @@ func (store *BoundedStore) SetCreationTime(value time.Time) { store.creationTime
 
 // reserve holds exactly one entry for the session's next encode. Reservation
 // changes no committed bytes, sequences, recovery floor, or creation time.
-// Commit or abort it before making another mutating store call.
+// Commit or abort it before another sender or journal mutation. Independent
+// target-counter updates may proceed while the sender holds a reservation.
 func (store *BoundedStore) reserve(sequence int) (int, error) {
 	if store.reservedIndex >= 0 {
 		return -1, ErrJournalReservation
@@ -120,22 +130,17 @@ func (store *BoundedStore) reserve(sequence int) (int, error) {
 	if sequence < store.floor {
 		return -1, ErrJournalRangeUnavailable
 	}
-	vacant := -1
-	for index := range store.entries {
-		entry := &store.entries[index]
-		if entry.sequence == sequence {
-			store.reservedIndex, store.reservedSequence = index, sequence
-			return index, nil
-		}
-		if entry.sequence == 0 && vacant < 0 {
-			vacant = index
-		}
-	}
-	if vacant < 0 {
+	// Subtract rather than computing floor+capacity, which can overflow near
+	// the maximum supported sequence number.
+	if sequence-store.floor >= len(store.entries) {
 		return -1, ErrJournalFull
 	}
-	store.reservedIndex, store.reservedSequence = vacant, sequence
-	return vacant, nil
+	index := (sequence - 1) % len(store.entries)
+	if existing := store.entries[index].sequence; existing != 0 && existing != sequence {
+		return -1, ErrJournalFull
+	}
+	store.reservedIndex, store.reservedSequence = index, sequence
+	return index, nil
 }
 
 func (store *BoundedStore) commit(index, sequence int, wire []byte, incr bool) error {
@@ -145,14 +150,14 @@ func (store *BoundedStore) commit(index, sequence int, wire []byte, incr bool) e
 	if len(wire) > store.maxMessageBytes {
 		return ErrJournalMessageCapacity
 	}
-	if incr && (sequence != store.nextSender || store.nextSender == int(^uint(0)>>1)) {
+	if incr && (sequence != store.NextSenderMsgSeqNum() || sequence == int(^uint(0)>>1)) {
 		return ErrInvalidJournalSequence
 	}
 	start := index * store.maxMessageBytes
 	copy(store.arena[start:start+len(wire)], wire)
 	store.entries[index] = boundedJournalEntry{sequence: sequence, length: len(wire)}
 	if incr {
-		store.nextSender++
+		store.nextSender.Store(int64(sequence + 1))
 	}
 	store.abort(index)
 	return nil
@@ -177,9 +182,11 @@ func (store *BoundedStore) reserveReset() (int, error) {
 	return 0, nil
 }
 
-// commitReset atomically starts a new sequence space with the encoded logon at
-// sequence 1. Encoding must be complete before this call. All prechecks precede
-// changes to retained bytes, sequences, recovery floor, and creation time.
+// commitReset starts a new sequence space with the encoded logon at sequence 1.
+// It is an owner-serialized transaction: encoding and every fallible precheck
+// precede changes to retained bytes, sequences, recovery floor and creation time.
+// The two atomic counters do not form a concurrently atomic snapshot; reset
+// requires the owner to quiesce other store mutations and journal readers.
 func (store *BoundedStore) commitReset(index int, wire []byte) error {
 	if index < 0 || index != store.reservedIndex || !store.reservedReset {
 		return ErrJournalReservation
@@ -191,7 +198,9 @@ func (store *BoundedStore) commitReset(index int, wire []byte) error {
 	copy(store.arena[start:start+len(wire)], wire)
 	clear(store.entries)
 	store.entries[index] = boundedJournalEntry{sequence: 1, length: len(wire)}
-	store.nextSender, store.nextTarget, store.floor = 2, 1, 1
+	store.nextSender.Store(2)
+	store.nextTarget.Store(1)
+	store.floor = 1
 	store.creationTime = time.Now()
 	store.abort(index)
 	return nil
@@ -225,12 +234,16 @@ func (store *BoundedStore) RetireBefore(nextSequence int) error {
 	if store.reservedIndex >= 0 {
 		return ErrJournalReservation
 	}
-	if nextSequence < store.floor || nextSequence > store.nextSender {
+	if nextSequence < store.floor || nextSequence > store.NextSenderMsgSeqNum() {
 		return ErrJournalRangeUnavailable
 	}
-	for index := range store.entries {
-		if store.entries[index].sequence < nextSequence {
-			store.entries[index] = boundedJournalEntry{}
+	count := min(nextSequence-store.floor, len(store.entries))
+	index := (store.floor - 1) % len(store.entries)
+	for range count {
+		store.entries[index] = boundedJournalEntry{}
+		index++
+		if index == len(store.entries) {
+			index = 0
 		}
 	}
 	store.floor = nextSequence
@@ -241,7 +254,7 @@ func (store *BoundedStore) RetireBefore(nextSequence int) error {
 // resend is emitted. Missing entries within the known window are allowed:
 // admin or deliberately skipped sequence numbers can require gap fills.
 func (store *BoundedStore) retainedRange(begin, end int) error {
-	if begin < store.floor || end < begin || end >= store.nextSender {
+	if begin < store.floor || end < begin || end >= store.NextSenderMsgSeqNum() {
 		return ErrJournalRangeUnavailable
 	}
 	return nil
@@ -250,13 +263,12 @@ func (store *BoundedStore) retainedRange(begin, end int) error {
 // message borrows read-only journal bytes. The borrow ends before the next
 // store mutation; it cannot outlive replacement, retirement, or reset.
 func (store *BoundedStore) message(sequence int) ([]byte, bool) {
-	if sequence < store.floor {
+	if sequence < store.floor || sequence-store.floor >= len(store.entries) {
 		return nil, false
 	}
-	for index := range store.entries {
-		if store.entries[index].sequence == sequence {
-			return store.entryBytes(index), true
-		}
+	index := (sequence - 1) % len(store.entries)
+	if store.entries[index].sequence == sequence {
+		return store.entryBytes(index), true
 	}
 	return nil, false
 }
@@ -267,17 +279,28 @@ func (store *BoundedStore) entryBytes(index int) []byte {
 	return store.arena[start:end:end]
 }
 
-// nextEntry orders retained entries without per-call sorting or scratch. Its
-// work is bounded by journal capacity, including sparse sequence spaces.
+// nextEntry scans only the intersection with the configured sequence window.
+// Successive calls advance begin, so a complete iteration examines each window
+// position at most once even when the requested range contains huge gaps.
 func (store *BoundedStore) nextEntry(begin, end int) int {
-	selected := -1
-	for index := range store.entries {
-		sequence := store.entries[index].sequence
-		if sequence >= begin && sequence <= end && (selected < 0 || sequence < store.entries[selected].sequence) {
-			selected = index
+	begin = max(begin, store.floor)
+	end = min(end, store.floor+min(len(store.entries)-1, int(^uint(0)>>1)-store.floor))
+	if begin > end {
+		return -1
+	}
+	index := (begin - 1) % len(store.entries)
+	for sequence := begin; ; sequence++ {
+		if store.entries[index].sequence == sequence {
+			return index
+		}
+		if sequence == end {
+			return -1
+		}
+		index++
+		if index == len(store.entries) {
+			index = 0
 		}
 	}
-	return selected
 }
 
 // IterateMessages calls cb in sequence order with read-only borrowed bytes.
@@ -332,7 +355,9 @@ func (store *BoundedStore) Reset() error {
 		return ErrJournalReservation
 	}
 	clear(store.entries)
-	store.nextSender, store.nextTarget, store.floor = 1, 1, 1
+	store.nextSender.Store(1)
+	store.nextTarget.Store(1)
+	store.floor = 1
 	store.creationTime = time.Now()
 	return nil
 }
