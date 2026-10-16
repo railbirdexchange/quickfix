@@ -236,11 +236,13 @@ func doParsing(mp *msgParser) (err error) {
 	mp.msg.groupStack = mp.msg.groupStack[:0]
 
 	// Allocate expected message fields in one chunk.
-	fieldCount := bytes.Count(mp.rawBytes, []byte{'\001'})
+	var fieldCount int
 	if mp.limits != nil {
 		// A binary XMLData value may itself contain SOH bytes. Bound actual
 		// extracted fields instead of treating those data bytes as fields.
 		fieldCount = cap(mp.msg.fields)
+	} else {
+		fieldCount = bytes.Count(mp.rawBytes, []byte{'\001'})
 	}
 	if fieldCount == 0 {
 		return parseError{OrigError: fmt.Sprintf("No Fields detected in %s", string(mp.rawBytes))}
@@ -333,14 +335,16 @@ func doParsing(mp *msgParser) (err error) {
 				mp.msg.Trailer.add(mp.msg.fields[mp.fieldIndex : mp.fieldIndex+1])
 			}
 			mp.foundTrailer = true
-		case mp.groupDefinition(mp.parsedFieldBytes.tag) != nil:
-			if err = parseGroup(mp, mp.groupDefinition(mp.parsedFieldBytes.tag), &mp.msg.Body.FieldMap); err != nil {
-				return err
-			}
 		default:
-			mp.foundBody = true
-			mp.trailerBytes = mp.rawBytes
-			mp.msg.Body.add(mp.msg.fields[mp.fieldIndex : mp.fieldIndex+1])
+			if group := mp.groupDefinition(mp.parsedFieldBytes.tag); group != nil {
+				if err = parseGroup(mp, group, &mp.msg.Body.FieldMap); err != nil {
+					return err
+				}
+			} else {
+				mp.foundBody = true
+				mp.trailerBytes = mp.rawBytes
+				mp.msg.Body.add(mp.msg.fields[mp.fieldIndex : mp.fieldIndex+1])
+			}
 		}
 		if mp.parsedFieldBytes.tag == tagCheckSum {
 			break

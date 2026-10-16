@@ -80,6 +80,10 @@ func TestBoundedValidationRejectCompatibility(t *testing.T) {
 		t.Run(fixture.TestName, func(t *testing.T) {
 			message := boundedValidationParse(t, fixture.MessageBytes)
 			bounded := boundedValidationFromLegacy(t, fixture.Validator, len(message.fields))
+			sessionOwned, err := newSessionValidator(bounded.settings, bounded.application, bounded.transport, len(message.fields))
+			if err != nil {
+				t.Fatal(err)
+			}
 			want := fixture.Validator.Validate(message)
 			if (want == nil) != fixture.DoNotExpectReject {
 				t.Fatalf("legacy fixture outcome changed: %v", want)
@@ -93,6 +97,7 @@ func TestBoundedValidationRejectCompatibility(t *testing.T) {
 					t.Fatalf("validation operational error: %v", err)
 				}
 				assertBoundedRejectEqual(t, got, want)
+				assertBoundedRejectEqual(t, sessionOwned.Validate(message), want)
 			}
 		})
 	}
@@ -153,6 +158,10 @@ func TestBoundedValidationSettingsAndMultiEnums(t *testing.T) {
 		t.Run(strconv.Itoa(flags), func(t *testing.T) {
 			legacy := NewValidator(settings, dictionary, nil)
 			bounded := boundedValidationFromLegacy(t, legacy, 64)
+			sessionOwned, err := newSessionValidator(settings, dictionary, nil, 64)
+			if err != nil {
+				t.Fatal(err)
+			}
 			for _, fixture := range []struct {
 				enum, unknown, empty string
 			}{
@@ -173,6 +182,7 @@ func TestBoundedValidationSettingsAndMultiEnums(t *testing.T) {
 					t.Fatal(err)
 				}
 				assertBoundedRejectEqual(t, reject, legacy.Validate(message))
+				assertBoundedRejectEqual(t, sessionOwned.Validate(message), reject)
 			}
 		})
 	}

@@ -73,7 +73,8 @@ func TestValidatorInlineUnlimitedInput(t *testing.T) {
 func TestValidatorInlineTagDomainAndSpill(t *testing.T) {
 	maximum := int(^uint(0) >> 1)
 	for _, zeroFirst := range []bool{false, true} {
-		var seen validationTagSet
+		var tags [2 * validationInlineTagCapacity]Tag
+		seen := validationTagSet{tags: tags[:], limit: validationInlineTagCapacity}
 		initial := []Tag{Tag(-maximum - 1), Tag(maximum), -1}
 		if zeroFirst {
 			initial = append(initial, 0)
