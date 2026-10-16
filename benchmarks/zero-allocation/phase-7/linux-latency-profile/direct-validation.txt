@@ -1,0 +1,68 @@
+File: quickfix-linux-arm64.test
+Type: cpu
+Time: Oct 16, 2026 at 11:00am (EDT)
+Duration: 15.91s, Total samples = 12.77s (80.25%)
+Active filters:
+   focus=validateFIX|validateFields|validateWalk
+Showing nodes accounting for 0.90s, 7.05% of 12.77s total
+      flat  flat%   sum%        cum   cum%
+         0     0%     0%      0.90s  7.05%  github.com/quickfixgo/quickfix.(*BoundedValidator).validateWithinCapacity
+     0.01s 0.078% 0.078%      0.90s  7.05%  github.com/quickfixgo/quickfix.validateFIXWithScratch
+         0     0% 0.078%      0.45s  3.52%  github.com/quickfixgo/quickfix.(*BoundedValidator).Validate (inline)
+         0     0% 0.078%      0.45s  3.52%  github.com/quickfixgo/quickfix.(*boundedFullSession).readMessage
+         0     0% 0.078%      0.45s  3.52%  github.com/quickfixgo/quickfix.(*boundedFullSession).readReport
+         0     0% 0.078%      0.45s  3.52%  github.com/quickfixgo/quickfix.(*boundedFullSession).unacknowledgedBatch
+         0     0% 0.078%      0.45s  3.52%  github.com/quickfixgo/quickfix.(*session).run
+         0     0% 0.078%      0.45s  3.52%  github.com/quickfixgo/quickfix.(*session).verify (inline)
+         0     0% 0.078%      0.45s  3.52%  github.com/quickfixgo/quickfix.(*session).verifyMsgAgainstAppImpl
+         0     0% 0.078%      0.45s  3.52%  github.com/quickfixgo/quickfix.(*session).verifySelect
+         0     0% 0.078%      0.45s  3.52%  github.com/quickfixgo/quickfix.(*sessionValidator).Validate
+         0     0% 0.078%      0.45s  3.52%  github.com/quickfixgo/quickfix.(*stateMachine).Incoming
+         0     0% 0.078%      0.45s  3.52%  github.com/quickfixgo/quickfix.BenchmarkOrdinaryFullSessionReadToWrite.func1
+         0     0% 0.078%      0.45s  3.52%  github.com/quickfixgo/quickfix.inSession.FixMsgIn
+         0     0% 0.078%      0.45s  3.52%  github.com/quickfixgo/quickfix.measureOrdinaryFullSessionRoundTrip
+         0     0% 0.078%      0.45s  3.52%  github.com/quickfixgo/quickfix.measureOrdinaryReadToWrite
+         0     0% 0.078%      0.45s  3.52%  github.com/quickfixgo/quickfix.newBoundedFullSession.func1
+         0     0% 0.078%      0.45s  3.52%  testing.(*B).launch
+         0     0% 0.078%      0.45s  3.52%  testing.(*B).runN
+     0.06s  0.47%  0.55%      0.41s  3.21%  github.com/quickfixgo/quickfix.validateFields
+     0.01s 0.078%  0.63%      0.30s  2.35%  github.com/quickfixgo/quickfix.validateField
+         0     0%  0.63%      0.23s  1.80%  github.com/quickfixgo/quickfix.validateWalkWithScratch
+     0.01s 0.078%   0.7%      0.23s  1.80%  github.com/quickfixgo/quickfix.validateWalkWithTagSet
+         0     0%   0.7%      0.21s  1.64%  github.com/quickfixgo/quickfix.validateRequired
+     0.01s 0.078%  0.78%      0.16s  1.25%  github.com/quickfixgo/quickfix.validateRequiredFieldMap
+     0.12s  0.94%  1.72%      0.16s  1.25%  runtime.mapaccess2_fast64
+     0.07s  0.55%  2.27%      0.14s  1.10%  github.com/quickfixgo/quickfix.validFieldValue
+     0.01s 0.078%  2.35%      0.09s   0.7%  github.com/quickfixgo/quickfix.getFieldType (inline)
+     0.08s  0.63%  2.98%      0.08s  0.63%  github.com/quickfixgo/quickfix.(*validationTagSet).add
+     0.03s  0.23%  3.21%      0.08s  0.63%  github.com/quickfixgo/quickfix.FieldMap.Has
+     0.06s  0.47%  3.68%      0.06s  0.47%  github.com/quickfixgo/quickfix.Tag.IsHeader (inline)
+     0.02s  0.16%  3.84%      0.06s  0.47%  github.com/quickfixgo/quickfix.validEnumValues
+     0.03s  0.23%  4.07%      0.06s  0.47%  runtime.mapaccess2_faststr
+     0.05s  0.39%  4.46%      0.05s  0.39%  github.com/quickfixgo/quickfix.(*fixedFieldMap).find
+     0.03s  0.23%  4.70%      0.05s  0.39%  github.com/quickfixgo/quickfix.(*validationRequiredMetadata).allPresent
+     0.04s  0.31%  5.01%      0.05s  0.39%  runtime.mapiternext
+         0     0%  5.01%      0.04s  0.31%  github.com/quickfixgo/quickfix.(*FIXUTCTimestamp).Read
+         0     0%  5.01%      0.04s  0.31%  github.com/quickfixgo/quickfix.(*FieldMap).lookup
+         0     0%  5.01%      0.04s  0.31%  github.com/quickfixgo/quickfix.(*fixedFieldMap).lookup (inline)
+         0     0%  5.01%      0.04s  0.31%  github.com/quickfixgo/quickfix.readCanonicalUTCTimestamp
+     0.02s  0.16%  5.17%      0.04s  0.31%  runtime.mapaccess1_faststr
+     0.04s  0.31%  5.48%      0.04s  0.31%  runtime.memhash64
+     0.02s  0.16%  5.64%      0.02s  0.16%  aeshashbody
+     0.02s  0.16%  5.79%      0.02s  0.16%  github.com/quickfixgo/quickfix.timestampTwoDigits (inline)
+     0.02s  0.16%  5.95%      0.02s  0.16%  github.com/quickfixgo/quickfix.validFloatValue
+     0.02s  0.16%  6.11%      0.02s  0.16%  github.com/quickfixgo/quickfix.validateFieldContent
+         0     0%  6.11%      0.02s  0.16%  github.com/quickfixgo/quickfix.validateMsgType (inline)
+     0.02s  0.16%  6.26%      0.02s  0.16%  github.com/quickfixgo/quickfix.validateVisitField
+     0.01s 0.078%  6.34%      0.02s  0.16%  runtime.mapiterinit
+     0.02s  0.16%  6.50%      0.02s  0.16%  runtime.memequal
+     0.01s 0.078%  6.58%      0.02s  0.16%  time.Date
+     0.01s 0.078%  6.66%      0.01s 0.078%  github.com/quickfixgo/quickfix.(*FieldMap).runlock
+     0.01s 0.078%  6.73%      0.01s 0.078%  github.com/quickfixgo/quickfix.validationDigits (inline)
+         0     0%  6.73%      0.01s 0.078%  github.com/quickfixgo/quickfix.validationHasRequiredTags
+     0.01s 0.078%  6.81%      0.01s 0.078%  internal/chacha8rand.(*State).Refill
+     0.01s 0.078%  6.89%      0.01s 0.078%  runtime.(*bmap).overflow (inline)
+         0     0%  6.89%      0.01s 0.078%  runtime.rand
+     0.01s 0.078%  6.97%      0.01s 0.078%  runtime.strhash
+     0.01s 0.078%  7.05%      0.01s 0.078%  time.(*Location).get
+         0     0%  7.05%      0.01s 0.078%  time.(*Location).lookup

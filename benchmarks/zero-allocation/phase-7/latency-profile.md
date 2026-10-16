@@ -62,21 +62,34 @@ return. This removes the extra ACK from the direct latency interval without
 removing the completion proof. All ten candidate rows report zero allocations,
 but the matched comparison does not demonstrate a latency improvement.
 
-Source review of the corrected runtime identifies two bounded follow-up
-experiments; neither is implemented or claimed as a speedup here. First,
-`messageArena.scalarFits` finds the record and calculates lengths that
-`setScalar` immediately calculates again. Byte setters also preflight before
-alias staging and then repeat preflight. Carrying one locally checked record
-index and lengths into mutation could remove repeated lookup without persistent
-caching. All capacity checks must remain before staging/mutation; overlap,
-group replacement, exact-fit/one-over, sticky errors and section replacement
-fixtures must remain intact.
+The [scalar-preparation experiment](scalar-preparation/README.md) was rejected:
+its setter microbenchmark improved, but completed NewOrderSingle sends did not,
+and grouped sends became slower. Its runtime changes were reverted.
 
-Second, outbound replay admission currently resets its private parse slot
-before and after parsing; previous admission and resend completion already
-reset it, and Parse restores its representation. Removing only the preceding
-reset is a candidate after auditing every exit and alternating malformed,
-oversized, decreasing-field and nested-group cases. Full replay-capacity parsing
-and the following reset must remain before commit. Both changes require new
-controlled before/after component and complete-path measurements. Skipping
-validation or assuming a globally valid encoded-length cache is not justified.
+Fresh [Linux Go 1.23 profiles](linux-latency-profile/README.md) at `a2fb11b9`
+identify outbound replay-capacity parsing, encoding and header construction as
+measurable preparation costs. They include peer/setup work and do not provide a
+wall-time decomposition or establish a minimum achievable latency.
+
+The [replay-index experiment](replay-capacity/README.md) suppressed unused index
+construction during private journal admission while preserving the same parser
+and limits. Differential correctness checks passed, and completed outbound
+components were 3.4–4.6% faster. Direct TCP p50 medians for BEFORE → candidate →
+unchanged BEFORE were 6875 → 6875 → 6833 ns for ordinary messages and
+7708 → 7584 → 7459 ns for groups. The unchanged control improved more than the
+candidate's apparent group gain. No stable direct improvement was established;
+the runtime change and active experimental tests were reverted. Exact source,
+tests and raw measurements remain archived with the decision.
+
+The separate [cached-length experiment](cached-length/README.md) uses the
+construction arena's existing length accounting only for its original intact
+owner. Explicit resend bodies, copied messages and replaced sections retain the
+field walk. Its correctness and performance evidence is recorded separately;
+the retained runtime is `8033f27d5f154fd0f0ec69dd1ed5facbfff38cae`. Completed
+outbound medians improve 2.3–5.0% versus the first control, and full TCP
+32-request batch medians improve 1.5–2.5% (2.3–2.7% versus the final unchanged
+control). Direct ordinary p50 medians remain 6833 → 6833 → 6916 ns, with no
+demonstrated individual latency improvement. All seven exact allocation
+intervals, Go 1.23 package checks (the existing Mongo teardown exclusion), vet
+and the separate full core race run pass. The one-microsecond target remains
+unmet; these measurements do not establish a performance floor.

@@ -7,12 +7,18 @@ session storage is configured by default. The complete limits, ownership,
 lifetime and exhaustion contract is in
 [ZERO_ALLOCATION.md](../../../ZERO_ALLOCATION.md).
 
-Current production runtime is `a2fb11b923d1e0143a60427cf38ba2854cc142f6`.
-Commit `01c466c0ea0dd27f3f891306c9b33b0700492f5c` adds only the direct latency
-fixture and its evidence. Current exact allocation checks pass all seven warmed
+Current production runtime is `8033f27d5f154fd0f0ec69dd1ed5facbfff38cae`.
+The [cached-length change](cached-length/README.md) removes redundant outbound
+length scans for intact caller-owned construction arenas. Completed outbound
+component medians improve 2.3–5.0% and full TCP 32-request batch medians improve
+1.5–2.5% versus the first control on the shared Linux VM; a final unchanged-binary
+control supports those descriptive gains. Direct individual latency did not
+improve. Current exact allocation checks pass all seven warmed
 TCP scenarios, 100 completed cycles each, with zero additional objects and
 bytes. Fresh Go 1.23 package tests, vet and the complete core race run also pass.
-The directly observed final-read-to-write p50 is about 9–10 microseconds.
+The current Linux candidate's ordinary direct p50 ranges from 6.708 to 6.917
+microseconds across five runs. Older platform measurements remain below with
+their original source identities.
 
 **Not ready to merge:** the sub-microsecond target is unmet. All 35 refreshed
 full TCP AFTER samples report zero bytes and allocations; the mandatory baseline
@@ -22,14 +28,36 @@ bytes are +0.369% steady / −0.522% burst versus the matched baseline, one run
 each. Those runs still allocate and do not establish statistical improvement or
 a zero-allocation integration result.
 
-## Current qualification
+## Current qualification at `8033f27d`
+
+The [complete latest evidence](cached-length/README.md) includes unchanged-source
+A–B–A controls, frozen executable/source/fixture identities and all raw samples.
+
+| Check | Result |
+|---|---|
+| All seven exact TCP allocation intervals | PASS, 100 cycles each, zero `Mallocs` and `TotalAlloc` deltas; [log](cached-length/exact-go1.23.12.txt), 10.427 s |
+| Go 1.23 all-package tests | PASS, core 26.742 s; [log](cached-length/tests-go1.23.12.txt). Only the existing optional `TestMongoLogTestSuite` is excluded |
+| New cached-length boundary/aliasing fixtures | PASS; [log](cached-length/focused-cached-go1.23.12.txt), 0.546 s |
+| Go 1.23 vet | PASS; [empty successful output](cached-length/vet-go1.23.12.txt) |
+| Separate Go 1.23 complete core race run | PASS; [log](cached-length/race-go1.23.12.txt), 29.742 s |
+| Completed outbound components | All 45 before/candidate/control rows 0/0; candidate median reduction 2.3–5.0% versus first control |
+| Full TCP ordinary/group batches | All 30 before/candidate/control rows 0/0; candidate medians 297404/332882 ns per 32 requests |
+| Direct final-read-to-completed-write | All 30 before/candidate/control rows 0/0; ordinary p50 medians 6833/6833/6916 ns. No demonstrated gain |
+| Mandatory allocation baseline | PASS, all 50 candidate rows retain baseline allocation categories. Legacy group parsing remains 3 B/op and 0 reported allocs/op |
+
+The runtime change preserves the existing length walk for explicit resend
+bodies, copies and replaced sections. Exact-size and one-byte-short destination
+fixtures check atomic failure, BodyLength digit boundaries, nested groups,
+all-section mutation, aliasing and byte-for-byte wire parity.
+
+## Prior full qualification at `a2fb11b9`
 
 The host is Apple M4 Pro, darwin/arm64. Toolchains and exact source/harness hashes
 are recorded with each capture. Historical `0572f01b` results below retain their
 original runtime and rejection/retry semantics; they do not substitute for
 current qualification.
 
-| Check at current runtime | Result and evidence |
+| Check at `a2fb11b9` | Result and evidence |
 |---|---|
 | All seven exact TCP allocation intervals | PASS, 100 cycles each, zero `Mallocs` and `TotalAlloc` deltas; [Go 1.23 log](cold-scalars/full-session-exact-go1.23.12.txt), 9.709 s |
 | Go 1.23 all-package tests | PASS, core 26.441 s; [log](final-qualification/tests-go1.23.12.txt). Only the existing optional `TestMongoLogTestSuite` is excluded |
@@ -195,7 +223,7 @@ still occur. The historical `0572f01b` slow-consumer fixture used that behavior
 and retried a rejected business ID; the corrected fixture requires all 34
 responses without retry.
 
-## Current direct latency at `a2fb11b9`
+## Prior macOS direct latency at `a2fb11b9`
 
 The [new direct fixture](read-to-write/README.md) uses `Message.ReceiveTime`,
 stamped immediately after the final socket read returns. The interval includes

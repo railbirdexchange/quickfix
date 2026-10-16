@@ -1,0 +1,136 @@
+diff --git a/message.go b/message.go
+index 7681b483..79c3c225 100644
+--- a/message.go
++++ b/message.go
+@@ -42,6 +42,16 @@ type msgParser struct {
+ 	limits                  *ParseLimits
+ 	declaredGroupEntries    int
+ 	actualGroupEntries      int
++	capacityOnly            bool
++}
++
++// Replay admission consumes only parse errors and capacity checks. The same
++// parser still extracts every field and walks dictionary groups, but it need
++// not construct lookup indexes for a message that is never exposed.
++func (mp *msgParser) addParsedField(section *FieldMap, values field) {
++	if !mp.capacityOnly {
++		section.add(values)
++	}
+ }
+ 
+ // in the message header, the first 3 tags in the message header must be 8,9,35.
+@@ -283,7 +293,7 @@ func doParsing(mp *msgParser) (err error) {
+ 	if mp.rawBytes, err = extractSpecificField(&mp.msg.fields[mp.fieldIndex], tagBeginString, mp.rawBytes); err != nil {
+ 		return
+ 	}
+-	mp.msg.Header.add(mp.msg.fields[mp.fieldIndex : mp.fieldIndex+1])
++	mp.addParsedField(&mp.msg.Header.FieldMap, mp.msg.fields[mp.fieldIndex:mp.fieldIndex+1])
+ 
+ 	// Get body length.
+ 	mp.fieldIndex++
+@@ -291,7 +301,7 @@ func doParsing(mp *msgParser) (err error) {
+ 	if mp.rawBytes, err = extractSpecificField(mp.parsedFieldBytes, tagBodyLength, mp.rawBytes); err != nil {
+ 		return
+ 	}
+-	mp.msg.Header.add(mp.msg.fields[mp.fieldIndex : mp.fieldIndex+1])
++	mp.addParsedField(&mp.msg.Header.FieldMap, mp.msg.fields[mp.fieldIndex:mp.fieldIndex+1])
+ 
+ 	// Get msg type.
+ 	mp.fieldIndex++
+@@ -299,7 +309,7 @@ func doParsing(mp *msgParser) (err error) {
+ 	if mp.rawBytes, err = extractSpecificField(mp.parsedFieldBytes, tagMsgType, mp.rawBytes); err != nil {
+ 		return
+ 	}
+-	mp.msg.Header.add(mp.msg.fields[mp.fieldIndex : mp.fieldIndex+1])
++	mp.addParsedField(&mp.msg.Header.FieldMap, mp.msg.fields[mp.fieldIndex:mp.fieldIndex+1])
+ 
+ 	// Start parsing.
+ 	dictionary := mp.appDataDictionary
+@@ -343,7 +353,7 @@ func doParsing(mp *msgParser) (err error) {
+ 					return err
+ 				}
+ 			} else {
+-				mp.msg.Header.add(mp.msg.fields[mp.fieldIndex : mp.fieldIndex+1])
++				mp.addParsedField(&mp.msg.Header.FieldMap, mp.msg.fields[mp.fieldIndex:mp.fieldIndex+1])
+ 			}
+ 		case isTrailerField(mp.parsedFieldBytes.tag, mp.transportDataDictionary):
+ 			if group := mp.sectionGroup(mp.parsedFieldBytes.tag, false); group != nil {
+@@ -351,7 +361,7 @@ func doParsing(mp *msgParser) (err error) {
+ 					return err
+ 				}
+ 			} else {
+-				mp.msg.Trailer.add(mp.msg.fields[mp.fieldIndex : mp.fieldIndex+1])
++				mp.addParsedField(&mp.msg.Trailer.FieldMap, mp.msg.fields[mp.fieldIndex:mp.fieldIndex+1])
+ 			}
+ 			mp.foundTrailer = true
+ 		default:
+@@ -362,7 +372,7 @@ func doParsing(mp *msgParser) (err error) {
+ 			} else {
+ 				mp.foundBody = true
+ 				mp.trailerBytes = mp.rawBytes
+-				mp.msg.Body.add(mp.msg.fields[mp.fieldIndex : mp.fieldIndex+1])
++				mp.addParsedField(&mp.msg.Body.FieldMap, mp.msg.fields[mp.fieldIndex:mp.fieldIndex+1])
+ 			}
+ 		}
+ 		if mp.parsedFieldBytes.tag == tagCheckSum {
+@@ -486,7 +496,7 @@ func parseGroup(mp *msgParser, definition *datadictionary.FieldDef, section *Fie
+ 			continue
+ 		}
+ 
+-		section.add(mp.msg.fields[start:mp.fieldIndex])
++		mp.addParsedField(section, mp.msg.fields[start:mp.fieldIndex])
+ 		if !bodyGroup || mp.limits != nil {
+ 			// The normal loop classifies the first field outside this header or
+ 			// trailer group. Rewind that field without moving/copying its bytes.
+diff --git a/message_slot.go b/message_slot.go
+index 0a1585a9..0ad21a71 100644
+--- a/message_slot.go
++++ b/message_slot.go
+@@ -114,6 +114,17 @@ func (slot *MessageSlot) restoreScopedFields() {
+ // error Message returns nil; no session sequence or store state is changed.
+ // Parsing and subsequent dictionary validation are separate operations.
+ func (slot *MessageSlot) Parse(frame []byte) error {
++	return slot.parse(frame, false)
++}
++
++// checkReplayCapacity is private to outbound journal admission. It runs the
++// same parser and limits without building unused field indexes. No Message is
++// exposed; the caller must Reset after the check to release frame references.
++func (slot *MessageSlot) checkReplayCapacity(frame []byte) error {
++	return slot.parse(frame, true)
++}
++
++func (slot *MessageSlot) parse(frame []byte, capacityOnly bool) error {
+ 	slot.valid = false
+ 	slot.restoreScopedFields()
+ 	if len(frame) > slot.limits.MaxFrameBytes {
+@@ -127,6 +138,7 @@ func (slot *MessageSlot) Parse(frame []byte) error {
+ 		appDataDictionary:       slot.appDictionary,
+ 		rawBytes:                frame,
+ 		limits:                  &slot.limits,
++		capacityOnly:            capacityOnly,
+ 	}
+ 	err := doParsing(&parser)
+ 	// A group can extract one boundary field and rewind before an error. Include
+@@ -136,7 +148,7 @@ func (slot *MessageSlot) Parse(frame []byte) error {
+ 	if err != nil {
+ 		return err
+ 	}
+-	slot.valid = true
++	slot.valid = !capacityOnly
+ 	return nil
+ }
+ 
+diff --git a/scoped_outbound_session.go b/scoped_outbound_session.go
+index e1a2e9e2..24f48545 100644
+--- a/scoped_outbound_session.go
++++ b/scoped_outbound_session.go
+@@ -228,7 +228,7 @@ func (s *session) prepareOutbound(message, inReplyTo *Message, replacement bool)
+ 		// well as its byte slot. This is capacity admission, not new outgoing
+ 		// dictionary validation: legacy semantic parse errors are unchanged.
+ 		ring.replay.Reset()
+-		parseError := ring.replay.Parse(slot.wire)
++		parseError := ring.replay.checkReplayCapacity(slot.wire)
+ 		ring.replay.Reset()
+ 		if isInboundCapacityError(parseError) {
+ 			s.finishPreparedSendStage("build_message", messageType, started, false)

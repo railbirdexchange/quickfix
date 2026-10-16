@@ -9,15 +9,18 @@ or send API is required.
 The measured target is the warmed, bounded path from a TCP frame through
 dictionary/group parsing, validation, ordinary application handling, encoding,
 resend-journal commit, completed write and output-slot return. Source remains
-compatible with Go 1.23. At current runtime `a2fb11b9`, exact Go 1.23 checks of
+compatible with Go 1.23. At current runtime `8033f27d`, exact Go 1.23 checks of
 seven warmed TCP scenarios each completed 100 cycles with zero allocated objects
 and zero allocated bytes. This includes connected-send backpressure and the
 corrected slow-consumer lifecycle. Focused correctness and race checks pass;
 the fresh Go 1.23 all-package suite, vet and complete core race run also pass.
 Only the previously reproduced optional Mongo logger teardown suite is excluded.
-All 35 refreshed full TCP samples report 0 B/op and 0 allocs/op; the mandatory
-baseline capture passes with its allocation rows preserved.
-The final `a2fb11b9` revision passes unchanged fix-server steady and burst
+The prior `a2fb11b9` full seven-flow throughput capture reports 0 B/op and
+0 allocs/op in all 35 samples. Current exact checks cover all seven flows;
+current ordinary/group batch and direct captures report 0/0 in all samples.
+The mandatory baseline capture passes with its allocation rows preserved,
+including 3 B/op and 0 reported allocs/op for legacy convenience group parsing.
+The prior `a2fb11b9` revision passes unchanged fix-server steady and burst
 delivery, audit, ordering and recovery assertions. Those whole-process runs
 still allocate: +0.369% steady / −0.522% burst versus the matched baseline, one
 run each. These small differences do not establish statistical improvement.
@@ -27,6 +30,11 @@ An additional unchanged-runtime [Linux VM measurement](benchmarks/zero-allocatio
 reports ordinary p50 6.333–6.500 µs and p99 10.834–11.500 µs; all ten ordinary/group
 benchmark rows report 0/0. This shared QEMU ARM64 development VM is a separate
 measurement, not a controlled platform comparison or production latency result.
+The [current cached-length qualification](benchmarks/zero-allocation/phase-7/cached-length/README.md)
+retains a small completed-batch gain: 1.5–2.5% versus its first unchanged-source
+control, with a final control supporting the result. Direct ordinary p50 medians
+are 6.833 → 6.833 → 6.916 µs across before/candidate/before. This demonstrates no
+individual latency improvement and does not establish a performance floor.
 Legacy callback lifetime compatibility is also unresolved: saving an incoming
 `*Message` for later use previously kept its contents alive; the candidate
 recycles it. The [callback audit](benchmarks/zero-allocation/phase-7/callback-lifetime-audit.md)
@@ -266,8 +274,8 @@ setup-allocated channels and a reused timer; no goroutine is created per cycle.
 Owner-copied snapshots establish unchanged committed state before preparation,
 and the writer-failure case checks that a blocked send fails without committing.
 The [backpressure regression checks](benchmarks/zero-allocation/phase-7/backpressure/)
-and current [seven exact allocation intervals](benchmarks/zero-allocation/phase-7/cold-scalars/full-session-exact-go1.23.12.txt)
-cover those semantics. Fresh [final qualification](benchmarks/zero-allocation/phase-7/final-qualification/)
+and current [seven exact allocation intervals](benchmarks/zero-allocation/phase-7/cached-length/exact-go1.23.12.txt)
+cover those semantics. Fresh [cached-length qualification](benchmarks/zero-allocation/phase-7/cached-length/)
 records the full Go 1.23 package, vet and core race passes separately from
 performance captures.
 
