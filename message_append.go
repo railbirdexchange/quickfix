@@ -34,6 +34,9 @@ func (message *Message) AppendWithBodyBytesTo(dst, bodyBytes []byte) ([]byte, er
 }
 
 func (message *Message) appendTo(dst, bodyBytes []byte, useBodyBytes bool) ([]byte, error) {
+	if err := message.constructionError(); err != nil {
+		return dst, err
+	}
 	// Reserve the minimum 9=0<SOH> and 10=000<SOH> first, then count
 	// against the remaining capacity. Never sum unchecked wire lengths:
 	// repeated tag indexes can describe more bytes than fit in an int.
