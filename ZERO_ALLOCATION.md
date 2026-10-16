@@ -23,6 +23,11 @@ still allocate: +0.369% steady / −0.522% burst versus the matched baseline, on
 run each. These small differences do not establish statistical improvement.
 Allocation and latency are separate qualifications: the sub-microsecond
 target remains unmet even at the directly measured final-read-to-write boundary.
+Legacy callback lifetime compatibility is also unresolved: saving an incoming
+`*Message` for later use previously kept its contents alive; the candidate
+recycles it. The [callback audit](benchmarks/zero-allocation/phase-7/callback-lifetime-audit.md)
+records the exact affected boundaries. Unchanged signatures and explicit copy
+helpers do not preserve that existing behavior automatically.
 This work is not ready to merge. The current
 [phase-7 evidence](benchmarks/zero-allocation/phase-7/README.md) identifies the
 source, measurements and checks that are final versus diagnostic.
@@ -89,6 +94,9 @@ Changing an already attached caller message to a destination with different
 frame/field limits returns an error rather than silently resizing its arena.
 
 ## Scopes and callback lifetimes
+
+The following describes the candidate's changed lifetime contract. It is not
+evidence that legacy applications retaining callback pointers remain compatible.
 
 Each mutable message, frame, output slot and journal entry has one owner.
 Callbacks retain their existing signatures and run synchronously in their

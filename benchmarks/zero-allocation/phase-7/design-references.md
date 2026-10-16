@@ -29,6 +29,12 @@ until an explicit retention acknowledgement. Callback capture, interface
 dispatch, custom field writers and section replacement are tested at those
 ownership boundaries.
 
+The [callback lifetime audit](callback-lifetime-audit.md) identifies an unresolved
+compatibility gap in the current implementation. Internal single ownership does
+not establish that an existing application stopped using a pointer when its
+callback returned. These references do not remove the need for an ownership
+signal or an owned boundary copy.
+
 Allocation and latency are separate acceptance checks. Exact whole-process
 allocation deltas cover warmed completed cycles; the individual-request latency
 fixture includes TCP, peer validation and the acknowledgement barrier proving

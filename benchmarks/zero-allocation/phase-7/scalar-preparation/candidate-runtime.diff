@@ -1,0 +1,68 @@
+diff --git a/message_arena.go b/message_arena.go
+index e2561aec..49266988 100644
+--- a/message_arena.go
++++ b/message_arena.go
+@@ -294,7 +294,8 @@ func (arena *messageArena) setBytes(fields *FieldMap, tag Tag, value []byte) {
+ 	// Check capacity before touching even the staging plane. Only arbitrary
+ 	// byte input needs alias classification; typed formatters use private stack
+ 	// bytes and never need pointer inspection.
+-	if !arena.scalarFits(fields, tag, len(value)) {
++	index, prefixLength, length, fits := arena.prepareScalar(fields, tag, len(value))
++	if !fits {
+ 		return
+ 	}
+ 	external, owned := value, false
+@@ -302,20 +303,28 @@ func (arena *messageArena) setBytes(fields *FieldMap, tag Tag, value []byte) {
+ 		copy(arena.staging, value)
+ 		value, external, owned = arena.staging[:len(value)], nil, true
+ 	}
+-	arena.setScalar(fields, tag, value, "", external, owned)
++	arena.setPreparedScalar(fields, tag, index, prefixLength, length, value, "", external, owned)
+ }
+ 
+ func (arena *messageArena) scalarFits(fields *FieldMap, tag Tag, valueLength int) bool {
++	_, _, _, fits := arena.prepareScalar(fields, tag, valueLength)
++	return fits
++}
++
++// Preparation is consumed within one setter call. Alias staging only copies
++// bytes; it cannot invalidate the checked record index or encoded lengths.
++func (arena *messageArena) prepareScalar(fields *FieldMap, tag Tag, valueLength int) (index, prefixLength, length int, fits bool) {
+ 	section := fields.arenaSection
+-	index := arena.find(section, tag)
+-	prefixLength := intTextLength(int(tag)) + 1
++	index = arena.find(section, tag)
++	prefixLength = intTextLength(int(tag)) + 1
+ 	if valueLength > len(arena.bytes)-prefixLength-1 {
+ 		if arena.errors[section] == nil {
+ 			arena.errors[section] = ErrFrameCapacity
+ 		}
+-		return false
++		return index, prefixLength, 0, false
+ 	}
+-	return arena.preflight(section, tag, index, prefixLength+valueLength+1, 1)
++	length = prefixLength + valueLength + 1
++	return index, prefixLength, length, arena.preflight(section, tag, index, length, 1)
+ }
+ 
+ func (arena *messageArena) setScalar(fields *FieldMap, tag Tag, value []byte, text string, external []byte, owned bool) {
+@@ -323,13 +332,15 @@ func (arena *messageArena) setScalar(fields *FieldMap, tag Tag, value []byte, te
+ 	if text != "" {
+ 		valueLength = len(text)
+ 	}
+-	if !arena.scalarFits(fields, tag, valueLength) {
++	index, prefixLength, length, fits := arena.prepareScalar(fields, tag, valueLength)
++	if !fits {
+ 		return
+ 	}
++	arena.setPreparedScalar(fields, tag, index, prefixLength, length, value, text, external, owned)
++}
++
++func (arena *messageArena) setPreparedScalar(fields *FieldMap, tag Tag, index, prefixLength, length int, value []byte, text string, external []byte, owned bool) {
+ 	section := fields.arenaSection
+-	index := arena.find(section, tag)
+-	prefixLength := intTextLength(int(tag)) + 1
+-	length := prefixLength + valueLength + 1
+ 	offset := arena.used
+ 	if index >= 0 {
+ 		offset = arena.records[index].offset

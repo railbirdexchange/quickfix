@@ -96,4 +96,8 @@ burst delivers 9,712.523 requests/s and 48,562.613 expanded FIX messages/s.
 [Integration PR 1362](https://github.com/railbirdexchange/draftkings-exchange/pull/1362)
 records exact binaries, dependency pins, broker isolation and cleanup. Existing
 Kafka `client closed` errors after burst audit assertions leave shutdown audit
-delivery unqualified. This remains draft work because the latency target is unmet.
+delivery unqualified. This remains draft work because the latency target is
+unmet and [legacy callback lifetime compatibility](../callback-lifetime-audit.md)
+is unresolved. These measurements use synchronous callbacks that do not retain
+incoming message/byte views; they do not qualify unchanged pointer-retaining
+applications.
