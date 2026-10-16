@@ -79,6 +79,13 @@ included. This is not network-arrival latency, and no overhead is subtracted.
 **The under-one-microsecond target remains unmet; no latency improvement is
 demonstrated.**
 
+An additional [Linux VM capture](../linux-read-to-write/README.md) uses the
+unchanged production runtime and Go 1.23.12: ordinary direct p50 6.333–6.500 µs,
+p99 10.834–11.500 µs; groups p50 7.083–7.334 µs, p99 11.792–13.250 µs. All ten
+benchmark rows report 0 B/op and 0 allocs/op. The shared QEMU ARM64 development VM
+also hosts other workloads. This is neither a controlled comparison with macOS
+nor a production latency qualification, and it also misses one microsecond.
+
 ```sh
 GOTOOLCHAIN=go1.23.12 rtk proxy go test ./... -skip '^TestMongoLogTestSuite$' -count=1 -timeout=5m
 GOTOOLCHAIN=go1.23.12 rtk proxy go vet ./...

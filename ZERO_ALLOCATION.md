@@ -23,6 +23,10 @@ still allocate: +0.369% steady / −0.522% burst versus the matched baseline, on
 run each. These small differences do not establish statistical improvement.
 Allocation and latency are separate qualifications: the sub-microsecond
 target remains unmet even at the directly measured final-read-to-write boundary.
+An additional unchanged-runtime [Linux VM measurement](benchmarks/zero-allocation/phase-7/linux-read-to-write/README.md)
+reports ordinary p50 6.333–6.500 µs and p99 10.834–11.500 µs; all ten ordinary/group
+benchmark rows report 0/0. This shared QEMU ARM64 development VM is a separate
+measurement, not a controlled platform comparison or production latency result.
 Legacy callback lifetime compatibility is also unresolved: saving an incoming
 `*Message` for later use previously kept its contents alive; the candidate
 recycles it. The [callback audit](benchmarks/zero-allocation/phase-7/callback-lifetime-audit.md)
