@@ -1,0 +1,15 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+cpu: Apple M4 Pro
+BenchmarkHeartbeatStore/idle_heartbeat/bounded         	       1	      3292 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHeartbeatStore/idle_heartbeat/legacy_external 	       1	      3125 ns/op	      80 B/op	       1 allocs/op
+BenchmarkHeartbeatStore/idle_heartbeat/borrowed_external         	       1	      4250 ns/op	      80 B/op	       1 allocs/op
+BenchmarkHeartbeatStore/timer_heartbeat/bounded                  	       1	      4834 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHeartbeatStore/timer_heartbeat/legacy_external          	       1	      5375 ns/op	      80 B/op	       1 allocs/op
+BenchmarkHeartbeatStore/timer_heartbeat/borrowed_external        	       1	      4125 ns/op	      80 B/op	       1 allocs/op
+BenchmarkHeartbeatStore/test_request/bounded                     	       1	      3709 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHeartbeatStore/test_request/legacy_external             	       1	      3417 ns/op	      80 B/op	       1 allocs/op
+BenchmarkHeartbeatStore/test_request/borrowed_external           	       1	      3041 ns/op	      80 B/op	       1 allocs/op
+PASS
+ok  	github.com/quickfixgo/quickfix	0.621s

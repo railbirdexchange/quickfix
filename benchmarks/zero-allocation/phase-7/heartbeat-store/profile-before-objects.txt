@@ -1,0 +1,16 @@
+File: quickfix-before.test
+Type: alloc_objects
+Time: 2026-10-17 18:44:28 EDT
+Active filters:
+   focus=prepareOutbound
+Showing nodes accounting for 100133, 60.79% of 164718 total
+Dropped 1 node (cum <= 823)
+      flat  flat%   sum%        cum   cum%
+    100133 60.79% 60.79%     100133 60.79%  bytes.Clone (inline)
+         0     0% 60.79%     100133 60.79%  github.com/quickfixgo/quickfix.(*heartbeatStoreFixture).process
+         0     0% 60.79%     100133 60.79%  github.com/quickfixgo/quickfix.(*session).prepareOutbound
+         0     0% 60.79%     100133 60.79%  github.com/quickfixgo/quickfix.(*session).sendHeartbeat
+         0     0% 60.79%     100133 60.79%  github.com/quickfixgo/quickfix.(*session).sendInReplyTo
+         0     0% 60.79%     100133 60.79%  github.com/quickfixgo/quickfix.BenchmarkHeartbeatStore.func1
+         0     0% 60.79%     100066 60.75%  testing.(*B).launch
+         0     0% 60.79%     100133 60.79%  testing.(*B).runN

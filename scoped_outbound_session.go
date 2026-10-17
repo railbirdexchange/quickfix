@@ -3,14 +3,15 @@ package quickfix
 import (
 	"bytes"
 	"io"
+	"reflect"
 	"time"
 
 	"github.com/quickfixgo/quickfix/config"
 )
 
 // preparedMessageStore explicitly accepts borrowed bytes and reserves journal
-// capacity without changing committed state. Other MessageStore implementations
-// receive an owned copy through their unchanged public interface.
+// capacity without changing committed state. Other stores use their public
+// persistence method, with owned bytes unless they accept BorrowedMessageStore.
 type preparedMessageStore interface {
 	preparedStoreOwner() MessageStore
 	reserve(int) (int, error)
@@ -53,6 +54,14 @@ func (s *session) configureOutbound(settings *SessionSettings) error {
 		// continue through its public persistence and reset overrides; only
 		// the actual capability owner may accept direct prepared commits.
 		ring.journal = journal
+	}
+	if store, ok := s.store.(BorrowedMessageStore); ok && reflect.ValueOf(s.store).Comparable() {
+		owner := store.BorrowedStoreOwner()
+		if reflect.ValueOf(owner).Comparable() && owner == s.store {
+			// Select once during setup. As with prepared commits, a promoted
+			// capability must not bypass a decorator's persistence overrides.
+			ring.borrowedStore = store
+		}
 	}
 	ring.log, _ = s.log.(BorrowedLog)
 	if err := s.controls.init(s, s.boundedIn.limits); err != nil {
@@ -263,6 +272,8 @@ func (s *session) prepareOutbound(message, inReplyTo *Message, replacement bool)
 		if err == nil {
 			if s.DisableMessagePersist {
 				err = s.store.IncrNextSenderMsgSeqNum()
+			} else if ring.borrowedStore != nil {
+				err = ring.borrowedStore.SaveMessageAndIncrNextSenderMsgSeqNumBorrowed(sequence, slot.wire)
 			} else {
 				err = s.store.SaveMessageAndIncrNextSenderMsgSeqNum(sequence, bytes.Clone(slot.wire))
 			}

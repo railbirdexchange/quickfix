@@ -37,6 +37,7 @@ type outboundRing struct {
 	head                  int
 	count                 int
 	journal               preparedMessageStore
+	borrowedStore         BorrowedMessageStore
 	log                   BorrowedLog
 	replay                *MessageSlot
 	writeTimeout          time.Duration

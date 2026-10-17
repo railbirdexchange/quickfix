@@ -289,10 +289,25 @@ pending for the established lifecycle retry path.
 
 `BoundedStore` is an explicitly selected, in-memory resend journal. It preserves
 process-local sequence/history across reconnects; it provides no crash
-durability. The engine does not replace a configured persistent store. Other
+durability. The engine does not replace a configured persistent store. Ordinary
 `MessageStore` implementations retain their public callbacks and receive owned
-copies; those copies and the store's own work are outside the zero-allocation
-contract. An unbounded `MemoryStore` is also outside this contract.
+copies. A store implementing `BorrowedMessageStore` can instead consume the
+encoded slot synchronously without that extra engine copy. It must not mutate
+the bytes or retain them past return, including an error return; asynchronous
+retention must make its own copy before returning. Sequence advancement,
+persistence, reset and error semantics remain the store's existing contract.
+The session selects this capability once at setup. Its comparable
+`BorrowedStoreOwner` must equal the configured store, so an embedding decorator
+keeps owned delivery unless it explicitly implements the borrowed contract.
+This capability supplies no bounded retention or journal reservation by itself.
+The store's own allocations remain outside the engine's zero-allocation claim;
+an unbounded `MemoryStore` also remains outside this contract.
+
+The [heartbeat store measurements](benchmarks/zero-allocation/phase-7/heartbeat-store/README.md)
+cover generated Heartbeat, the reused timer and session-event dispatch, and
+generated TestRequest with persistence, callbacks, completed writes and returned
+output slots. These are fixed-buffer writer component measurements, separate
+from TCP latency and the allocation cost inside a production store or callback.
 
 Only an independently acknowledged recovery boundary permits owner-controlled
 `BoundedStore.RetireBefore`. Socket write completion alone is insufficient. The
