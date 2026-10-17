@@ -102,6 +102,26 @@ measured 440,840 B and 54 allocations with the default arena versus 1,688 B and
 not a per-request result or an exact memory formula for every message shape.
 Reusing many caller messages multiplies that storage.
 
+`FieldMap.SetGroupValues` replaces a dynamic outgoing group from an ordered
+`[]GroupField` without constructing `RepeatingGroup`, `Group`, template or field
+writer objects. The attached arena reserves one additional `BoundedMaxFields`
+slab of `TagValue` metadata at setup. All group counts and values consume the
+existing total field/frame budgets; replacing, removing or clearing a group
+reclaims its metadata. Input byte slices and strings are copied synchronously,
+including values borrowed from the same arena. The caller supplies dictionary
+order, delimiters and group counts, including flattened nested groups; the
+setter never reparses raw FIX bytes to discover their boundaries.
+
+Scalar setters, the legacy `SetGroup`, shallow-copy detachment and owned
+`GetGroup` snapshots retain their existing behavior. A capacity failure leaves
+the previously constructed fields intact and latches an error until that
+section is cleared. The new setter returns that error directly; send and append
+also observe it before consuming sequence or store state. Standalone use remains
+an allocating owned-storage convenience path. The focused lifecycle fixture
+checks warmed group construction, replacement, removal, clear and append at
+zero allocations; [construction evidence](benchmarks/zero-allocation/phase-7/outbound-groups/README.md)
+keeps these component measurements separate from completed session writes.
+
 The [first-send correction](benchmarks/zero-allocation/phase-7/first-send/README.md)
 removes the large scratch allocation on fresh sends and repeated arena
 attachment after convenience reparsing. Historical
