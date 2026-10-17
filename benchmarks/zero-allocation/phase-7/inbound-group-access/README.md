@@ -42,13 +42,15 @@ Focused correctness covers message/slot access, current-section replacement,
 reset invalidation, ordinary unparsed messages, group parsing/validation and
 exact zero-allocation parse/access/reset. The existing owned GetGroup path is
 unchanged. [Focused tests](tests.txt) and [Go 1.23.12 checks](tests-go1.23.12.txt)
-passed. Performance and tests were serialized.
+passed. The separate focused race check also passed in 2.717 seconds
+([output](tests-race.txt)). Performance and tests were serialized.
 
 Commands, from the repository root:
 
 ```sh
 GOTOOLCHAIN=auto rtk proxy go test . -run '^$' -bench '^BenchmarkAllocationBaseline$' -benchmem -benchtime=1s -count=5 -cpu=1
 GOTOOLCHAIN=auto rtk proxy go test . -run '^(TestMessageBorrowGroup|TestMessageSlot|TestBorrowedGroup)' -count=1
+GOTOOLCHAIN=auto rtk proxy go test -race . -run '^(TestMessageBorrowGroup|TestMessageSlot|TestBorrowedGroup)' -count=1
 GOTOOLCHAIN=auto rtk proxy go test . -run '^$' -bench '^Benchmark(AllocationBaseline|CallbackGroupAccess)$' -benchmem -benchtime=1s -count=5 -cpu=1
 GOTOOLCHAIN=auto rtk proxy /Users/a.alamer/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.12.darwin-arm64/bin/go test . -run '^(TestMessageBorrowGroup|TestMessageSlot|TestBorrowedGroup|TestInboundCallback|TestOrdinaryInbound|TestBounded.*Allocation)' -count=1
 ```
