@@ -179,7 +179,7 @@ func TestBoundedConnectionSlowConsumerAndReconnect(t *testing.T) {
 	if len(inbound.ring.vacant) != 0 {
 		t.Fatal("reader exposed an extra vacant slot while consumer owns every slot")
 	}
-	s := &session{boundedIn: inbound}
+	s := &session{boundedIn: inbound, application: BorrowApplication(&scopedInboundBenchmarkApplication{})}
 	active, err := s.parseInboundSlot(first.slot)
 	if err != nil {
 		t.Fatal(err)
@@ -221,7 +221,7 @@ func TestScopedInboundReaderCancellationDoesNotResetActiveScratch(t *testing.T) 
 		[]byte(boundedHeartbeatFrame), time.Now())
 	message := boundedConnectionTestReceive(t, incoming)
 	boundedConnectionTestWait(t, observed.started, "reader owning another slot during a blocked read")
-	s := &session{boundedIn: inbound}
+	s := &session{boundedIn: inbound, application: BorrowApplication(&scopedInboundBenchmarkApplication{})}
 	active, err := s.parseInboundSlot(message.slot)
 	if err != nil {
 		t.Fatal(err)

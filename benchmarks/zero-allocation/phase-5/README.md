@@ -1,9 +1,15 @@
 # Phase 5: ordinary inbound frame ownership
 
+Current ownership and measurement correction:
+[callback-boundary evidence](callback-boundary/README.md). The historical zero
+rows below assumed callback-only lifetimes; ordinary callbacks now retain their
+legacy ownership, with separate measurements for explicit borrowing.
+
 Ordinary sessions now read into a fixed raw-frame ring and use one session-owned
 parse scratch. They dispatch the existing `Application.FromAdmin` and `FromApp`
-callbacks through a private session-owned validator. There is no mode flag or required new
-application interface. Storage belongs to one owner at a time; channels transfer
+callbacks through a private session-owned validator. There is no engine mode flag.
+Ordinary applications receive owned messages; `BorrowApplication` explicitly
+permits callback-scoped delivery without an ownership copy. Storage belongs to one owner at a time; channels transfer
 raw slots, and the session alone accesses parse scratch.
 
 ```mermaid
@@ -17,7 +23,13 @@ sequenceDiagram
     Reader->>Reader: Frame into fixed storage
     Reader->>Inbound: Transfer filled slot and receive time
     Inbound->>Session: Transfer slot
-    Session->>Session: Parse, validate, ordinary callback, final engine use
+    Session->>Session: Parse and enforce configured capacity
+    alt Ordinary Application
+        Session->>Session: Materialize owned message before dispatch
+    else BorrowApplication
+        Session->>Session: Borrow parsed scratch during callback
+    end
+    Session->>Session: Validate, callback, final engine use
     alt Sequence is ahead of target
         Session->>Stash: Retain raw frame and receive time
         Stash->>Session: Take missing sequence for replay
@@ -48,14 +60,20 @@ frame allowance is explicitly increased. It does not allocate 30,000 parse slabs
 For the 66-slot case the frame arena is 1.031 MiB, plus one parse slab and indexes;
 channel storage, dictionaries, reader buffers and other session state are additional.
 
-Incoming messages and byte views are scoped to synchronous callback processing.
-The original `*Message`, `GetBytes`, `Bytes`, and explicitly borrowed group views
-must not be retained after their scope or used concurrently with the session.
-Engine processing continues after callback return: reject construction and resend
-handling finish before the raw slot is released. A stashed message retains its raw
-frame until replay or discard. Arbitrary applications that previously retained the
-original message pointer or byte views must copy their retained data; this is a
-lifetime contract change, despite unchanged callback signatures.
+Ordinary `Application` callbacks retain the existing owned-message lifetime.
+Their `*Message`, shallow section copies, `GetBytes`, `Bytes` and group data are
+independent of subsequent ring reuse. The compatibility boundary materializes an
+owned raw frame and message before state dispatch; validation and subsequent
+protocol handling see the same message, including callback edits. This boundary
+allocates and is measured separately.
+
+`BorrowApplication(application)` explicitly declares synchronous use. Only that
+boundary delivers the existing parse scratch without a copy; its message and
+byte views must not be retained after the callback or used concurrently with the
+session. The parser, validator, queues, stash and reader are identical for both
+application contracts. Engine processing continues after callback return: reject
+construction and resend handling finish before the raw slot is released. A
+stashed message retains its raw frame until replay or discard.
 
 Owned string APIs (`GetString`, `FIXString`, `Message.String`) remain owned.
 `Message.CopyInto`, section `CopyInto`, and ordinary `GetGroup` from scoped input
@@ -123,23 +141,25 @@ outside the guarantee. Baseline latency is not claimed unchanged: validation ran
 774.0–792.2 ns before versus 832.2–857.1 ns after. These measurements do not establish
 the cause of that timing shift.
 
-The ordinary inbound [before measurement](scoped-session-before-go1.25.3.txt) and
+The historical inbound [before measurement](scoped-session-before-go1.25.3.txt) and
 [after measurement](scoped-session-after-go1.25.3.txt) use the exact same timed
-benchmark implementation. It creates an ordinary
-session with its normal application interface, null logger, dictionary validation,
+benchmark implementation. The old candidate incorrectly treated ordinary
+callbacks as borrowed; its zero rows below do not qualify owned delivery. It used
+the normal session engine, null logger, dictionary validation,
 latency checking, and memory-store target-sequence accounting. Each operation
 completes framing, inbound-channel transfer, parsing, dictionary/group traversal,
 validation, callback, target-sequence advancement, timer reset and slot return.
 All 66 raw slots are warmed before timing. The fixture is a deterministic in-memory
 connection, not TCP or a completed-write/full-session benchmark.
 
-| Ordinary inbound flow | Before ns/op | After ns/op | Before B/op | After B/op | Before allocs/op | After allocs/op |
+| Historical inbound flow (borrowed callback semantics) | Before ns/op | After ns/op | Before B/op | After B/op | Before allocs/op | After allocs/op |
 |---|---:|---:|---:|---:|---:|---:|
 | NewOrderSingle | 2,314–2,371 | 1,897–1,923 | 2,671 | 0 | 21 | 0 |
 | Repeating groups | 4,705–5,062 | 2,736–2,767 | 5,208 | 0 | 30 | 0 |
 
 Each range contains five one-second samples on one CPU. Every final sample reports
-zero allocations, also enforced by `TestScopedInboundSessionAllocations` after
+zero allocations. The corrected `TestScopedInboundSessionAllocations` explicitly
+uses `BorrowApplication` and verifies the same behavior after
 warm-up with completed callbacks, target-sequence advancement and all raw slots
 returned. The requested sub-microsecond processing target is not met.
 

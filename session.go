@@ -699,6 +699,11 @@ func (s *session) verifyMsgAgainstAppImpl(msg *Message) MessageRejectError {
 }
 
 func (s *session) fromCallback(msg *Message) MessageRejectError {
+	if !applicationBorrowsMessages(s.application) {
+		// Do not publish an engine slot reference with the owned message. The
+		// inbound dispatcher retains ownership until protocol handling finishes.
+		msg.inbound = nil
+	}
 	msgType, err := msg.Header.GetBytes(tagMsgType)
 	if err != nil {
 		return err
