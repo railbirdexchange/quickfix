@@ -143,8 +143,9 @@ func (m FieldMap) getFieldNoLock(tag Tag, parser FieldValueReader) MessageReject
 }
 
 // GetBytes is a zero-copy GetField wrapper for []bytes fields. Values from a
-// session callback expire when that callback returns; CopyInto detaches them.
-// Arena-owned outgoing values expire on the next mutation of the same Message.
+// MessageSlot or BorrowApplication callback follow that explicit borrowed
+// lifetime. Ordinary Application delivery retains its owned field bytes.
+// Borrowed outgoing arena values expire on mutation of the same Message.
 // Values supplied to SetBytes retain their external caller-owned alias.
 func (m FieldMap) GetBytes(tag Tag) ([]byte, MessageRejectError) {
 	m.rlock()

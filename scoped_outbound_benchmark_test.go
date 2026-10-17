@@ -67,12 +67,14 @@ type scopedOutboundBenchmark struct {
 	store       *BoundedStore
 	connection  *scopedOutboundBenchmarkConnection
 	peer        *MessageSlot
-	legacyOut   chan []byte
-	legacyDone  chan struct{}
 	floor       int
 }
 
 func newScopedOutboundBenchmark(test testing.TB, groups bool, messageType string) *scopedOutboundBenchmark {
+	return newScopedOutboundBenchmarkWithDelivery(test, groups, messageType, false)
+}
+
+func newScopedOutboundBenchmarkWithDelivery(test testing.TB, groups bool, messageType string, borrowed bool) *scopedOutboundBenchmark {
 	test.Helper()
 	wire, dictionary := boundedOwnershipFixture(test, groups)
 	message := NewMessage()
@@ -86,12 +88,16 @@ func newScopedOutboundBenchmark(test testing.TB, groups bool, messageType string
 	sender, _ := message.Header.GetString(tagSenderCompID)
 	target, _ := message.Header.GetString(tagTargetCompID)
 	application := &scopedOutboundBenchmarkApplication{message: message}
+	var deliveredApplication Application = application
+	if borrowed {
+		deliveredApplication = BorrowApplication(application)
+	}
 	settings := NewSessionSettings()
 	settings.Set(config.DataDictionary, "spec/FIX40.xml")
 	if groups {
 		settings.Set(config.DataDictionary, "spec/FIX44.xml")
 	}
-	current, err := (sessionFactory{}).newSession(SessionID{BeginString: beginString, SenderCompID: sender, TargetCompID: target, Qualifier: "ordinary-outbound-benchmark"}, NewBoundedStoreFactory(1024, 16384), settings, NewNullLogFactory(), application)
+	current, err := (sessionFactory{}).newSession(SessionID{BeginString: beginString, SenderCompID: sender, TargetCompID: target, Qualifier: "ordinary-outbound-benchmark"}, NewBoundedStoreFactory(1024, 16384), settings, NewNullLogFactory(), deliveredApplication)
 	if err != nil {
 		test.Fatal(err)
 	}
@@ -117,18 +123,8 @@ func newScopedOutboundBenchmark(test testing.TB, groups bool, messageType string
 			test.Fatal(err)
 		}
 	}
-	if current.outbound == nil {
-		fixture.legacyOut = make(chan []byte, 32)
-		fixture.legacyDone = make(chan struct{})
-		current.messageOut = fixture.legacyOut
-		go func() {
-			defer close(fixture.legacyDone)
-			writeLoopWithCompletion(fixture.connection, fixture.legacyOut, current.log, current.messageEvent)
-		}()
-	} else {
-		current.writeConnection = newOutboundWriter(fixture.connection, len(current.outbound.pending), time.Second, current.messageEvent)
-		go current.writeConnection.run()
-	}
+	current.writeConnection = newOutboundWriter(fixture.connection, len(current.outbound.pending), time.Second, current.messageEvent)
+	go current.writeConnection.run()
 	return fixture
 }
 
@@ -143,7 +139,7 @@ func (fixture *scopedOutboundBenchmark) process() error {
 	fixture.session.sendQueued(true)
 	fixture.session.sendMutex.Unlock()
 	<-fixture.session.messageEvent
-	if fixture.session.outbound != nil && len(fixture.session.outbound.vacant) != len(fixture.session.outbound.slots) {
+	if len(fixture.session.outbound.vacant) != len(fixture.session.outbound.slots) {
 		return ErrOutboundCapacity
 	}
 	if err := fixture.peer.Parse(fixture.connection.wire[:fixture.connection.used]); err != nil {
@@ -165,19 +161,14 @@ func (fixture *scopedOutboundBenchmark) process() error {
 }
 
 func (fixture *scopedOutboundBenchmark) close() {
-	if fixture.legacyOut != nil {
-		close(fixture.legacyOut)
-		<-fixture.legacyDone
-	} else {
-		_ = fixture.session.writeConnection.finish()
-	}
+	_ = fixture.session.writeConnection.finish()
 	fixture.session.peerTimer.Stop()
 	fixture.session.stateTimer.Stop()
 	_ = UnregisterSession(fixture.session.sessionID)
 }
 
 // BenchmarkScopedOutboundSession measures ordinary SendToTarget with a reused
-// caller-owned Message, normal ToApp callback, header preparation, persistence,
+// caller-owned Message, owned or explicitly borrowed ToApp delivery, header preparation, persistence,
 // encoding, completed copy to the peer, output-slot return, peer parsing, and
 // explicit journal retirement. It is a completed-write component benchmark,
 // not a network, inbound-session, or round-trip latency measurement.
@@ -190,26 +181,32 @@ func BenchmarkScopedOutboundSession(benchmark *testing.B) {
 		{name: "repeating_group", groups: true},
 		{name: "custom_message_type", messageType: "CUSTOM.APPLICATION.MESSAGE.TYPE"},
 	} {
-		benchmark.Run(scenario.name, func(benchmark *testing.B) {
-			fixture := newScopedOutboundBenchmark(benchmark, scenario.groups, scenario.messageType)
-			defer fixture.close()
-			// FIFO vacant-slot transfer visits all 33 default output slots twice.
-			for iteration := 0; iteration < 66; iteration++ {
-				if err := fixture.process(); err != nil {
-					benchmark.Fatal(err)
+		for _, borrowed := range []bool{false, true} {
+			delivery := "owned"
+			if borrowed {
+				delivery = "borrowed"
+			}
+			benchmark.Run(scenario.name+"/"+delivery, func(benchmark *testing.B) {
+				fixture := newScopedOutboundBenchmarkWithDelivery(benchmark, scenario.groups, scenario.messageType, borrowed)
+				defer fixture.close()
+				// FIFO vacant-slot transfer visits all 33 default output slots twice.
+				for iteration := 0; iteration < 66; iteration++ {
+					if err := fixture.process(); err != nil {
+						benchmark.Fatal(err)
+					}
 				}
-			}
-			benchmark.ReportAllocs()
-			benchmark.ResetTimer()
-			for iteration := 0; iteration < benchmark.N; iteration++ {
-				if err := fixture.process(); err != nil {
-					benchmark.Fatal(err)
+				benchmark.ReportAllocs()
+				benchmark.ResetTimer()
+				for iteration := 0; iteration < benchmark.N; iteration++ {
+					if err := fixture.process(); err != nil {
+						benchmark.Fatal(err)
+					}
 				}
-			}
-			benchmark.StopTimer()
-			if fixture.application.calls != benchmark.N+66 {
-				benchmark.Fatalf("callback count: got %d, want %d", fixture.application.calls, benchmark.N+66)
-			}
-		})
+				benchmark.StopTimer()
+				if fixture.application.calls != benchmark.N+66 {
+					benchmark.Fatalf("callback count: got %d, want %d", fixture.application.calls, benchmark.N+66)
+				}
+			})
+		}
 	}
 }

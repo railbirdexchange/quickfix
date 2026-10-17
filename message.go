@@ -129,6 +129,8 @@ type Message struct {
 	outboundFields *outboundFields
 	outboundOwner  *Message // Identifies a prior successful send of this exact representation.
 	arena          *messageArena
+	// Only the explicit borrowed application boundary may recycle scalar views.
+	outboundBorrowed bool
 }
 
 // ToMessage returns the message itself.

@@ -11,8 +11,8 @@ import (
 	"github.com/quickfixgo/quickfix/internal"
 )
 
-// This application implements only the ordinary Application interface. Its
-// callback reads the received message synchronously and retains no input views.
+// The same synchronous application exercises owned and explicitly borrowed
+// callback delivery. It retains no message or input byte views.
 type scopedInboundBenchmarkApplication struct {
 	calls int
 	value byte
@@ -89,6 +89,11 @@ func (*scopedInboundBenchmarkConnection) SetWriteDeadline(time.Time) error { ret
 
 func scopedInboundBenchmarkSetup(test testing.TB, groups bool, frames int) (*session, *scopedInboundBenchmarkApplication, <-chan fixIn, func()) {
 	test.Helper()
+	return scopedInboundBenchmarkSetupDelivery(test, groups, frames, true)
+}
+
+func scopedInboundBenchmarkSetupDelivery(test testing.TB, groups bool, frames int, borrowed bool) (*session, *scopedInboundBenchmarkApplication, <-chan fixIn, func()) {
+	test.Helper()
 	wire, dictionary := boundedOwnershipFixture(test, groups)
 	message := NewMessage()
 	if err := ParseMessageWithDataDictionary(message, bytes.NewBuffer(wire), dictionary, dictionary); err != nil {
@@ -110,7 +115,11 @@ func scopedInboundBenchmarkSetup(test testing.TB, groups bool, frames int) (*ses
 	settings.Set(config.InChanCapacity, "32")
 	settings.Set(config.MaxLatency, "3600")
 	application := &scopedInboundBenchmarkApplication{}
-	current, err := (sessionFactory{}).newSession(SessionID{BeginString: beginString, SenderCompID: target, TargetCompID: sender}, NewMemoryStoreFactory(), settings, NewNullLogFactory(), application)
+	var callback Application = application
+	if borrowed {
+		callback = BorrowApplication(application)
+	}
+	current, err := (sessionFactory{}).newSession(SessionID{BeginString: beginString, SenderCompID: target, TargetCompID: sender}, NewMemoryStoreFactory(), settings, NewNullLogFactory(), callback)
 	if err != nil {
 		test.Fatal(err)
 	}
@@ -121,31 +130,19 @@ func scopedInboundBenchmarkSetup(test testing.TB, groups bool, frames int) (*ses
 	current.messageOut = make(chan []byte, 1)
 	messageIn := make(chan fixIn, current.InChanCapacity)
 	current.messageIn = messageIn
-	var readDone <-chan struct{}
-	// Select exactly the path that the production acceptor/initiator selects
-	// for this ordinary session; no bounded setting or borrowed handler is used.
-	if current.boundedIn != nil {
-		control, err := startBoundedRead(connection, newParser(connection), current.boundedIn, messageIn, nil, time.Time{})
-		if err != nil {
-			test.Fatal(err)
-		}
-		current.readConnection = control
-		readDone = control.done
-	} else {
-		done := make(chan struct{})
-		readDone = done
-		go func() {
-			defer close(done)
-			readLoop(newParser(connection), messageIn, current.log)
-		}()
+	// Both callback delivery contracts use the production fixed-slot reader.
+	control, err := startBoundedRead(connection, newParser(connection), current.boundedIn, messageIn, nil, time.Time{})
+	if err != nil {
+		test.Fatal(err)
 	}
+	current.readConnection = control
 	cleanup := func() {
 		for incoming := range messageIn {
 			if incoming.slot != nil {
 				incoming.slot.release()
 			}
 		}
-		<-readDone
+		<-control.done
 		current.readConnection = nil
 		current.peerTimer.Stop()
 		current.stateTimer.Stop()
@@ -154,9 +151,10 @@ func scopedInboundBenchmarkSetup(test testing.TB, groups bool, frames int) (*ses
 	return current, application, messageIn, cleanup
 }
 
-// BenchmarkScopedInboundSession measures ordinary session setup/dispatch without
-// an opt-in interface: framing -> inbound channel -> parse/dictionary -> session
-// validation -> ordinary callback -> target-sequence advance -> slot return.
+// BenchmarkScopedInboundSession measures the same ordinary fixed-storage engine
+// with owned callbacks and BorrowApplication: framing -> inbound channel ->
+// parse/dictionary -> validation -> callback -> sequence advance -> slot return.
+// Owned delivery includes the compatibility copy at the application boundary.
 // Every measured iteration waits for Incoming to complete. Socket writes and
 // application-created output are outside this inbound phase's measurement.
 func BenchmarkScopedInboundSession(benchmark *testing.B) {
@@ -165,33 +163,38 @@ func BenchmarkScopedInboundSession(benchmark *testing.B) {
 		if groups {
 			name = "repeating_group"
 		}
-		benchmark.Run(name, func(benchmark *testing.B) {
-			const warmFrames = 66
-			current, application, incoming, cleanup := scopedInboundBenchmarkSetup(benchmark, groups, benchmark.N+warmFrames)
-			defer cleanup()
-			process := func() {
-				message, open := <-incoming
-				if !open || message.readError != nil {
-					benchmark.Fatalf("reader stopped: open=%v, error=%v", open, message.readError)
+		for _, delivery := range []struct {
+			name     string
+			borrowed bool
+		}{{name: "owned"}, {name: "borrowed", borrowed: true}} {
+			benchmark.Run(name+"/"+delivery.name, func(benchmark *testing.B) {
+				const warmFrames = 66
+				current, application, incoming, cleanup := scopedInboundBenchmarkSetupDelivery(benchmark, groups, benchmark.N+warmFrames, delivery.borrowed)
+				defer cleanup()
+				process := func() {
+					message, open := <-incoming
+					if !open || message.readError != nil {
+						benchmark.Fatalf("reader stopped: open=%v, error=%v", open, message.readError)
+					}
+					current.Incoming(current, message)
+					if !current.IsLoggedOn() {
+						benchmark.Fatal("ordinary session disconnected during processing")
+					}
 				}
-				current.Incoming(current, message)
-				if !current.IsLoggedOn() {
-					benchmark.Fatal("ordinary session disconnected during processing")
+				for range warmFrames {
+					process()
 				}
-			}
-			for range warmFrames {
-				process()
-			}
-			benchmark.ReportAllocs()
-			benchmark.ResetTimer()
-			for iteration := 0; iteration < benchmark.N; iteration++ {
-				process()
-			}
-			benchmark.StopTimer()
-			if application.calls != benchmark.N+warmFrames || current.store.NextTargetMsgSeqNum() != benchmark.N+warmFrames+1 {
-				benchmark.Fatalf("callbacks=%d, next target=%d", application.calls, current.store.NextTargetMsgSeqNum())
-			}
-		})
+				benchmark.ReportAllocs()
+				benchmark.ResetTimer()
+				for iteration := 0; iteration < benchmark.N; iteration++ {
+					process()
+				}
+				benchmark.StopTimer()
+				if application.calls != benchmark.N+warmFrames || current.store.NextTargetMsgSeqNum() != benchmark.N+warmFrames+1 {
+					benchmark.Fatalf("callbacks=%d, next target=%d", application.calls, current.store.NextTargetMsgSeqNum())
+				}
+			})
+		}
 	}
 }
 
@@ -205,7 +208,8 @@ func TestScopedInboundSessionAllocations(t *testing.T) {
 			const warmFrames, measuredFrames = 66, 1000
 			// AllocsPerRun performs one additional warm-up call.
 			const totalFrames = warmFrames + measuredFrames + 1
-			current, application, incoming, cleanup := scopedInboundBenchmarkSetup(t, groups, totalFrames)
+			// Only explicit borrowed delivery excludes the compatibility copy.
+			current, application, incoming, cleanup := scopedInboundBenchmarkSetupDelivery(t, groups, totalFrames, true)
 			cleaned := false
 			defer func() {
 				if !cleaned {
@@ -229,7 +233,7 @@ func TestScopedInboundSessionAllocations(t *testing.T) {
 			cleanup()
 			cleaned = true
 			if allocations != 0 {
-				t.Fatalf("ordinary inbound processing allocated %v times per frame", allocations)
+				t.Fatalf("borrowed inbound processing allocated %v times per frame", allocations)
 			}
 			if application.calls != totalFrames || current.store.NextTargetMsgSeqNum() != totalFrames+1 {
 				t.Fatalf("callbacks=%d, next target=%d", application.calls, current.store.NextTargetMsgSeqNum())

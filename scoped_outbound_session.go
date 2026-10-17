@@ -63,6 +63,7 @@ func (s *session) configureOutbound(settings *SessionSettings) error {
 }
 
 func (s *session) fillOutboundHeader(message *Message, inReplyTo *Message) {
+	message.outboundBorrowed = applicationBorrowsMessages(s.application)
 	setCanonicalIdentity(&message.Header.FieldMap, tagBeginString, s.sessionID.BeginString)
 	setCanonicalIdentity(&message.Header.FieldMap, tagSenderCompID, s.sessionID.SenderCompID)
 	setCanonicalIdentity(&message.Header.FieldMap, tagTargetCompID, s.sessionID.TargetCompID)

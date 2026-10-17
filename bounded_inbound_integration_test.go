@@ -16,8 +16,8 @@ type inboundCallbackRecord struct {
 	id       string
 }
 
-// These recorders deliberately copy borrowed values. Retaining the view itself
-// would violate the callback contract that these tests exercise.
+// These recorders copy values so the same helper can exercise both ordinary
+// owned delivery and explicit BorrowApplication delivery.
 type inboundRecordingApplication struct {
 	t             *testing.T
 	borrowed      []inboundCallbackRecord
@@ -385,6 +385,7 @@ func TestBoundedInboundSessionCapacityPreservesStore(t *testing.T) {
 
 func TestBoundedInboundSessionCallbackLifetimes(t *testing.T) {
 	s, application, log, _ := newInboundIntegrationSession(t, 0, 0)
+	s.application = BorrowApplication(application)
 	application.fromApp = func(message *Message) MessageRejectError {
 		require.Same(t, s.boundedIn.parsed.Message(), message)
 		require.NotNil(t, message.inbound)
@@ -409,6 +410,7 @@ func TestBoundedInboundSessionCallbackLifetimes(t *testing.T) {
 
 func TestScopedInboundRejectKeepsMessageUntilReplyCompletes(t *testing.T) {
 	s, application, _, store := newInboundIntegrationSession(t, 0, 0)
+	s.application = BorrowApplication(application)
 	callbackReturned, replyObserved := false, false
 	application.fromApp = func(*Message) MessageRejectError {
 		callbackReturned = true

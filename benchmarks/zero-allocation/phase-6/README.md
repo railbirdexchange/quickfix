@@ -5,6 +5,15 @@ synchronously, encodes into a fixed session output slot, and transfers only
 independent wire bytes to the writer. Existing `Application` callbacks and send
 signatures remain in use. There is no alternate builder or outbound mode flag.
 
+The current [callback ownership qualification](callback-boundary/README.md)
+preserves ordinary callback lifetimes. Completed ordinary sends now measure
+88 B/4 allocations for NewOrderSingle and 96 B/4 for groups/custom types,
+down from the original compatible 343 B/20, 551 B/22 and 503 B/24 baselines.
+Explicit `BorrowApplication` delivery measures 0 B/0 allocations through the
+same engine. The older zero-allocation candidate rows and source hashes below
+are historical: they preceded the callback-lifetime correction and do not
+qualify the current default ownership contract.
+
 ```mermaid
 sequenceDiagram
     participant Caller as Caller / ordinary FromApp
@@ -80,10 +89,15 @@ callbacks. No new hot mutex, pool, reference count, dependency or slice growth
 is introduced.
 
 The caller's `Message` remains usable/mutable after Send returns; the writer
-never holds it. Engine scalar byte views belong to that Message and may change
-on its next send. `CopyInto` and owned string getters detach retained values.
-Engine resend callbacks receive a scoped replay view with the same copying rule.
-Ordinary body setters and fresh construction still allocate in this phase.
+never holds it. Ordinary `ToApp` and `ToAdmin` receive the original pointer.
+Previously returned engine scalar byte views stay valid across later sends;
+each new scalar owns separate wire/getter bytes. Ordinary resend callbacks
+receive an owned message whose raw bytes, fields and groups survive replay
+completion and journal reuse. `BorrowApplication` explicitly substitutes a
+callback-scoped lifetime for engine-owned messages, and permits engine-field
+views on caller-created outgoing messages to be reused on later sends. This
+wrapper changes the ownership boundary, not engine routing. Ordinary body
+setters and fresh construction still allocate in this phase.
 
 Logging finishes before slot transfer. Existing synchronous borrowed logging can
 consume bytes directly; arbitrary legacy loggers receive owned copies. Logging,
@@ -97,7 +111,13 @@ because receipt is uncertain. Successful teardown keeps ResetOnDisconnect
 behavior. Resend may exceed the ring depth: the writer returns capacity
 independently, and writer failure propagates before target advancement.
 
-## Controlled evidence
+## Historical controlled evidence (superseded callback contract)
+
+This section records the original measurement pair. Its zero-allocation
+candidate silently borrowed callback-visible storage and is not a compatible
+default implementation. Use the [current evidence](callback-boundary/README.md)
+for corrected owned and explicitly borrowed results. The original allocating
+baseline below remains the compatible allocation-reduction reference.
 
 The isolated pair uses ordinary inbound parent `afbd0127`; later phase-5 latency
 commits are deliberately excluded. Both sides use the same harness and inputs.
@@ -126,7 +146,7 @@ After evidence: [original baseline](scoped-after-go1.25.3.txt),
 
 Go 1.25.3, Apple M4 Pro, CPU=1, five repetitions:
 
-| Ordinary completed-write flow | Before ns/op | Before B/op | Before allocs/op | After ns/op | After B/op | After allocs/op |
+| Historical completed-write flow | Before ns/op | Before B/op | Before allocs/op | Incompatible candidate ns/op | Candidate B/op | Candidate allocs/op |
 |---|---:|---:|---:|---:|---:|---:|
 | NewOrderSingle | 2,958–3,038 | 343 | 20 | 1,950–2,081 | 0 | 0 |
 | Repeating group | 3,959–4,075 | 551 | 22 | 3,061–3,321 | 0 | 0 |
@@ -155,14 +175,14 @@ serialized. A prior baseline run was interrupted; its
 is excluded from every result above. The complete mandatory command was rerun
 from its first case.
 
-The unchanged harness SHA-256 values are:
+The unchanged harness SHA-256 values within that historical pair were:
 
 | File | SHA-256 |
 |---|---|
 | `allocation_baseline_test.go` | `ad521a9f8acb7bea2afed51f7ae1de23d68dd95379fcbc7f2f5489d68b3dd78a` |
 | `scoped_outbound_benchmark_test.go` | `9cadc954f11c1284760eec13eba8abd6b1f282a86ed46822561c4a9a5eaa23fb` |
 
-The [qualified source manifest](scoped-qualified-source.sha256) records root Go
+The [historical source manifest](scoped-qualified-source.sha256) records root Go
 sources/tests and `config/bounded.go` at isolated phase-6 commit
 `74902566548297bfdcb598962654a69333b10a2b`, measured on 2026-10-16; its
 [post-measurement verification](scoped-qualified-source-check.txt) passed.
@@ -173,7 +193,11 @@ These completed-write results exceed one microsecond. Full inbound-to-completed-
 write qualification and variable response construction remain phase-7 work;
 the whole library is not claimed to be allocation-free.
 
-## Correctness qualification
+## Historical correctness qualification
+
+These checks predate the newly added retained-callback regression fixtures.
+Current Go 1.23.12 package tests/vet and the full core race run (19.389 seconds)
+are recorded in the [callback ownership qualification](callback-boundary/README.md#correctness-qualification).
 
 Fixtures cover partial/zero-progress writes, buffered/unbuffered completion,
 slow-consumer ownership, full rings, journal bounds/aborts, reset atomicity,
@@ -191,15 +215,20 @@ GOTOOLCHAIN=auto rtk proxy go test -race . -count=1
 The [Go 1.23.12 package suite](scoped-tests-go1.23.12.txt) passed, including the
 core package in 8.026 seconds. [Go 1.23.12 vet](scoped-vet-go1.23.12.txt) exited
 successfully without diagnostics. The [full core race run](scoped-race.txt)
-passed in 18.506 seconds. Source was unchanged after those checks and through
-both after measurements. `TestOrdinaryOutboundWarmedAllocations` exercises
+passed in 18.506 seconds. That historical source was unchanged after those
+checks and through both historical after measurements.
+`TestOrdinaryOutboundWarmedAllocations` exercises
 100 completed ordinary sends per scenario after visiting every output slot.
 
-The existing optional Mongo logger environment failure remains documented in
+The existing Mongo logger environment failure remains documented in
 [phase 1](../phase-1/README.md#existing-optional-mongo-logger-test-failure). Only
 that suite is skipped. Race/correctness checks are separate from performance.
 
-## Combined qualification with phase-5 latency changes
+## Historical combined qualification with phase-5 latency changes
+
+The zero-allocation rows and manifests in this section also predate the
+callback-lifetime correction. They describe the incompatible prior candidate,
+not the current ordinary ownership contract.
 
 On 2026-10-16, phase-5 commit
 `23f58fe592c9699afa8f128924fc0ca4d2a93ec9` was merged into the qualified isolated
@@ -212,7 +241,7 @@ clock optimization still calls `CheckSessionTime` for lifecycle transitions.
 The [combined Go 1.23.12 package suite](combined-tests-go1.23.12.txt) passed
 (core 7.616 seconds), [vet](combined-vet-go1.23.12.txt) exited successfully
 without diagnostics, and the [full core race run](combined-race.txt) passed
-in 18.967 seconds. The same optional Mongo logger suite was excluded.
+in 18.967 seconds. The same Mongo logger suite was excluded.
 
 ```sh
 GOTOOLCHAIN=auto rtk proxy go test . -run '^$' -bench '^BenchmarkAllocationBaseline$' -benchmem -benchtime=1s -count=5 -cpu=1
@@ -224,7 +253,7 @@ Both commands passed: [mandatory baseline](combined-after-go1.25.3.txt) in
 in 31.918 seconds. CPU-heavy work remained serialized. Go 1.25.3, Apple M4 Pro,
 CPU=1, five repetitions:
 
-| Combined ordinary component | ns/op | B/op | allocs/op |
+| Historical component (borrowed lifetimes) | ns/op | B/op | allocs/op |
 |---|---:|---:|---:|
 | Inbound NewOrderSingle | 1,267–1,356 | 0 | 0 |
 | Inbound repeating group | 2,005–2,064 | 0 | 0 |
@@ -239,7 +268,8 @@ fast parsing, reused parsing and validation. Its parser ranges are
 remains 152 B/6 allocations, legacy framed read 160 B/2, and decimal overflow
 168 B/5.
 
-All three benchmark harnesses are unchanged. The inbound harness SHA-256 is
+All three benchmark harnesses were unchanged within that historical comparison.
+The historical inbound harness SHA-256 is
 `a2131b006ab16692bdd54b072d95456aac5179ae04311ba4568f2178e9101e26`;
 baseline and outbound hashes are listed above. The
 [combined source manifest](combined-qualified-source.sha256) and

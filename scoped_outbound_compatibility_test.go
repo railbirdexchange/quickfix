@@ -228,7 +228,7 @@ func TestOrdinaryOutboundWarmedAllocations(t *testing.T) {
 		{name: "custom_message_type", messageType: "CUSTOM.APPLICATION.MESSAGE.TYPE"},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
-			fixture := newScopedOutboundBenchmark(t, scenario.groups, scenario.messageType)
+			fixture := newScopedOutboundBenchmarkWithDelivery(t, scenario.groups, scenario.messageType, true)
 			defer fixture.close()
 			for iteration := 0; iteration < 66; iteration++ {
 				if err := fixture.process(); err != nil {

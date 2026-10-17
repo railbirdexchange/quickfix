@@ -243,6 +243,10 @@ func (cursor *scopedResend) process(wire []byte) error {
 		return err
 	}
 	message := s.outbound.replay.Message()
+	if !applicationBorrowsMessages(s.application) {
+		// Detach before resend rewrites parsed fields into engine scalar storage.
+		message = materializeInboundMessage(message)
+	}
 	messageType, _ := message.Header.GetBytes(tagMsgType)
 	sequence, _ := message.Header.GetInt(tagMsgSeqNum)
 	if isAdminMessageType(messageType) || !s.resend(message) {

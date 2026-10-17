@@ -71,6 +71,12 @@ func (s *session) parseInboundSlot(slot *inboundSlot) (*Message, error) {
 		return nil, err
 	}
 	message := parsed.Message()
+	if !applicationBorrowsMessages(s.application) {
+		// The ordinary Application contract permits retention. Materialize one
+		// owned frame and message before state dispatch, so callback mutations
+		// are also the values used by subsequent protocol handling.
+		message = materializeInboundMessage(message)
+	}
 	message.inbound = slot
 	message.ReceiveTime = slot.receiveTime
 	return message, nil
