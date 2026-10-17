@@ -39,7 +39,7 @@ SOH, `=` or NUL are copied exactly rather than reinterpreted.
 ## Measurement
 
 The unchanged controlled baseline is recorded in
-[before](baseline-before.txt) and [after](baseline-and-groups-after.txt).
+[before](baseline-before.txt) and [final after](callback-baseline-and-groups-after.txt).
 The same after file also compares two-party construction through legacy
 `RepeatingGroup` / `SetGroup` with the new ordered setter, followed by
 `AppendTo` into an existing destination. Both cases use identical fields and
@@ -48,8 +48,8 @@ benchmark does not include a completed socket write.
 
 | Two-party construction plus append | Median ns/op | B/op | allocs/op |
 |---|---:|---:|---:|
-| Legacy `RepeatingGroup` / `SetGroup` | 1,688 | 3,552 | 68 |
-| Ordered `SetGroupValues` | 204.7 | 0 | 0 |
+| Legacy `RepeatingGroup` / `SetGroup` | 1,700 | 3,552 | 68 |
+| Ordered `SetGroupValues` | 202.6 | 0 | 0 |
 
 All five ordered-setter samples measured zero bytes and objects. The original
 baseline allocation rows are unchanged before/after: parsing with no dictionary,
@@ -82,10 +82,10 @@ owned `GetGroup` retention, shallow-copy detachment, atomic capacity failure
 and recovery. The warmed setter/replace/clear/append fixture also requires
 exactly zero allocations.
 
-The [entire QuickFIX core package on Go 1.23.12](tests-go1.23.12.txt) passes
-in 30.650 seconds, including the pre-existing seven exact full-session
+The [entire QuickFIX core package on Go 1.23.12](callback-core-go1.23.12.txt) passes
+in 30.675 seconds, including the pre-existing seven exact full-session
 allocation scenarios and the new outgoing group fixtures. The separate
-[full core race run](tests-race.txt) passes in 34.412 seconds; exact allocation
+[full core race run](callback-core-race.txt) passes in 33.946 seconds; exact allocation
 measurement remains excluded from race instrumentation. The repository's
 separate Mongo logger teardown issue is unrelated and that integration package
 was not run in these core checks.
@@ -94,3 +94,37 @@ These results qualify the described bounded QuickFIX component/session path.
 They do not establish zero allocations in FIX-server's business objects,
 decimal formatting, logging, store or asynchronous application handoffs.
 No PREPROD deployment or load test is part of this upstream measurement.
+
+## First-send snapshot correction
+
+Service integration exposed a cold-path ownership gap after group construction
+commit `4d099c836c7621cf4aeacee64a77f5fb9aee06e9`: a first borrowed `ToApp` or
+`ToAdmin` receives the caller's ordinary message before its second-send arena
+attachment. `CopyInto` and `GetGroup` did not recognize those fields as scoped
+and could retain the caller's mutable `SetBytes` inputs. Reusing numeric input
+buffers after the send then changed a supposedly owned audit snapshot.
+
+The [failing regression](first-send-copy-before.txt) captures both first-send
+callbacks changing retained `HEADER` bytes to `XXXXXX`. The wrapper now marks
+unmarked fields reusable only during the synchronous outgoing callback, so
+the existing snapshot methods copy their bytes. It restores markers on the
+same backing after normal return, errors and panics; replacement sections keep
+their own flags. Caller message identity, external `SetBytes` aliases, setter
+behavior and second-send arena attachment remain unchanged. No construction
+arena is allocated merely to establish this first callback's scope.
+
+The [Go 1.23 focused check](first-send-copy-go1.23.12.txt) passes in 2.746 seconds,
+including full-message and per-section snapshots, legacy `GetGroup`, callback
+error/panic cleanup, section replacement and all new completed-group fixtures.
+The dynamic group interval still completes 3,200 orders with zero added heap
+objects and bytes. This correction is included with the real group-allocation
+reduction, rather than being represented as an independent performance gain.
+
+The [callback before](callback-outbound-before.txt) and
+[final after](callback-baseline-and-groups-after.txt) benchmarks preserve
+0 B/op and 0 allocs/op in every borrowed completed-write case. Scalar-send
+medians are 1,945 → 1,970 ns/op; repeating-group send medians are
+2,844 → 2,845 ns/op. These are completed outbound component timings, not TCP
+round-trip timings. The final group-construction medians in the table above
+come from the same final candidate; the [initial group-only run](baseline-and-groups-after.txt)
+is retained separately. Mandatory baseline allocation rows remain unchanged.
