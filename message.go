@@ -125,7 +125,10 @@ type Message struct {
 	inbound    *inboundSlot
 	// parseSlot identifies the original slot even in Message value copies.
 	// CopyInto must not transfer its input-frame or parse-storage ownership.
-	parseSlot *MessageSlot
+	parseSlot      *MessageSlot
+	outboundFields *outboundFields
+	// Only the explicit borrowed application boundary may recycle scalar views.
+	outboundBorrowed bool
 }
 
 // ToMessage returns the message itself.
@@ -151,6 +154,12 @@ func NewMessage() *Message {
 // CopyInto overwrites to with this message. Copies from session callbacks own
 // their field and group bytes and remain valid after the callback returns.
 func (m *Message) CopyInto(to *Message) {
+	if m == to && m.outboundFields != nil {
+		return
+	}
+	if to.outboundFields != nil && to.outboundFields.owner != to {
+		to.outboundFields = nil
+	}
 	scoped := m.parseSlot != nil && m.parseSlot.scopedFields[0].fixed != nil || m.Header.scoped || m.Body.scoped || m.Trailer.scoped
 	if scoped && m == to {
 		return

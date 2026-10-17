@@ -3,6 +3,7 @@ package quickfix
 import (
 	"bytes"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -21,6 +22,7 @@ type SendStageObserver func(SendStageEvent)
 var sendStageObserverState struct {
 	sync.RWMutex
 	observer SendStageObserver
+	enabled  atomic.Bool
 }
 
 // SetSendStageObserver installs a process-wide observer for FIX send-stage
@@ -29,6 +31,20 @@ func SetSendStageObserver(observer SendStageObserver) {
 	sendStageObserverState.Lock()
 	defer sendStageObserverState.Unlock()
 	sendStageObserverState.observer = observer
+	sendStageObserverState.enabled.Store(observer != nil)
+}
+
+func startSendStage() time.Time {
+	if sendStageObserverState.enabled.Load() {
+		return time.Now()
+	}
+	return time.Time{}
+}
+
+func (s *session) finishSendStage(stage string, messageType []byte, started time.Time, success bool) {
+	if !started.IsZero() {
+		s.observeSendStage(stage, string(messageType), time.Since(started), success)
+	}
 }
 
 func observeSendStage(event SendStageEvent) {

@@ -44,21 +44,28 @@ func (sm *stateMachine) Connect(session *session) {
 	}
 
 	if session.RefreshOnLogon {
-		if err := session.store.Refresh(); err != nil {
+		if err := session.refreshStore(); err != nil {
 			session.logError(err)
 			return
 		}
 	}
 
-	if session.ResetOnLogon {
-		if err := session.store.Reset(); err != nil {
-			session.logError(err)
-			return
+	if session.ResetOnLogon || (session.outbound != nil && session.outbound.scheduledResetPending.Load()) {
+		if session.outbound != nil {
+			session.stageLogonReset()
+		} else {
+			if err := session.store.Reset(); err != nil {
+				session.logError(err)
+				return
+			}
 		}
 	}
 
 	session.log.OnEvent("Sending logon request")
 	if err := session.sendLogon(); err != nil {
+		if isOutboundCapacityError(err) {
+			session.preserveOnDisconnect = true
+		}
 		session.logError(err)
 		return
 	}
@@ -173,7 +180,12 @@ func (sm *stateMachine) CheckSessionTime(session *session, now time.Time) {
 			session.log.OnEvent("Not in session")
 		}
 
-		sm.State.ShutdownNow(session)
+		if err := sm.State.ShutdownNow(session); isOutboundCapacityError(err) {
+			session.preserveOnDisconnect = true
+			if session.outbound != nil {
+				session.outbound.scheduledResetPending.Store(true)
+			}
+		}
 		sm.setState(session, notSessionTime{})
 
 		if sm.notifyOnInSessionTime == nil {
@@ -187,10 +199,28 @@ func (sm *stateMachine) CheckSessionTime(session *session, now time.Time) {
 		sm.notifyInSessionTime()
 		sm.setState(session, latentState{})
 	}
+	if session.SessionTime == nil {
+		return
+	}
+	if session.outbound != nil && session.outbound.scheduledResetPending.Load() {
+		// Failed output admission must not turn into an unconditional reset
+		// on the next timer tick. The next Logon stages this reset instead.
+		return
+	}
 
-	if !session.SessionTime.IsInSameRange(session.store.CreationTime(), now) {
+	session.sendMutex.Lock()
+	creationTime := session.store.CreationTime()
+	session.sendMutex.Unlock()
+	if !session.SessionTime.IsInSameRange(creationTime, now) {
 		session.log.OnEvent("Session reset")
-		sm.State.ShutdownNow(session)
+		if err := sm.State.ShutdownNow(session); isOutboundCapacityError(err) {
+			session.preserveOnDisconnect = true
+			if session.outbound != nil {
+				session.outbound.scheduledResetPending.Store(true)
+			}
+			sm.setState(session, latentState{})
+			return
+		}
 		if err := session.dropAndReset(); err != nil {
 			session.logError(err)
 		}
@@ -215,7 +245,12 @@ func (sm *stateMachine) CheckResetTime(session *session, now time.Time) {
 
 	// If we have crossed the reset time boundary in between checks or we are at the reset time, we send the reset
 	if session.lastCheckedResetSeqTime.Before(resetSeqTimeToday) && !now.Before(resetSeqTimeToday) {
-		session.sendLogonInReplyTo(true, nil)
+		if err := session.sendLogonInReplyTo(true, nil); err != nil {
+			session.logError(err)
+			if isOutboundCapacityError(err) {
+				return
+			}
+		}
 	}
 
 	// Update the last checked reset seq time to now
@@ -279,6 +314,9 @@ func (sm *stateMachine) IsSessionTime() bool {
 }
 
 func handleStateError(s *session, err error) sessionState {
+	if isOutboundCapacityError(err) {
+		s.preserveOnDisconnect = true
+	}
 	s.logError(err)
 	return latentState{}
 }
@@ -303,7 +341,7 @@ type sessionState interface {
 	IsSessionTime() bool
 
 	// ShutdownNow terminates the session state immediately.
-	ShutdownNow(*session)
+	ShutdownNow(*session) error
 
 	// Stop triggers a clean stop.
 	Stop(*session) (nextState sessionState)
@@ -323,16 +361,18 @@ func (connected) IsSessionTime() bool { return true }
 
 type connectedNotLoggedOn struct{ connected }
 
-func (connectedNotLoggedOn) IsLoggedOn() bool     { return false }
-func (connectedNotLoggedOn) ShutdownNow(*session) {}
+func (connectedNotLoggedOn) IsLoggedOn() bool           { return false }
+func (connectedNotLoggedOn) ShutdownNow(*session) error { return nil }
 
 type loggedOn struct{ connected }
 
 func (loggedOn) IsLoggedOn() bool { return true }
-func (loggedOn) ShutdownNow(s *session) {
+func (loggedOn) ShutdownNow(s *session) error {
 	if err := s.sendLogout(""); err != nil {
 		s.logError(err)
+		return err
 	}
+	return nil
 }
 
 func (loggedOn) Stop(s *session) (nextState sessionState) {

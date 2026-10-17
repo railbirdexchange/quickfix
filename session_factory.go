@@ -468,6 +468,10 @@ func (f sessionFactory) newSession(
 	if s.store, err = storeFactory.Create(s.sessionID); err != nil {
 		return
 	}
+	if err = s.configureOutbound(settings); err != nil {
+		s.store.Close()
+		return
+	}
 
 	s.sessionEvent = make(chan internal.Event)
 	s.messageEvent = make(chan bool, 1)

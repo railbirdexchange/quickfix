@@ -77,6 +77,9 @@ func shutdownWithReason(session *session, msg *Message, incrNextTargetMsgSeqNum 
 	logout := session.buildLogout(reason)
 
 	if err := session.dropAndSendInReplyTo(logout, msg); err != nil {
+		if isOutboundCapacityError(err) {
+			return handleStateError(session, err)
+		}
 		session.logError(err)
 	}
 

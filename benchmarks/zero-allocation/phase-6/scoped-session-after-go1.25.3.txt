@@ -1,0 +1,21 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+cpu: Apple M4 Pro
+BenchmarkScopedOutboundSession/new_order_single         	  616492	      1981 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/new_order_single         	  643027	      1990 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/new_order_single         	  612861	      1950 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/new_order_single         	  640179	      2080 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/new_order_single         	  557716	      2081 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/repeating_group          	  397027	      3133 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/repeating_group          	  390200	      3061 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/repeating_group          	  396452	      3168 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/repeating_group          	  383390	      3154 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/repeating_group          	  359187	      3321 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/custom_message_type      	  587787	      2045 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/custom_message_type      	  581018	      2078 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/custom_message_type      	  581720	      2041 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/custom_message_type      	  608259	      1950 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/custom_message_type      	  614161	      1964 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/quickfixgo/quickfix	20.541s

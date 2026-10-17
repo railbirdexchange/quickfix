@@ -1,6 +1,11 @@
 package config
 
 const (
+	// OutboundFrameQueueCapacity bounds pending output frames. The writer
+	// receives one additional progress slot. Default: 32.
+	OutboundFrameQueueCapacity = "OutboundFrameQueueCapacity"
+	// OutboundWriteTimeout bounds a complete socket write. Default: 30s.
+	OutboundWriteTimeout = "OutboundWriteTimeout"
 	// InboundFrameQueueCapacity bounds extra raw frame slots beyond retained
 	// resend frames and two progress slots. Default: min(InChanCapacity, 32).
 	// InChanCapacity remains a channel upper bound; vacant-slot exhaustion

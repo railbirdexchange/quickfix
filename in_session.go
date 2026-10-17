@@ -35,6 +35,9 @@ func (state inSession) FixMsgIn(session *session, msg *Message) sessionState {
 	switch {
 	case bytes.Equal(msgTypeLogon, msgType):
 		if err := session.handleLogon(msg); err != nil {
+			if isOutboundCapacityError(err) {
+				return handleStateError(session, err)
+			}
 			if err := session.initiateLogoutInReplyTo("", msg); err != nil {
 				return handleStateError(session, err)
 			}
@@ -96,6 +99,9 @@ func (state inSession) handleLogout(session *session, msg *Message) (nextState s
 		session.log.OnEvent("Sending logout response")
 
 		if err := session.sendLogoutInReplyTo("", msg); err != nil {
+			if isOutboundCapacityError(err) {
+				return handleStateError(session, err)
+			}
 			session.logError(err)
 		}
 	} else {
@@ -237,12 +243,29 @@ func (state inSession) resendMessages(session *session, beginSeqNo, endSeqNo int
 
 	seqNum := beginSeqNo
 	nextSeqNum := seqNum
-	msg := NewMessage()
+	var msg *Message
+	if session.outbound != nil {
+		msg = &session.outbound.replay.message
+		defer session.outbound.replay.Reset()
+	} else {
+		msg = NewMessage()
+	}
 	err := session.store.IterateMessages(beginSeqNo, endSeqNo, func(msgBytes []byte) error {
-		err := ParseMessageWithDataDictionary(msg, bytes.NewBuffer(msgBytes), session.transportDataDictionary, session.appDataDictionary)
+		var err error
+		if session.outbound != nil {
+			session.outbound.replay.Reset()
+			err = session.outbound.replay.Parse(msgBytes)
+		} else {
+			err = ParseMessageWithDataDictionary(msg, bytes.NewBuffer(msgBytes), session.transportDataDictionary, session.appDataDictionary)
+		}
 		if err != nil {
 			session.log.OnEventf("Resend Msg Parse Error: %v, %v", err.Error(), bytes.NewBuffer(msgBytes).String())
 			return err // We cant continue with a message that cant be parsed correctly.
+		}
+		if session.outbound != nil && !applicationBorrowsMessages(session.application) {
+			// The journal and parse scratch may be recycled after this request.
+			// Ordinary ToApp retains an independently owned replay message.
+			msg = materializeInboundMessage(session.outbound.replay.Message())
 		}
 		msgType, _ := msg.Header.GetBytes(tagMsgType)
 		sentMessageSeqNum, _ := msg.Header.GetInt(tagMsgSeqNum)
@@ -264,8 +287,11 @@ func (state inSession) resendMessages(session *session, beginSeqNo, endSeqNo int
 		}
 
 		session.log.OnEventf("Resending Message: %v", sentMessageSeqNum)
-		msgBytes = msg.buildWithBodyBytes(msg.bodyBytes) // workaround for maintaining repeating group field order
-		session.EnqueueBytesAndSend(msgBytes)
+		// Keep the original serialized body and repeating-group order even if
+		// the resend callback changes its convenience field maps.
+		if err := session.enqueueReplay(msg, msg.bodyBytes); err != nil {
+			return err
+		}
 
 		seqNum = sentMessageSeqNum + 1
 		nextSeqNum = seqNum
@@ -425,7 +451,9 @@ func (state *inSession) generateSequenceReset(session *session, beginSeqNo int, 
 
 	msgBytes := sequenceReset.build()
 
-	session.EnqueueBytesAndSend(msgBytes)
+	if err = session.EnqueueBytesAndSend(msgBytes); err != nil {
+		return err
+	}
 	session.log.OnEventf("Sent SequenceReset TO: %v", endSeqNo)
 
 	return
