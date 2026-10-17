@@ -2,6 +2,8 @@ module github.com/quickfixgo/quickfix
 
 go 1.23
 
+toolchain go1.27.2
+
 require (
 	github.com/mattn/go-sqlite3 v1.14.22
 	github.com/pires/go-proxyproto v0.7.0

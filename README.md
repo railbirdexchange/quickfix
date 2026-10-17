@@ -14,7 +14,7 @@ See v0.9.0 release notes [here](https://github.com/quickfixgo/quickfix/releases/
 <ul>
   <li>100% free and open source with a liberal <a href="https://github.com/quickfixgo/quickfix/blob/master/LICENSE.txt">license</a></li>
   <li>Supports FIX versions 4.0 - 5.0SP2</li>
-  <li>Runs on any hardware and operating system supported by Go (1.21+ required)</li>
+  <li>Runs on any hardware and operating system supported by Go (1.23+ required)</li>
   <li>Spec driven run-time message validation</li>
   <li>Spec driven code generation of type-safe FIX messages, fields, and repeating groups</li>
   <li>Support for protocol customizations</li>
@@ -114,6 +114,14 @@ If you wish to work on QuickFIX/Go itself, you will need [Docker](https://docs.d
 * This opens the project in a docker container pre-configured with everything you need
 
 ### Build and Test
+
+The preferred toolchain is Go 1.27.2. The module retains Go 1.23 source
+compatibility, checked in CI with Go 1.23.12 and Go 1.27.2. With
+`GOTOOLCHAIN=auto`, working in this module selects at least the preferred toolchain;
+the module's toolchain preference does not select the compiler for an
+application that imports QuickFIX/Go. CI uses `GOTOOLCHAIN=local` so each
+compatibility job runs its explicitly installed version. The existing linter
+runs on Go 1.23.12.
 
 The default make target runs [go vet](https://godoc.org/golang.org/x/tools/cmd/vet) and unit tests.
 
