@@ -171,6 +171,13 @@ allocation-free does not make every legacy group convenience API allocation-free
 Callbacks that replace/detach storage may allocate; subsequent internal control
 reuse still returns to its original fixed backing.
 
+Synchronous handlers can use `Message.BorrowGroup` to traverse the existing
+dictionary-backed body group without reconstructing legacy groups or copying
+field bytes. Its views expire on message mutation, slot reset/reparse or callback
+return. The [callback group comparison](benchmarks/zero-allocation/phase-7/inbound-group-access/README.md)
+measures 1,352 B / 31 allocations for owned group access versus zero for the
+borrowed view; it is a component result, not a full FIX-server allocation claim.
+
 ## Ownership, admission and exhaustion
 
 ```mermaid

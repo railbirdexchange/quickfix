@@ -155,7 +155,22 @@ func (slot *MessageSlot) Group(tag Tag) (BorrowedGroup, error) {
 	if !slot.valid {
 		return BorrowedGroup{}, ErrBorrowedGroupNotFound
 	}
-	typeField, found := slot.message.Header.lookup(tagMsgType)
+	return slot.message.BorrowGroup(tag)
+}
+
+// BorrowGroup returns a read-only body group backed by this message's parsed
+// fields. It is available on MessageSlot messages, including BorrowApplication
+// callbacks, without constructing or copying legacy Group objects. The view
+// expires on message mutation, slot reset/reparse, or callback return. Consume
+// it synchronously; use GetGroup when an independently owned group is needed.
+// Messages without active dictionary-backed parse storage return
+// ErrBorrowedGroupNotFound. Dictionary validation must still precede handling.
+func (message *Message) BorrowGroup(tag Tag) (BorrowedGroup, error) {
+	slot := message.parseSlot
+	if slot == nil || !slot.valid {
+		return BorrowedGroup{}, ErrBorrowedGroupNotFound
+	}
+	typeField, found := message.Header.lookup(tagMsgType)
 	if !found || len(typeField) == 0 {
 		return BorrowedGroup{}, ErrBorrowedGroupNotFound
 	}
@@ -167,7 +182,7 @@ func (slot *MessageSlot) Group(tag Tag) (BorrowedGroup, error) {
 	if definition == nil {
 		return BorrowedGroup{}, ErrBorrowedGroupNotFound
 	}
-	values, found := slot.message.Body.lookup(tag)
+	values, found := message.Body.lookup(tag)
 	if !found {
 		return BorrowedGroup{}, ErrBorrowedGroupNotFound
 	}
