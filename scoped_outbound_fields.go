@@ -38,9 +38,20 @@ func (message *Message) setOutboundField(fields *FieldMap, index int, tag Tag, w
 	// Mutating GetBytes in a callback must not silently rewrite the encoding.
 	valueBytes := message.outboundFields.values[index][:len(wire)-valueOffset-1]
 	copy(valueBytes, wire[valueOffset:len(wire)-1])
+	if !message.outboundBorrowed {
+		// Ordinary callbacks and callers may retain old getter slices across
+		// sends. One owned allocation keeps getter and wire regions separate,
+		// preserving the legacy rule that getter edits do not rewrite the wire.
+		storage := make([]byte, len(wire)+len(valueBytes))
+		copy(storage, wire)
+		copy(storage[len(wire):], valueBytes)
+		valueBytes = storage[len(wire):]
+		wire = storage[:len(wire):len(wire)]
+	} else {
+		fields.reusable = true
+	}
 	value := fields.getOrCreate(tag)
 	value[0] = TagValue{tag: tag, bytes: wire, value: valueBytes[:len(valueBytes):len(valueBytes)]}
-	fields.reusable = true
 }
 
 func (message *Message) setOutboundInt(fields *FieldMap, index int, tag Tag, value int) {

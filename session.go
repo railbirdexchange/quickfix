@@ -288,6 +288,7 @@ func (s *session) sendLogoutInReplyTo(reason string, inReplyTo *Message) error {
 
 func (s *session) resend(msg *Message) bool {
 	if s.outbound != nil {
+		msg.outboundBorrowed = applicationBorrowsMessages(s.application)
 		msg.setOutboundBytes(&msg.Header.FieldMap, outboundPossDup, tagPossDupFlag, []byte{'Y'})
 		if original, found := msg.Header.getBytesIfPresent(tagSendingTime); found {
 			msg.setOutboundBytes(&msg.Header.FieldMap, outboundOriginalTimestamp, tagOrigSendingTime, original)

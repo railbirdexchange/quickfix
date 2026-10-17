@@ -127,6 +127,8 @@ type Message struct {
 	// CopyInto must not transfer its input-frame or parse-storage ownership.
 	parseSlot      *MessageSlot
 	outboundFields *outboundFields
+	// Only the explicit borrowed application boundary may recycle scalar views.
+	outboundBorrowed bool
 }
 
 // ToMessage returns the message itself.

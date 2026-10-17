@@ -262,6 +262,11 @@ func (state inSession) resendMessages(session *session, beginSeqNo, endSeqNo int
 			session.log.OnEventf("Resend Msg Parse Error: %v, %v", err.Error(), bytes.NewBuffer(msgBytes).String())
 			return err // We cant continue with a message that cant be parsed correctly.
 		}
+		if session.outbound != nil && !applicationBorrowsMessages(session.application) {
+			// The journal and parse scratch may be recycled after this request.
+			// Ordinary ToApp retains an independently owned replay message.
+			msg = materializeInboundMessage(session.outbound.replay.Message())
+		}
 		msgType, _ := msg.Header.GetBytes(tagMsgType)
 		sentMessageSeqNum, _ := msg.Header.GetInt(tagMsgSeqNum)
 
