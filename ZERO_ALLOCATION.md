@@ -2,70 +2,64 @@
 
 The ordinary session uses fixed inbound and outbound storage and the existing
 `Application`, `Message` and `SendToTarget` APIs. Session setup enables this
-storage automatically. Repeated sends of the same caller-owned message acquire
-fixed construction storage during warm-up; no alternate application interface
-or send API is required.
+storage automatically. There is one engine, with no feature flag or alternate
+send path. Ordinary applications receive owned callback messages. An explicit
+`BorrowApplication(application)` wrapper permits callback-scoped delivery and
+reusable response construction storage in that same engine.
 
 The measured target is the warmed, bounded path from a TCP frame through
 dictionary/group parsing, validation, ordinary application handling, encoding,
 resend-journal commit, completed write and output-slot return. Source remains
-compatible with Go 1.23. At current runtime `8033f27d`, exact Go 1.23 checks of
-seven warmed TCP scenarios each completed 100 cycles with zero allocated objects
-and zero allocated bytes. This includes connected-send backpressure and the
-corrected slow-consumer lifecycle. Focused correctness and race checks pass;
-the fresh Go 1.23 all-package suite, vet and complete core race run also pass.
-Only the previously reproduced optional Mongo logger teardown suite is excluded.
-The prior `a2fb11b9` full seven-flow throughput capture reports 0 B/op and
-0 allocs/op in all 35 samples. Current exact checks cover all seven flows;
-current ordinary/group batch and direct captures report 0/0 in all samples.
-The mandatory baseline capture passes with its allocation rows preserved,
-including 3 B/op and 0 reported allocs/op for legacy convenience group parsing.
-The current published `8033f27d` dependency passes unchanged fix-server steady
-and burst delivery, audit, ordering and recovery assertions. Fresh matched
-whole-process runs still allocate: +0.069% steady / +0.022% burst versus
-`a2fb11b9`, one run each. These small differences do not establish statistical
-improvement or a zero-allocation service result. The burst reaches 9,793.541
-requests/second; this is throughput rather than engine latency.
+compatible with Go 1.23. The callback-boundary correction restores owned
+lifetimes for unchanged applications; those ownership copies allocate. The
+explicit borrowed profile is the warmed zero-allocation contract.
+
+The current [focused Go 1.23 check](benchmarks/zero-allocation/phase-7/callback-boundary/focused-third-go1.23.12.txt)
+passed in 18.835 seconds. It includes all seven exact borrowed TCP allocation
+intervals, public-constructor TCP coverage and generated-control ownership
+regressions. Each exact interval completes 100 warmed cycles with zero added
+objects and bytes. Final qualification also passes: all seven exact intervals
+(10.379 s), Go 1.23 package tests (core 29.302 s; only the existing Mongo logger
+teardown suite excluded), vet and the separate core race run (32.751 s).
+Qualified-source verification reports all checks OK. The
+[final evidence](benchmarks/zero-allocation/phase-7/callback-boundary/README.md)
+records all 35 borrowed full-session rows and all ten direct-latency rows at
+0 B/op and 0 allocs/op; the ten owned full-session rows still allocate.
+Ordinary/group batch medians are 3.6%/5.0% higher than the matched compatible
+parent, so this correction does not demonstrate a speed gain. Default owned
+bytes increase by about 3 KiB per 32-request batch with allocation counts
+unchanged.
+
+Earlier measurements at `8033f27d`, `a2fb11b9` and their predecessors silently
+borrowed callback storage. Their source identities and results remain in the
+[phase-7 history](benchmarks/zero-allocation/phase-7/README.md), but do not qualify
+the corrected default ownership contract. The old Linux VM ordinary p50 of
+6.333–6.500 µs and cached-length batch gains of 1.5–2.5% are historical results,
+not measurements of this callback correction.
+
+PREPROD load testing is already complete in
+[fix-server PR 1362](https://github.com/railbirdexchange/draftkings-exchange/pull/1362):
+100 sessions and 664,255 orders. That run used the `8033f27d` dependency pin;
+it does not establish deployed results for the new ownership correction. The
+service still allocates, and a zero-allocation whole-library or fix-server
+claim is not made.
+
 Allocation and latency are separate qualifications. One microsecond is a
 stretch target, not a release gate. The delivery objective is to reduce measured
 latency as far as practical while preserving zero allocation in the supported
 path, correctness and compatibility; it does not require an open-ended search
 for the minimum achievable time.
-An additional unchanged-runtime [Linux VM measurement](benchmarks/zero-allocation/phase-7/linux-read-to-write/README.md)
-reports ordinary p50 6.333–6.500 µs and p99 10.834–11.500 µs; all ten ordinary/group
-benchmark rows report 0/0. This shared QEMU ARM64 development VM is a separate
-measurement, not a controlled platform comparison or production latency result.
-The [current cached-length qualification](benchmarks/zero-allocation/phase-7/cached-length/README.md)
-retains a small completed-batch gain: 1.5–2.5% versus its first unchanged-source
-control, with a final control supporting the result. Direct ordinary p50 medians
-are 6.833 → 6.833 → 6.916 µs across before/candidate/before. This demonstrates no
-individual latency improvement and does not establish a performance floor.
-Legacy callback lifetime compatibility is also unresolved: saving an incoming
-`*Message` for later use previously kept its contents alive; the candidate
-recycles it. The [callback audit](benchmarks/zero-allocation/phase-7/callback-lifetime-audit.md)
-records the exact affected boundaries. Unchanged signatures and explicit copy
-helpers do not preserve that existing behavior automatically.
-Callback lifetime compatibility and final isolated dev qualification remain
-open. Exceeding one microsecond does not itself block merging. The current
-[phase-7 evidence](benchmarks/zero-allocation/phase-7/README.md) identifies the
-source, measurements and checks that are final versus diagnostic.
-
-The next delivery step is one controlled dev baseline/candidate comparison with
-fixed resources, workloads, durations and repetitions declared before running.
-It measures delivery/recovery correctness, completed-write and service latency,
-CPU, allocations/GC and queue pressure. At most one further performance change
-is included in this delivery, supported by a clear bottleneck from that run and
-a focused before/after rerun. Otherwise retain the measured gains and make the
-merge/rework decision. Correctness failures still require repair and verification;
-they do not justify unrelated optimization experiments.
+The [resolved callback audit](benchmarks/zero-allocation/phase-7/callback-lifetime-audit.md)
+records the adapters and regression fixtures that preserve default lifetimes.
 
 ## Configuration and cold storage
 
 The reference workload uses FIX 4.4 over plain TCP, the repository's FIX44
 dictionary, enabled validation and persistence, `NewNullLogFactory`, and an
 explicit `NewBoundedStoreFactory(1024, 16384)`. The application reuses one response
-message, changes scalar fields for every order and uses ordinary callbacks and
-`SendToTarget`. Static output groups are built before measurement. Input groups,
+message, changes scalar fields for every order and uses `BorrowApplication`
+with the existing callbacks and `SendToTarget`. Static output groups are built
+before measurement. Input groups,
 including nested Parties/PartySubIDs, are parsed and validated on every request.
 
 | Setting or storage | Default | Measured profile |
@@ -96,7 +90,11 @@ dictionary/validation/recovery state. These are session-owned, not one full
 parser per raw frame.
 
 A repeatedly sent caller message attaches its construction arena on its second
-ordinary send. The arena has wire, getter-value and overlap-staging byte planes,
+send only when the destination application uses `BorrowApplication`. Ordinary
+owned delivery does not attach an arena. Moving a previously borrowed message
+to owned delivery detaches its arena before the callback, preserving its original
+pointer and restoring stable getter bytes across later operations.
+The arena has wire, getter-value and overlap-staging byte planes,
 each bounded by the frame limit, plus fixed field indexes and records. An
 [historical cold construction benchmark](benchmarks/zero-allocation/phase-7/construction-cold-go1.25.3.txt)
 measured 440,840 B and 54 allocations with the default arena versus 1,688 B and
@@ -106,9 +104,9 @@ Reusing many caller messages multiplies that storage.
 
 The [first-send correction](benchmarks/zero-allocation/phase-7/first-send/README.md)
 removes the large scratch allocation on fresh sends and repeated arena
-attachment after convenience reparsing. Current
+attachment after convenience reparsing. Historical
 [cold scalar packing](benchmarks/zero-allocation/phase-7/cold-scalars/README.md)
-further reduces the completed-send component fixtures to 2,760 B / 24 allocations
+reduced the completed-send component fixtures to 2,760 B / 24 allocations
 for a fresh parsed message and 88 B / 4 allocations for repeated convenience
 reparsing into the same message. Those compatibility lifecycles still allocate;
 they are separate from warmed scalar updates on a reused response.
@@ -117,38 +115,46 @@ The session also owns one control-message arena of the same kind, a 16 KiB
 reject-text buffer, a 16 KiB + 18-byte event buffer and fixed engine-field
 scratch. Control initialization and caller-arena attachment are outside the
 warmed interval. Sending a new `Message` for every request continues to allocate.
-Changing an already attached caller message to a destination with different
-frame/field limits returns an error rather than silently resizing its arena.
+A borrowed send of an already attached caller message to a destination with
+different frame/field limits returns an error rather than resizing its arena.
+Owned delivery instead detaches that arena before preparing the send.
 
 ## Scopes and callback lifetimes
 
-The following describes the candidate's changed lifetime contract. It is not
-evidence that legacy applications retaining callback pointers remain compatible.
-
 Each mutable message, frame, output slot and journal entry has one owner.
 Callbacks retain their existing signatures and run synchronously in their
-existing processing/send scope.
+existing processing/send scope. Default ownership adapters sit at delivery
+boundaries; fixed frame, parser, validation and output storage remain internal.
 
-- Incoming `Message`, its parsed fields, `GetBytes` values and raw `Bytes()` view
-  are valid during the incoming callback. The session reuses parsing storage
-  after processing. `CopyInto`, `GetString` and `String` create owned retained
-  representations and may allocate. A shallow struct copy does not transfer
-  ownership of the underlying storage.
+- Ordinary `FromApp` and `FromAdmin` receive an owned message and copied frame.
+  Its pointer, parsed field/group data, `GetBytes`, raw `Bytes()` and shallow
+  section views survive internal slot reuse and reconnect. Materialization
+  preserves parsed raw/field aliases within the owned representation. Incoming
+  callback mutations still affect subsequent session handling.
+- Ordinary engine-generated `ToAdmin` receives an owned copy of the private
+  control cell. Encoding continues from that delivered object, so field, section
+  and whole-message replacements affect the actual sent wire. Ordinary replay
+  `ToApp` receives an owned message after the fixed parse and before resend
+  header updates. It survives replay completion and journal retirement/reuse.
 - A caller-owned outgoing message remains the caller's after synchronous
   `SendToTarget` encoding returns. The writer owns an independent wire slot, so
   subsequent caller mutation cannot alter queued bytes. Do not concurrently
   mutate or send the same message. On a logged-on connection, this call can wait
   for output capacity; the caller must keep the message and borrowed input
-  values valid until it returns. Getter views from its arena can move or be
-  replaced on later mutations; engine-generated views can change on a later
-  send. Public `SetBytes` retains its caller-supplied value alias, and the source
-  must remain valid for the operation using it.
-- Internal control and replay messages are borrowed during `ToAdmin`/`ToApp`.
-  Control storage remains acquired through callback and encoding, and is reused
-  on the next control acquisition. Copy retained content explicitly. Nested
-  control acquisition returns `ErrOutboundCapacity` before touching the active
-  message. Outbound callbacks must not recursively send/reset under existing
-  send ownership.
+  values valid until it returns. Ordinary `ToApp`/`ToAdmin` receives that original
+  pointer; previously returned engine-field getter bytes stay valid across
+  later sends. Public `SetBytes` retains its caller-supplied value alias, and the
+  source must remain valid for the operation using it.
+- Explicit `BorrowApplication` delivery borrows incoming, generated-control and
+  replay messages only until callback return. Its caller-owned response may
+  acquire an arena on the second send; field views may move or be overwritten
+  by a later mutation or send. Finish synchronous consumption first, or use an
+  owned copying API for values that must escape. A shallow copy does not detach
+  borrowed storage. The wrapper changes lifetime, not the engine or send API.
+
+Control storage remains acquired through callback and encoding. Nested control
+acquisition returns `ErrOutboundCapacity` before touching the active cell.
+Outbound callbacks must not recursively send/reset under existing send ownership.
 
 Control recycling restores its private original message representation before
 clearing it. A callback replacing a public section or the entire message cannot
@@ -157,9 +163,9 @@ TestReqID, routing identifiers, reject references and original sending time have
 owned getter bytes separate from their encoded wire; mutating those getters
 does not mutate the source request or silently rewrite the encoded value.
 
-Ordinary typed scalar getters/setters and reuse are included in the measured
-handler. Legacy `GetGroup`, per-request `SetGroup`/template reconstruction,
-`CopyInto`, field-map initialization/replacement and custom allocating field
+Typed scalar getters/setters and reuse within the explicit borrowed profile are
+included in the measured handler. Legacy `GetGroup`, per-request
+`SetGroup`/template reconstruction, `CopyInto`, field-map initialization/replacement and custom allocating field
 writers remain compatibility boundaries. Group parsing and validation being
 allocation-free does not make every legacy group convenience API allocation-free.
 Callbacks that replace/detach storage may allocate; subsequent internal control
@@ -174,7 +180,9 @@ flowchart LR
     Owner -->|out of order| Stash[Fixed retained-frame stash]
     Stash -->|ordered replay| Owner
     Owner -->|processing or discard complete| Vacant
-    Owner --> Handler[Ordinary Application callback]
+    Owner --> Boundary[Application ownership adapter]
+    Boundary -->|default: owned message| Handler[Application callback]
+    Boundary -->|explicit BorrowApplication: scoped view| Handler
     Handler --> Caller[Caller-owned response Message]
     Caller --> Send[Synchronous SendToTarget]
     Send --> Admission[Output admission]
@@ -288,11 +296,13 @@ from performance measurement. The revised connected-backpressure case uses only
 setup-allocated channels and a reused timer; no goroutine is created per cycle.
 Owner-copied snapshots establish unchanged committed state before preparation,
 and the writer-failure case checks that a blocked send fails without committing.
-The [backpressure regression checks](benchmarks/zero-allocation/phase-7/backpressure/)
-and current [seven exact allocation intervals](benchmarks/zero-allocation/phase-7/cached-length/exact-go1.23.12.txt)
-cover those semantics. Fresh [cached-length qualification](benchmarks/zero-allocation/phase-7/cached-length/)
-records the full Go 1.23 package, vet and core race passes separately from
-performance captures.
+The historical [backpressure regression checks](benchmarks/zero-allocation/phase-7/backpressure/)
+record the correction's origin. The current
+[focused callback-boundary run](benchmarks/zero-allocation/phase-7/callback-boundary/focused-third-go1.23.12.txt)
+includes all seven exact intervals with explicit borrowed delivery. Final
+all-package/vet/race, exact-allocation, source verification and complete benchmark
+qualification passed; the [callback-boundary evidence](benchmarks/zero-allocation/phase-7/callback-boundary/README.md)
+separates owned allocations, borrowed zero results and measured timing changes.
 
 The additional [direct latency fixture](benchmarks/zero-allocation/phase-7/read-to-write/README.md)
 starts at `Message.ReceiveTime`, stamped after the final socket read returns,
@@ -303,7 +313,7 @@ and framing work before that last read are excluded. Samples are accepted only
 after the unchanged peer-validation/ACK/slot-return/journal-retirement barrier;
 the broader client TCP/ACK RTT remains a separate metric.
 
-Across five Go 1.23 samples at `a2fb11b9`, direct p50 is 8.875–8.959 microseconds
+Across five historical Go 1.23 samples at `a2fb11b9`, direct p50 is 8.875–8.959 microseconds
 for ordinary messages and 9.875–10.000 microseconds with groups. All ten
 instrumented request/ACK benchmark rows report 0 B/op and 0 allocs/op, which are
 rounded benchmark results rather than a new exact allocation assertion.
@@ -317,5 +327,5 @@ cover reusable heartbeat, TestRequest, resend, gap-fill, Logout, Logon and rejec
 builders, but do not claim every surrounding negotiation/error flow is allocation
 free. TLS, allocating handlers/loggers/observers, arbitrary-precision decimal
 overflow and unqualified dictionaries/transports require separate measurement.
-The existing optional Mongo logger teardown failure is documented separately in
+The existing Mongo logger teardown failure is documented separately in
 the evidence; this TCP profile does not establish live Mongo coverage.

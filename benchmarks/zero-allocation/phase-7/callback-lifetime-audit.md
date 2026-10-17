@@ -1,77 +1,109 @@
-# Callback lifetime compatibility gap
+# Resolved callback ownership boundaries
 
-Source audit: 2026-10-16. Original runtime
-`d0993b42089daed35711c252244147d1183fd398`; candidate
-`4d74075f8fbfcf4a0e8decd35999825cb54672da` (production code `a2fb11b9`).
-This is source evidence, not an executed before/after regression fixture.
+The ordinary engine keeps fixed internal storage and preserves default
+`Application` lifetimes through owned delivery adapters. `BorrowApplication`
+explicitly permits shorter lifetimes within that same engine. No feature flag,
+alternate engine or send signature selects the allocation path.
 
-The candidate keeps method signatures but does **not** preserve the lifetime of
-messages delivered to existing application callbacks. This remains a merge
-blocker alongside the unmet latency target. The zero-allocation measurements
-use synchronous callbacks that do not retain these views; they do not prove
-compatibility for arbitrary existing applications.
+This supersedes the earlier compatibility-gap audit of
+`4d74075f8fbfcf4a0e8decd35999825cb54672da` (production `a2fb11b9`) against
+original runtime `d0993b42089daed35711c252244147d1183fd398`. That candidate's
+implicit borrowing was incompatible; documenting callback scope alone did not
+repair it. The correction supplies the missing adapters and regression tests.
+One microsecond is a stretch target, not a compatibility or merge gate.
 
-## Concrete behavior
+## Current boundary contract
 
-An ordinary `FromApp` callback can save its `*Message` in an application field,
-return, and read its ClOrdID after session processing finishes. The original
-runtime allocated a distinct message and copied frame for each input. Keeping
-the message reachable kept its contents alive. The candidate clears the parsed
-message after processing; the later getter can report a missing field. After
-another input, the same pointer can represent that later message.
+| Boundary | Ordinary `Application` | Explicit `BorrowApplication` |
+|---|---|---|
+| `FromApp` / `FromAdmin` | Owned message/frame materialized after fixed parsing; retained pointer, raw bytes, scalar/group views and shallow sections survive slot reuse | Message and views valid only during callback |
+| Generated `ToAdmin` | Owned copy of private control cell; callback replacements are the representation actually encoded | Private control view valid only during callback |
+| Replay `ToApp` | Owned message materialized after fixed parse and before resend header mutation; remains valid after replay and journal reuse | Fixed replay view valid only during callback |
+| Caller-created outgoing message | Original pointer preserved; old engine-field getter slices survive subsequent sends | Original pointer preserved; field views may move or be overwritten on later mutation/send |
+| Reused response construction | No automatic arena; a previous borrowed arena is detached before owned delivery | Fixed arena attaches on the second send, with configured limits |
 
-Saving a `GetBytes` result or `Message.Bytes()` instead retains a view into a
-raw input slot. Its contents change when the slot is reused. A shallow message
-or field-map copy also shares the recycled backing.
+Internal frame, parse, validation, control and output storage is shared by both
+contracts. The owned boundary allocates. Explicit borrowed delivery omits those
+copies; retaining data then requires an owned copying operation. Writer channels
+transfer independent output slots, never the caller's message.
 
-| Boundary | Original behavior | Candidate behavior |
-| --- | --- | --- |
-| Incoming `FromApp` / `FromAdmin` | Distinct message and copied frame per input | Session-owned message reset after processing; raw frame recycled |
-| Engine-generated `ToAdmin` | Distinct control message instances | One control cell cleared on later acquisition |
-| Replay `ToApp` | One message reused within each resend request | Reused within the request and also reset at request completion |
-| Caller-created outgoing message | Caller retains its own message | Caller still retains its own message; writer owns independent encoded bytes |
+## Implementation and behavior
 
-Replay needs the distinction above: the original runtime already reused one
-message within a resend batch. It did not provide a separate retained snapshot
-for every replay callback. Resetting the last replay at request completion is
-nevertheless an additional lifetime change.
+- `session_state.go` and `inbound_owned_message.go` materialize the successful
+  fixed parse into an owned message before state dispatch. One copied raw frame
+  and owned field metadata preserve the parsed representation and its raw/value
+  aliases, including group ranges. `session.fromCallback` clears the internal
+  frame token before ordinary application delivery. Callback mutations remain
+  visible to subsequent protocol handling.
+- `session.toAdmin` in `scoped_control.go` checks construction errors before
+  copying the internal control cell. It returns the delivered representation,
+  and send/gap-fill paths continue encoding that object. Section or whole-message
+  replacement therefore reaches the wire and persistence. The retained object
+  is never recycled with the private control cell.
+- `scopedResend.process` materializes owned delivery immediately after fixed
+  parse, before `session.resend` changes headers or calls `ToApp`. This placement
+  was retained in merge `6c66e9fa34759187547d133b998362afd7e8c2c9`. Fixed replay
+  scratch is still reset between frames and at request completion; owned
+  delivery is independent. Original persisted body/group wire behavior remains.
+- `prepareOutbound` detaches construction arenas before ordinary callbacks and
+  permits automatic attachment only for explicitly borrowed delivery. Cold
+  engine scalars own separate wire/getter regions in one exact allocation.
+  Replacing a scalar does not overwrite an earlier getter. Capacity/construction
+  failures precede committed sequence/store changes, with output/journal
+  reservations released on failure.
 
-## Source evidence
+## Regression evidence
 
-- Original `parser.go:159–161` allocated and copied each frame;
-  `session_state.go:94–99` allocated a new message for each incoming frame.
-  Parsed fields referenced that independently owned frame in `tag_value.go`.
-- Original `application.go` did not declare callback-only borrowing.
-  `GetBytes` was explicitly zero-copy, but no callback expiration was stated.
-- Candidate `session.go:827–836` passes the reusable message directly to the
-  application. `session_state.go:94–103` resets its slot after processing;
-  `MessageSlot.Reset` clears the maps, parsed fields and frame references.
-- Candidate `scoped_control.go` reuses the control cell and clears replay state
-  at request completion. `scoped_control_test.go` explicitly checks control
-  pointer identity and clearing.
+The current [focused Go 1.23 run](callback-boundary/focused-third-go1.23.12.txt)
+passed in 18.835 seconds. It includes all seven exact borrowed TCP allocation
+intervals, public-constructor integration and generated-control ownership.
+Final qualification also passed: all seven exact intervals (10.379 s), Go 1.23
+package tests (core 29.302 s; only the existing Mongo logger teardown suite
+excluded), vet, the separate complete core race run (32.751 s), and qualified
+source verification. The [final callback-boundary evidence](callback-boundary/README.md)
+records the complete benchmarks: 35 borrowed full-session rows and ten direct
+rows at 0/0, with owned delivery still allocating. Ordinary/group batch medians
+increased 3.6%/5.0%; the ownership correction makes no speed-gain claim.
 
-Current ownership adapters preserve copied data: `CopyInto`, owned string
-getters, detached `GetGroup` results and the legacy logger's automatic byte
-copies. There is no equivalent automatic application-message adapter or
-existing retention/release signal. `enableScopedCallbacks` allows convenience
-mutations; it does not detach the delivered message.
+The lifetime fixtures exercise actual retained references rather than copying
+them in the test and thereby hiding reuse:
 
-Existing compatibility fixtures test caller-initiated copying. The fix-server
-RFQ and audit fixtures verify its specific owned retained data. Neither proves
-that an unchanged application saving a callback pointer remains compatible.
-Documenting a new callback lifetime does not supply that compatibility.
+| Fixture | Behavior checked |
+|---|---|
+| `TestInboundLegacyCallbacksRetainMessageAndBytes` | Pointer, shallow sections, getters and raw bytes across more frames than ring capacity and reconnect |
+| `TestInboundLegacyCallbackRetainsNestedGroups` / `TestInboundOwnedMaterializationMatchesParsedRepresentation` | Nested/header/trailer groups, parsed raw/field aliases and detached frame storage |
+| `TestInboundLegacyFromAdminMutationChangesHeartbeat` | Incoming TestReqID mutation reaches the outgoing heartbeat |
+| `TestInboundLegacyRetainedMessageConcurrentWithSlotReuse` | Retained reads while later frames reuse internal slots |
+| `TestOutboundLegacyRetainedGettersSurviveRepeatedSends` | Original pointer and old sequence/time/369/BodyLength/checksum getters across second/third sends |
+| `TestOutboundLegacyReplaySurvivesJournalReuseAndAnotherResend` | Retained replay pointer/raw/groups through completion, retirement, exact journal-cell reuse and another resend |
+| `TestOrdinaryControlCallbacksRetainMessagesAndSections` | All seven generated control types retain distinct callback objects and shallow views |
+| `TestOrdinaryControlCallbackReplacementReachesCompletedWriter` | Field, section and whole-message replacements reach persistence and completed wire |
+| `TestOrdinaryControlConstructionOverflowReturnsError` | No callback, panic or sequence/store change on pre-delivery construction overflow |
+| `TestOrdinaryOutboundDetachesPreviouslyBorrowedStorage` | Original pointer retained when moving from borrowed to owned delivery; later mutations leave saved owned getters intact |
+| `TestApplicationBoundaryPublicConstructors` | Real acceptor/initiator TCP sessions for both contracts, dictionary validation, persistence, slot reuse, disconnect/reconnect and joined reader/writer teardown |
 
-## Required decision
+The earlier failing-before evidence remains in the
+[outbound boundary qualification](../phase-6/callback-boundary/README.md): saved
+sequence bytes changed on a later send, and replay raw bytes were reset at
+request completion. Those failures are the reason the old zero-allocation
+candidate is not a compatible allocation baseline.
 
-The existing `Application` interface gives the library no way to distinguish a
-callback that saves its message from one that consumes it synchronously. If
-both receive the same reusable identity, recycling invalidates the saved one.
-Without a release signal, backpressure also cannot determine when that saved
-message is safe to reuse.
+## Original behavior preserved
 
-Internal frame, parser, validation and output storage can remain fixed in
-either design. Automatically delivering owned messages preserves the old
-callback behavior but allocates at that boundary. Callback-scoped delivery can
-reuse storage without allocation but changes existing lifetime behavior. The
-current measured candidate implements the latter; that change has not been
-accepted as satisfying the plug-and-play compatibility requirement.
+At `d0993b42089daed35711c252244147d1183fd398`, `parser.go:159–161` allocated
+and copied each frame, and `session_state.go:94–99` created a new message per
+input. Parsed fields referenced the independently owned frame through
+`tag_value.go`. Holding the incoming message kept its contents alive. The
+original `Application` documentation did not declare callback expiration;
+`GetBytes` being zero-copy did not imply that its frame could later be recycled.
+Generated admin messages were separate instances, and outgoing messages remained
+caller-owned.
+
+Original resend processing reused one message within a resend request, so it
+did not promise a distinct snapshot for every callback in that batch. It did
+leave the last representation alive after the request. Current owned replay
+delivery preserves that lifetime and gives each callback a distinct message.
+The historical source comparison establishes those original behaviors; the new
+retention fixtures execute the corrected boundaries. Earlier fixed-storage
+measurements at `8033f27d` and predecessors retain their source identities and
+do not qualify the new default ownership contract.
