@@ -264,7 +264,10 @@ func (s *session) generateSequenceReset(beginSeqNo int, endSeqNo int, inReplyTo 
 		setControlBytes(&sequenceReset.Header.FieldMap, tagOrigSendingTime, origSendingTime)
 	}
 
-	s.application.ToAdmin(sequenceReset, s.sessionID)
+	sequenceReset, err = s.toAdmin(sequenceReset)
+	if err != nil {
+		return err
+	}
 
 	if err = s.enqueueControl(sequenceReset); err != nil {
 		return
@@ -473,7 +476,10 @@ func (s *session) prepMessageForSend(msg *Message, inReplyTo *Message) (msgBytes
 
 	if isAdminMessageType(msgType) {
 		toAdminStartedAt := time.Now()
-		s.application.ToAdmin(msg, s.sessionID)
+		msg, err = s.toAdmin(msg)
+		if err != nil {
+			return
+		}
 		s.observeSendStage("to_admin", string(msgType), time.Since(toAdminStartedAt), true)
 		if bytes.Equal(msgType, msgTypeLogon) {
 			var resetSeqNumFlag FIXBoolean

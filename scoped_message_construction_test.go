@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-func TestOrdinarySendAdoptsCallerConstructionScope(t *testing.T) {
-	fixture := newScopedOutboundBenchmark(t, false, "")
+func TestBorrowedSendAdoptsCallerConstructionScope(t *testing.T) {
+	fixture := newScopedOutboundBenchmarkWithDelivery(t, false, "", true)
 	defer fixture.close()
 	if err := fixture.process(); err != nil {
 		t.Fatal(err)
@@ -49,8 +49,8 @@ func TestOrdinarySendAdoptsCallerConstructionScope(t *testing.T) {
 	}
 }
 
-func TestOrdinaryConstructionCapacityPrecedesPersistence(t *testing.T) {
-	fixture := newScopedOutboundBenchmark(t, false, "")
+func TestBorrowedConstructionCapacityPrecedesPersistence(t *testing.T) {
+	fixture := newScopedOutboundBenchmarkWithDelivery(t, false, "", true)
 	defer fixture.close()
 	for range 2 {
 		if err := fixture.process(); err != nil {
@@ -83,8 +83,8 @@ func TestOrdinaryConstructionCapacityPrecedesPersistence(t *testing.T) {
 	}
 }
 
-func TestOrdinaryChangingScalarsThroughCompletedWriteAllocateZero(t *testing.T) {
-	fixture := newScopedOutboundBenchmark(t, false, "")
+func TestBorrowedChangingScalarsThroughCompletedWriteAllocateZero(t *testing.T) {
+	fixture := newScopedOutboundBenchmarkWithDelivery(t, false, "", true)
 	defer fixture.close()
 	identifiers := [...]string{"order-a", "longer-order-identifier", "b"}
 	symbol := []byte("SYMBOL")

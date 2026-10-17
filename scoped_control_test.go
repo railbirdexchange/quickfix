@@ -286,6 +286,7 @@ func TestScopedControlInvalidLimitsFailSessionSetup(t *testing.T) {
 
 func TestScopedControlCallbackOwnershipAndCompletedWrite(t *testing.T) {
 	fixture, application := newScopedControlFixture(t)
+	fixture.session.application = BorrowApplication(application)
 	defer fixture.close()
 	retained := NewMessage()
 	sequence := fixture.store.NextSenderMsgSeqNum()
@@ -333,6 +334,7 @@ func TestScopedControlCallbackOwnershipAndCompletedWrite(t *testing.T) {
 
 func TestScopedControlCapacityFailureReleasesScope(t *testing.T) {
 	fixture, application := newScopedControlFixture(t)
+	fixture.session.application = BorrowApplication(application)
 	defer fixture.close()
 	sequence, target := fixture.store.NextSenderMsgSeqNum(), fixture.store.NextTargetMsgSeqNum()
 	oversized := string(bytes.Repeat([]byte{'x'}, fixture.session.boundedIn.limits.MaxFrameBytes))
@@ -443,6 +445,7 @@ func TestScopedControlWarmedAllocations(t *testing.T) {
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			fixture, _ := newScopedControlFixture(t)
+			fixture.session.application = BorrowApplication(fixture.session.application)
 			defer fixture.close()
 			cycle := func() error {
 				sequence := fixture.store.NextSenderMsgSeqNum()

@@ -29,9 +29,9 @@ type Application interface {
 
 	// ToAdmin notification of admin message being sent to target. A message
 	// supplied to Send or SendToTarget remains caller-owned after sending.
-	// Engine-generated controls are session-owned callback views: retain their
-	// contents with CopyInto or owned string getters before returning. Their
-	// Message and GetBytes results must not be retained for asynchronous work.
+	// Engine-generated controls are owned messages that remain valid afterward.
+	// BorrowApplication explicitly replaces owned delivery with callback-scoped
+	// views of engine-generated controls.
 	ToAdmin(message *Message, sessionID SessionID)
 
 	// ToApp notification of app message being sent to target. Ordinary sends
@@ -59,9 +59,10 @@ type Application interface {
 // Incoming messages, engine-generated admin messages and resend messages must
 // not be retained or passed to asynchronous work. CopyInto, GetGroup and string
 // getters can create owned values when retention is necessary, and may allocate.
-// Caller-created outgoing Messages remain caller-owned; their engine-maintained
-// fields may reuse storage on a later send. Do not retain those field byte views
-// across sends. Ordinary Application delivery retains the legacy lifetimes.
+// Caller-created outgoing Messages remain caller-owned. Repeated sends can
+// attach fixed construction storage; field byte views may move or be overwritten
+// on subsequent mutation or send. Do not retain those views across operations.
+// Ordinary Application delivery retains the legacy lifetimes.
 func BorrowApplication(application Application) Application {
 	if applicationBorrowsMessages(application) {
 		return application

@@ -131,18 +131,26 @@ type boundedFullSession struct {
 }
 
 func newBoundedFullSession(tb testing.TB, groups bool) *boundedFullSession {
+	return newFullSessionWithDelivery(tb, groups, true)
+}
+
+func newFullSessionWithDelivery(tb testing.TB, groups, borrowed bool) *boundedFullSession {
 	tb.Helper()
 	application := &boundedFullApplication{groups: groups, response: newBoundedFullResponse(groups), checkpoints: make(chan boundedFullCheckpoint, 1), logons: make(chan struct{}, 1), logouts: make(chan struct{}, 1), admissions: make(chan boundedFullAdmission, 1), admissionStarts: make(chan boundedFullAdmissionStart, 1), preparations: make(chan boundedFullStoreFingerprint, 1), commands: make(chan func(*boundedFullApplication), 1)}
 	settings := NewSessionSettings()
 	settings.Set(config.DataDictionary, "spec/FIX44.xml")
 	settings.Set(config.TimeStampPrecision, "MILLIS")
-	// Existing capacities only. No bounded-mode or alternate Application switch.
+	// Both callback contracts use the same engine and fixed capacities.
 	settings.Set(config.InChanCapacity, "32")
 	settings.Set(config.SocketOutboundBufferSize, "32")
 	settings.Set(config.OutboundFrameQueueCapacity, "32")
 	socketOutboundBufferSize, err := nonNegativeIntSetting(settings, config.SocketOutboundBufferSize)
 	require.NoError(tb, err)
-	s, err := (sessionFactory{}).newSession(SessionID{BeginString: BeginStringFIX44, SenderCompID: "SERVER", TargetCompID: "PEER", Qualifier: "ordinary-full-session"}, NewBoundedStoreFactory(1024, 16384), settings, NewNullLogFactory(), application)
+	var delivery Application = application
+	if borrowed {
+		delivery = BorrowApplication(application)
+	}
+	s, err := (sessionFactory{}).newSession(SessionID{BeginString: BeginStringFIX44, SenderCompID: "SERVER", TargetCompID: "PEER", Qualifier: "ordinary-full-session"}, NewBoundedStoreFactory(1024, 16384), settings, NewNullLogFactory(), delivery)
 	require.NoError(tb, err)
 	require.NoError(tb, registerSession(s))
 	application.session = s

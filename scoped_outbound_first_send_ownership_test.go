@@ -100,7 +100,7 @@ func TestScopedOutboundColdScalarSingleAllocation(t *testing.T) {
 }
 
 func TestScopedOutboundFirstSendEstablishesScopeOnlyOnReuse(t *testing.T) {
-	fixture := newScopedOutboundBenchmark(t, false, "")
+	fixture := newScopedOutboundBenchmarkWithDelivery(t, false, "", true)
 	defer fixture.close()
 	message := fixture.message
 	require.NoError(t, fixture.process())
@@ -188,7 +188,7 @@ func TestScopedOutboundFirstSendReparseResetsReuse(t *testing.T) {
 			name = "previously_warmed"
 		}
 		t.Run(name, func(t *testing.T) {
-			fixture := newScopedOutboundBenchmark(t, false, "")
+			fixture := newScopedOutboundBenchmarkWithDelivery(t, false, "", true)
 			defer fixture.close()
 			message := fixture.message
 			if previouslyWarmed {
@@ -211,7 +211,7 @@ func TestScopedOutboundFirstSendReparseResetsReuse(t *testing.T) {
 }
 
 func TestScopedOutboundFirstSendCopyBoundaries(t *testing.T) {
-	fixture := newScopedOutboundBenchmark(t, false, "")
+	fixture := newScopedOutboundBenchmarkWithDelivery(t, false, "", true)
 	defer fixture.close()
 	source := fixture.message
 	require.NoError(t, fixture.process())

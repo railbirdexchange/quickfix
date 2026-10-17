@@ -339,10 +339,18 @@ func TestBoundedFullSessionWarmedPostReconnect(t *testing.T) {
 // latency: the measurement includes the independent peer and acknowledgement.
 // Ordinary/groups/post-reconnect operations each process a batch of 32 requests.
 func BenchmarkBoundedFullSession(b *testing.B) {
-	for _, scenario := range []string{"ordinary", "groups", "outbound_resend", "inbound_gap", "slow_consumer", "warmed_post_reconnect", "heartbeat_test_request"} {
+	benchmarkFullSession(b, true, []string{"ordinary", "groups", "outbound_resend", "inbound_gap", "slow_consumer", "warmed_post_reconnect", "heartbeat_test_request"})
+}
+
+func BenchmarkOwnedFullSession(b *testing.B) {
+	benchmarkFullSession(b, false, []string{"ordinary", "groups"})
+}
+
+func benchmarkFullSession(b *testing.B, borrowed bool, scenarios []string) {
+	for _, scenario := range scenarios {
 		b.Run(scenario, func(b *testing.B) {
 			b.StopTimer()
-			fixture := newBoundedFullSession(b, scenario != "ordinary")
+			fixture := newFullSessionWithDelivery(b, scenario != "ordinary", borrowed)
 			require.NoError(b, fixture.warm())
 			if scenario == "warmed_post_reconnect" {
 				require.NoError(b, fixture.reconnect())

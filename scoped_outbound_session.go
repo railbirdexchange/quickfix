@@ -104,11 +104,20 @@ func (s *session) prepareOutbound(message, inReplyTo *Message, replacement bool)
 	if err := message.constructionError(); err != nil {
 		return nil, err
 	}
-	// A second ordinary send establishes a reusable caller scope. Avoid imposing
-	// a full fixed arena on single-use legacy builders. Incoming parsed slots
-	// already have their own session-owned storage and reset lifecycle.
-	if message.arena != nil || message.parseSlot == nil && !message.Header.scoped && !message.Body.scoped && !message.Trailer.scoped &&
-		message.outboundOwner == message {
+	borrowed := applicationBorrowsMessages(s.application)
+	if !borrowed && message != s.controls.message {
+		// A caller may move a message from a borrowed application to an owned
+		// one. End its reusable construction lifetime before owned delivery.
+		message.Header.detachArena()
+		message.Body.detachArena()
+		message.Trailer.detachArena()
+		message.arena = nil
+	}
+	// Only an explicit borrowed application can establish a reusable caller
+	// arena. Single-use builders keep small owned scalars; parsed input already
+	// has its own storage and reset lifecycle.
+	if borrowed && (message.arena != nil || message.parseSlot == nil && !message.Header.scoped && !message.Body.scoped && !message.Trailer.scoped &&
+		message.outboundOwner == message) {
 		if err := message.attachMessageArena(s.boundedIn.limits.MaxFrameBytes, s.boundedIn.limits.MaxFields); err != nil {
 			return nil, err
 		}
@@ -175,7 +184,10 @@ func (s *session) prepareOutbound(message, inReplyTo *Message, replacement bool)
 	message.setOutboundInt(&message.Header.FieldMap, outboundSequence, tagMsgSeqNum, sequence)
 	if admin {
 		started := startSendStage()
-		s.application.ToAdmin(message, s.sessionID)
+		message, err = s.toAdmin(message)
+		if err != nil {
+			return nil, err
+		}
 		s.finishPreparedSendStage("to_admin", messageType, started, true)
 		if logon {
 			reset := false

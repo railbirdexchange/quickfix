@@ -19,7 +19,8 @@ const (
 
 // Engine scalar storage belongs to a reused caller Message or session parse
 // slot and is never transferred to the socket writer. A fresh ordinary Message
-// uses small owned scalar values until a second send establishes its scope.
+// uses small owned scalar values. An explicitly borrowed application's second
+// send can establish reusable construction storage.
 type outboundFields struct {
 	owner   *Message
 	buffers [outboundFieldCount][80]byte
@@ -27,8 +28,8 @@ type outboundFields struct {
 }
 
 func (message *Message) hasOutboundScope() bool {
-	return message.arena != nil || message.parseSlot != nil ||
-		message.outboundFields != nil && message.outboundFields.owner == message
+	return message.arena != nil || message.outboundBorrowed && (message.parseSlot != nil ||
+		message.outboundFields != nil && message.outboundFields.owner == message)
 }
 
 func (message *Message) outboundFieldBuffer(index int) []byte {

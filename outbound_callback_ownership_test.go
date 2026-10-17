@@ -195,7 +195,7 @@ func completeOutboundOwnershipSend(t *testing.T, fixture *scopedOutboundBenchmar
 
 func completeOutboundOwnershipResend(t *testing.T, fixture *scopedOutboundBenchmark, sequence int) []byte {
 	t.Helper()
-	require.NoError(t, (inSession{}).resendMessages(fixture.session, sequence, sequence, *NewMessage()))
+	require.NoError(t, (inSession{}).resendMessages(fixture.session, sequence, sequence, NewMessage()))
 	return completeOutboundOwnershipWrite(t, fixture)
 }
 

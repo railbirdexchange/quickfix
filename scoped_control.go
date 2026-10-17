@@ -73,6 +73,22 @@ func (s *session) releaseControl() {
 	s.controls.busy = false
 }
 
+// toAdmin keeps the control cell private unless the application explicitly
+// borrows callbacks. Continue sending the delivered representation so callback
+// field/section replacements and its retained pointer describe the same wire.
+func (s *session) toAdmin(message *Message) (*Message, error) {
+	if err := message.constructionError(); err != nil {
+		return nil, err
+	}
+	if message == s.controls.message && !applicationBorrowsMessages(s.application) {
+		owned := NewMessage()
+		message.CopyInto(owned)
+		message = owned
+	}
+	s.application.ToAdmin(message, s.sessionID)
+	return message, nil
+}
+
 // enqueueControl preserves a gap fill's explicit sequence and bypasses normal
 // sender-sequence assignment/persistence just as EnqueueBytesAndSend did. Its
 // body is encoded directly into the reserved output slot rather than build().
