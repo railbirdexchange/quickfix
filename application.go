@@ -37,15 +37,37 @@ type Application interface {
 	// retain individual owned GetString/FIXString values, before returning.
 	ToApp(message *Message, sessionID SessionID) error
 
-	// FromAdmin processes an inbound admin message synchronously. The Message,
-	// GetBytes results and explicitly borrowed views are valid only during this callback.
-	// Do not retain them or pass them to asynchronous work. CopyInto detaches
-	// scoped input for retention; GetGroup returns owned group data. GetString,
-	// FIXString and String return owned strings. Ordinary setters remain
-	// available but may allocate.
+	// FromAdmin processes an inbound admin message. Messages and their field
+	// bytes remain valid after the callback returns. BorrowApplication explicitly
+	// replaces this owned delivery with callback-scoped delivery.
 	FromAdmin(message *Message, sessionID SessionID) MessageRejectError
 
-	// FromApp processes an inbound application message synchronously, with the
-	// same scoped Message/byte lifetime and retention rules as FromAdmin.
+	// FromApp processes an inbound application message, with the same ownership
+	// rules as FromAdmin.
 	FromApp(message *Message, sessionID SessionID) MessageRejectError
+}
+
+// BorrowApplication declares that application finishes using engine-owned
+// messages and byte views before each callback returns. It uses the same session
+// engine as an ordinary Application, omitting the ownership copies at delivery.
+// Pass the returned Application to NewAcceptor or NewInitiator.
+//
+// Incoming messages, engine-generated admin messages and resend messages must
+// not be retained or passed to asynchronous work. CopyInto, GetGroup and string
+// getters can create owned values when retention is necessary, and may allocate.
+// Caller-created outgoing Messages remain caller-owned; their engine-maintained
+// fields may reuse storage on a later send. Do not retain those field byte views
+// across sends. Ordinary Application delivery retains the legacy lifetimes.
+func BorrowApplication(application Application) Application {
+	if applicationBorrowsMessages(application) {
+		return application
+	}
+	return borrowedApplication{Application: application}
+}
+
+type borrowedApplication struct{ Application }
+
+func applicationBorrowsMessages(application Application) bool {
+	_, borrowed := application.(borrowedApplication)
+	return borrowed
 }
