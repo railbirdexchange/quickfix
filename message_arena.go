@@ -22,6 +22,7 @@ type messageArena struct {
 	values        []byte
 	staging       []byte
 	records       []messageArenaField
+	groupValues   []TagValue
 	recordIndexes [3][]int
 	used          int
 	fieldCount    int
@@ -32,12 +33,14 @@ type messageArena struct {
 }
 
 type messageArenaField struct {
-	section int
-	tag     Tag
-	offset  int
-	length  int
-	values  field
-	owned   bool // A scalar value belongs to the parallel owned-value plane.
+	section      int
+	tag          Tag
+	offset       int
+	length       int
+	values       field
+	owned        bool // Getter values belong to the parallel owned-value plane.
+	groupOffset  int
+	boundedGroup bool
 }
 
 // attachMessageArena is setup for ordinary outbound integration. It preserves
@@ -101,6 +104,7 @@ func (message *Message) attachMessageArena(maxFrameBytes, maxFields int) error {
 	}
 
 	arena := &messageArena{owner: message, sections: sections, maxFields: maxFields, records: make([]messageArenaField, 0, maxFields)}
+	arena.groupValues = make([]TagValue, 0, maxFields)
 	storage := make([]byte, 3*maxFrameBytes)
 	arena.bytes = storage[:maxFrameBytes:maxFrameBytes]
 	arena.values = storage[maxFrameBytes : 2*maxFrameBytes : 2*maxFrameBytes]
@@ -342,6 +346,7 @@ func (arena *messageArena) setScalar(fields *FieldMap, tag Tag, value []byte, te
 	}
 	record := &arena.records[index]
 	arena.account(section, tag, length-record.length, 1-len(record.values))
+	arena.releaseGroupValues(record)
 	record.length, record.owned = length, owned
 	record.values = fields.fixedGetOrCreate(tag)
 	entry, _ := fields.fixed.find(tag)
@@ -402,6 +407,7 @@ func (arena *messageArena) remove(fields *FieldMap, tag Tag) {
 	}
 	arena.resize(index, 0)
 	arena.account(fields.arenaSection, tag, -arena.records[index].length, -len(arena.records[index].values))
+	arena.releaseGroupValues(&arena.records[index])
 	entry, _ := fields.fixed.find(tag)
 	arena.recordIndexes[fields.arenaSection][entry] = 0
 	fields.fixedRemove(tag)
@@ -446,6 +452,7 @@ func (arena *messageArena) setGroup(fields *FieldMap, tag Tag, values field) {
 	}
 	record := &arena.records[index]
 	arena.account(section, tag, length-record.length, len(copied)-len(record.values))
+	arena.releaseGroupValues(record)
 	record.length, record.values, record.owned = length, copied, false
 	for current := range copied {
 		wire := copied[current].bytes

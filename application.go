@@ -62,6 +62,8 @@ type Application interface {
 // Caller-created outgoing Messages remain caller-owned. Repeated sends can
 // attach fixed construction storage; field byte views may move or be overwritten
 // on subsequent mutation or send. Do not retain those views across operations.
+// CopyInto and GetGroup inside outgoing callbacks own their snapshots even on
+// the first send, before reusable construction storage is attached.
 // Ordinary Application delivery retains the legacy lifetimes.
 func BorrowApplication(application Application) Application {
 	if applicationBorrowsMessages(application) {
@@ -71,6 +73,18 @@ func BorrowApplication(application Application) Application {
 }
 
 type borrowedApplication struct{ Application }
+
+func (application borrowedApplication) ToApp(message *Message, sessionID SessionID) error {
+	scope := beginBorrowedOutboundCopy(message)
+	defer scope.release()
+	return application.Application.ToApp(message, sessionID)
+}
+
+func (application borrowedApplication) ToAdmin(message *Message, sessionID SessionID) {
+	scope := beginBorrowedOutboundCopy(message)
+	defer scope.release()
+	application.Application.ToAdmin(message, sessionID)
+}
 
 func applicationBorrowsMessages(application Application) bool {
 	_, borrowed := application.(borrowedApplication)
