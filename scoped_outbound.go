@@ -122,13 +122,14 @@ type outboundWriter struct {
 	done       chan struct{}
 	wake       chan bool
 	timeout    time.Duration
-	err        error // Published by closing done.
+	failed     chan struct{}
+	err        error // Published by failed or by closing done; never changed afterward.
 }
 
 func newOutboundWriter(connection net.Conn, queueDepth int, timeout time.Duration, wake chan bool) *outboundWriter {
 	writer := &outboundWriter{
 		connection: connection, ready: make(chan *outboundSlot, queueDepth),
-		permits: make(chan struct{}, max(queueDepth, 1)), done: make(chan struct{}), wake: wake, timeout: timeout,
+		permits: make(chan struct{}, max(queueDepth, 1)), done: make(chan struct{}), failed: make(chan struct{}), wake: wake, timeout: timeout,
 	}
 	for count := 0; count < queueDepth; count++ {
 		writer.permits <- struct{}{}
@@ -155,12 +156,18 @@ func (writer *outboundWriter) run() {
 		if cap(writer.ready) != 0 {
 			writer.permits <- struct{}{}
 		}
-		writer.err = writer.write(slot.wire)
+		err := writer.write(slot.wire)
+		if err != nil {
+			writer.err = err
+			// Publish failure before returning ownership. A waiting sender must
+			// not use this slot to commit another message after a failed write.
+			close(writer.failed)
+		}
 		slot.release()
 		// This notification occurs after both the completed write and the
 		// ownership return. It also lets the session drain a pending queue.
 		writer.notify()
-		if writer.err != nil {
+		if err != nil {
 			return
 		}
 	}
@@ -173,7 +180,7 @@ func (writer *outboundWriter) notify() {
 	}
 }
 
-// failure is read only after done closes and publishes the writer result.
+// failure is read only after failed is observed or done closes.
 func (writer *outboundWriter) failure() error {
 	if writer.err != nil {
 		return writer.err

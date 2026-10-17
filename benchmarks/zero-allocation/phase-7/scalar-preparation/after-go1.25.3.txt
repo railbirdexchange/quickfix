@@ -1,0 +1,36 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+cpu: Apple M4 Pro
+BenchmarkMessageArenaScalarMutation/typed         	10012069	       107.2 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageArenaScalarMutation/typed         	11556564	       107.3 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageArenaScalarMutation/typed         	11093691	       107.7 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageArenaScalarMutation/typed         	11068054	       108.9 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageArenaScalarMutation/typed         	11269386	       110.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageArenaScalarMutation/external_bytes         	31832313	        37.09 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageArenaScalarMutation/external_bytes         	32099865	        36.95 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageArenaScalarMutation/external_bytes         	32743755	        36.98 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageArenaScalarMutation/external_bytes         	32972958	        36.69 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageArenaScalarMutation/external_bytes         	33659841	        36.67 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageArenaScalarMutation/overlapping_bytes      	25658637	        45.85 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageArenaScalarMutation/overlapping_bytes      	26417097	        46.32 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageArenaScalarMutation/overlapping_bytes      	25864902	        46.47 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageArenaScalarMutation/overlapping_bytes      	25775894	        45.89 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageArenaScalarMutation/overlapping_bytes      	25886313	        45.63 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/new_order_single            	  593605	      1966 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/new_order_single            	  626896	      1968 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/new_order_single            	  612819	      1948 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/new_order_single            	  627547	      1930 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/new_order_single            	  634470	      1987 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/repeating_group             	  415663	      2896 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/repeating_group             	  428319	      2859 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/repeating_group             	  422764	      2846 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/repeating_group             	  431746	      2896 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/repeating_group             	  429614	      2877 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/custom_message_type         	  630337	      1880 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/custom_message_type         	  639048	      1914 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/custom_message_type         	  662066	      1935 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/custom_message_type         	  631903	      1944 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/custom_message_type         	  606790	      1942 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/quickfixgo/quickfix	38.592s

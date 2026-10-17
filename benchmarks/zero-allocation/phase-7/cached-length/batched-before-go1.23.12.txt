@@ -1,0 +1,15 @@
+Warning: Permanently added '192.168.252.5' (ED25519) to the list of known hosts.
+goos: linux
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+BenchmarkBoundedFullSession/ordinary         	    4279	    301813 ns/op	  33.18 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedFullSession/ordinary         	    3940	    292621 ns/op	  34.17 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedFullSession/ordinary         	    4082	    304049 ns/op	  32.91 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedFullSession/ordinary         	    3949	    298463 ns/op	  33.51 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedFullSession/ordinary         	    4036	    301917 ns/op	  33.13 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedFullSession/groups           	    3511	    338111 ns/op	  39.74 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedFullSession/groups           	    3472	    345244 ns/op	  38.91 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedFullSession/groups           	    3080	    341255 ns/op	  39.30 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedFullSession/groups           	    3459	    336366 ns/op	  39.94 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedFullSession/groups           	    2928	    342949 ns/op	  39.09 MB/s	       0 B/op	       0 allocs/op
+PASS

@@ -1,0 +1,8 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+cpu: Apple M4 Pro
+BenchmarkMessageArenaColdConstruction/ordinary         	 1933029	       614.0 ns/op	    1688 B/op	      31 allocs/op
+BenchmarkMessageArenaColdConstruction/with_default_arena         	   51943	     23745 ns/op	  440840 B/op	      54 allocs/op
+PASS
+ok  	github.com/quickfixgo/quickfix	3.562s

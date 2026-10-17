@@ -1,0 +1,1 @@
+ok  	github.com/quickfixgo/quickfix	1.553s

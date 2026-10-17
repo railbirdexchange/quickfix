@@ -17,13 +17,19 @@ const (
 	outboundFieldCount
 )
 
-// Only engine-owned scalar fields use this workspace. It belongs to the
-// caller's Message and is never transferred to the socket writer. Ordinary
-// setters retain their allocating semantics; explicit copies detach the bytes.
+// Engine scalar storage belongs to a reused caller Message or session parse
+// slot and is never transferred to the socket writer. A fresh ordinary Message
+// uses small owned scalar values. An explicitly borrowed application's second
+// send can establish reusable construction storage.
 type outboundFields struct {
 	owner   *Message
 	buffers [outboundFieldCount][80]byte
 	values  [outboundFieldCount][80]byte
+}
+
+func (message *Message) hasOutboundScope() bool {
+	return message.arena != nil || message.outboundBorrowed && (message.parseSlot != nil ||
+		message.outboundFields != nil && message.outboundFields.owner == message)
 }
 
 func (message *Message) outboundFieldBuffer(index int) []byte {
@@ -34,6 +40,12 @@ func (message *Message) outboundFieldBuffer(index int) []byte {
 }
 
 func (message *Message) setOutboundField(fields *FieldMap, index int, tag Tag, wire []byte, valueOffset int) {
+	if arena := fields.mutableArena(); arena != nil {
+		// Engine buffers are disjoint from the arena, including its value plane.
+		// Account the field before later body/header mutations move those planes.
+		arena.setScalar(fields, tag, wire[valueOffset:len(wire)-1], "", nil, true)
+		return
+	}
 	// Legacy scalar setters keep the getter value separate from encoded wire.
 	// Mutating GetBytes in a callback must not silently rewrite the encoding.
 	valueBytes := message.outboundFields.values[index][:len(wire)-valueOffset-1]
@@ -54,7 +66,38 @@ func (message *Message) setOutboundField(fields *FieldMap, index int, tag Tag, w
 	value[0] = TagValue{tag: tag, bytes: wire, value: valueBytes[:len(valueBytes):len(valueBytes)]}
 }
 
+// Cold engine scalars own one exact allocation with separate wire and getter
+// regions. Replacing a field never overwrites a caller's retained old getter.
+func setColdOutboundField(fields *FieldMap, tag Tag, value []byte) {
+	arena := fields.mutableArena()
+	if fields.constructionErr != nil {
+		return
+	}
+	if arena != nil {
+		arena.setScalar(fields, tag, value, "", nil, true)
+		return
+	}
+	var prefix [24]byte
+	tagBytes := strconv.AppendInt(prefix[:0], int64(tag), 10)
+	wireLength := len(tagBytes) + len(value) + 2
+	storage := make([]byte, wireLength+len(value))
+	wire := storage[:wireLength:wireLength]
+	copy(wire, tagBytes)
+	wire[len(tagBytes)] = '='
+	copy(wire[len(tagBytes)+1:], value)
+	wire[wireLength-1] = '\x01'
+	ownedValue := storage[wireLength:len(storage):len(storage)]
+	copy(ownedValue, value)
+	field := fields.getOrCreate(tag)
+	field[0] = TagValue{tag: tag, bytes: wire, value: ownedValue}
+}
+
 func (message *Message) setOutboundInt(fields *FieldMap, index int, tag Tag, value int) {
+	if !message.hasOutboundScope() {
+		var scratch [24]byte
+		setColdOutboundField(fields, tag, strconv.AppendInt(scratch[:0], int64(value), 10))
+		return
+	}
 	wire := strconv.AppendInt(message.outboundFieldBuffer(index), int64(tag), 10)
 	wire = append(wire, '=')
 	valueOffset := len(wire)
@@ -63,7 +106,33 @@ func (message *Message) setOutboundInt(fields *FieldMap, index int, tag Tag, val
 	message.setOutboundField(fields, index, tag, wire, valueOffset)
 }
 
+func (message *Message) setOutboundBool(fields *FieldMap, index int, tag Tag, value bool) {
+	if !message.hasOutboundScope() {
+		encoded := [1]byte{'N'}
+		if value {
+			encoded[0] = 'Y'
+		}
+		setColdOutboundField(fields, tag, encoded[:])
+		return
+	}
+	wire := strconv.AppendInt(message.outboundFieldBuffer(index), int64(tag), 10)
+	wire = append(wire, '=')
+	valueOffset := len(wire)
+	encoded := byte('N')
+	if value {
+		encoded = 'Y'
+	}
+	wire = append(wire, encoded, '\x01')
+	message.setOutboundField(fields, index, tag, wire, valueOffset)
+}
+
 func (message *Message) setOutboundBytes(fields *FieldMap, index int, tag Tag, value []byte) {
+	if !message.hasOutboundScope() {
+		// Internal values may borrow an input frame or the writer's output
+		// slot. Both retained regions must belong to the caller's Message.
+		setColdOutboundField(fields, tag, value)
+		return
+	}
 	wire := strconv.AppendInt(message.outboundFieldBuffer(index), int64(tag), 10)
 	wire = append(wire, '=')
 	valueOffset := len(wire)
@@ -79,6 +148,17 @@ func (message *Message) setOutboundBytes(fields *FieldMap, index int, tag Tag, v
 }
 
 func (message *Message) setOutboundTime(value time.Time, precision TimestampPrecision) {
+	if !message.hasOutboundScope() {
+		timestamp := FIXUTCTimestamp{Time: value, Precision: precision}
+		var scratch [64]byte
+		encoded, err := timestamp.AppendTo(scratch[:0])
+		if err != nil {
+			message.Header.SetField(tagSendingTime, timestamp)
+			return
+		}
+		setColdOutboundField(&message.Header.FieldMap, tagSendingTime, encoded)
+		return
+	}
 	wire := append(message.outboundFieldBuffer(outboundTimestamp), '5', '2', '=')
 	timestamp := FIXUTCTimestamp{Time: value, Precision: precision}
 	wire, err := timestamp.AppendTo(wire)

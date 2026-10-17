@@ -127,6 +127,8 @@ type Message struct {
 	// CopyInto must not transfer its input-frame or parse-storage ownership.
 	parseSlot      *MessageSlot
 	outboundFields *outboundFields
+	outboundOwner  *Message // Identifies a prior successful send of this exact representation.
+	arena          *messageArena
 	// Only the explicit borrowed application boundary may recycle scalar views.
 	outboundBorrowed bool
 }
@@ -154,17 +156,19 @@ func NewMessage() *Message {
 // CopyInto overwrites to with this message. Copies from session callbacks own
 // their field and group bytes and remain valid after the callback returns.
 func (m *Message) CopyInto(to *Message) {
-	if m == to && m.outboundFields != nil {
+	if m == to {
 		return
 	}
+	if err := m.constructionError(); err != nil {
+		panic(err)
+	}
+	to.outboundOwner = nil
 	if to.outboundFields != nil && to.outboundFields.owner != to {
 		to.outboundFields = nil
 	}
 	scoped := m.parseSlot != nil && m.parseSlot.scopedFields[0].fixed != nil || m.Header.scoped || m.Body.scoped || m.Trailer.scoped
-	if scoped && m == to {
-		return
-	}
-	if scoped {
+	reusable := m.arena != nil || m.Header.reusable || m.Body.reusable || m.Trailer.reusable
+	if scoped || reusable {
 		// A callback may replace an entire section. Its local marker can then
 		// be absent, but the complete scoped message still requires owned copies.
 		header, body, trailer := m.Header.FieldMap, m.Body.FieldMap, m.Trailer.FieldMap
@@ -184,19 +188,20 @@ func (m *Message) CopyInto(to *Message) {
 	to.fields = make([]TagValue, len(m.fields))
 	for i := range to.fields {
 		value := m.fields[i].value
-		if scoped {
+		if scoped || reusable {
 			value = bytes.Clone(value)
 		}
 		to.fields[i].init(m.fields[i].tag, value)
 	}
 	copiedSlot := to.parseSlot != nil && &to.parseSlot.message != to
-	if scoped || copiedSlot {
+	if scoped || reusable || copiedSlot {
 		to.rawMessage = nil
 	}
 	if copiedSlot || scoped && to.parseSlot == nil {
 		to.inbound = nil
 		to.parseSlot = nil
 	}
+	to.arena = nil
 }
 
 // ParseMessage constructs a Message from a byte slice wrapping a FIX message.
@@ -211,6 +216,13 @@ func ParseMessageWithDataDictionary(
 	transportDataDictionary *datadictionary.DataDictionary,
 	appDataDictionary *datadictionary.DataDictionary,
 ) (err error) {
+	// Convenience reparsing replaces the entire field representation. It is a
+	// cold ownership boundary, not a mutation within the outbound scalar arena.
+	msg.Header.detachArena()
+	msg.Body.detachArena()
+	msg.Trailer.detachArena()
+	msg.arena = nil
+	msg.outboundOwner = nil
 	if msg.parseSlot != nil {
 		// Convenience parsing may reuse the original slab beyond the bounded
 		// parser's high-water mark, then shrink or replace the visible slice.
@@ -678,6 +690,9 @@ func extractField(parsedFieldBytes *TagValue, buffer []byte) (remBytes []byte, e
 // bytes borrow the input frame and expire when the callback returns. CopyInto
 // creates an owned message; String returns an owned string.
 func (m *Message) Bytes() []byte {
+	if err := m.constructionError(); err != nil {
+		panic(err)
+	}
 	if m.rawMessage != nil {
 		return m.rawMessage.Bytes()
 	}
@@ -688,6 +703,9 @@ func (m *Message) Bytes() []byte {
 // String returns an owned wire representation that remains valid after a
 // session callback returns.
 func (m *Message) String() string {
+	if err := m.constructionError(); err != nil {
+		panic(err)
+	}
 	if m.rawMessage != nil {
 		return m.rawMessage.String()
 	}
@@ -704,7 +722,13 @@ func formatCheckSum(value int) string {
 
 // Build constructs a []byte from a Message instance.
 func (m *Message) build() []byte {
+	if err := m.constructionError(); err != nil {
+		panic(err)
+	}
 	m.cook(m.Body.length(), m.Body.total())
+	if err := m.constructionError(); err != nil {
+		panic(err)
+	}
 
 	dst := make([]byte, 0, m.Header.serializedLength()+m.Body.serializedLength()+m.Trailer.serializedLength())
 	dst = m.Header.appendLegacy(dst)
@@ -718,7 +742,13 @@ func (m *Message) build() []byte {
 // This func lets us pull the Message from the Store, parse it, update the Header, and then build it back into bytes using the original Body.
 // Note: The only standard non-Body group is NoHops.  If that is used in the Header, this workaround may fail.
 func (m *Message) buildWithBodyBytes(bodyBytes []byte) []byte {
+	if err := m.constructionError(); err != nil {
+		panic(err)
+	}
 	m.cook(len(bodyBytes), bytesTotal(bodyBytes))
+	if err := m.constructionError(); err != nil {
+		panic(err)
+	}
 
 	dst := make([]byte, 0, m.Header.serializedLength()+len(bodyBytes)+m.Trailer.serializedLength())
 	dst = m.Header.appendLegacy(dst)

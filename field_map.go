@@ -18,6 +18,7 @@ package quickfix
 import (
 	"bytes"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -55,12 +56,14 @@ func (t tagSort) Less(i, j int) bool { return t.compare(t.tags[i], t.tags[j]) }
 type FieldMap struct {
 	tagLookup map[Tag]field
 	tagSort
-	rwLock *sync.RWMutex
-	fixed  *fixedFieldMap
-	scoped bool
-	// reusable marks engine scalar storage owned by the enclosing Message.
-	// Explicit field copies must detach it before that Message is sent again.
-	reusable bool
+	rwLock       *sync.RWMutex
+	fixed        *fixedFieldMap
+	scoped       bool
+	reusable     bool
+	arena        *messageArena
+	arenaSection int
+	// constructionErr preserves a failed section through cold arena detachment.
+	constructionErr error
 }
 
 // ascending tags.
@@ -71,7 +74,13 @@ func (m *FieldMap) init() {
 }
 
 func (m *FieldMap) initWithOrdering(ordering tagOrder) {
+	if m.arena != nil {
+		m.detachArena()
+		m.tags = nil
+	}
 	m.fixed = nil
+	m.reusable = false
+	m.constructionErr = nil
 	m.rwLock = &sync.RWMutex{}
 	m.tagLookup = make(map[Tag]field)
 	m.compare = ordering
@@ -136,6 +145,8 @@ func (m FieldMap) getFieldNoLock(tag Tag, parser FieldValueReader) MessageReject
 // GetBytes is a zero-copy GetField wrapper for []bytes fields. Values from a
 // MessageSlot or BorrowApplication callback follow that explicit borrowed
 // lifetime. Ordinary Application delivery retains its owned field bytes.
+// Borrowed outgoing arena values expire on mutation of the same Message.
+// Values supplied to SetBytes retain their external caller-owned alias.
 func (m FieldMap) GetBytes(tag Tag) ([]byte, MessageRejectError) {
 	m.rlock()
 	defer m.runlock()
@@ -256,7 +267,7 @@ func (m FieldMap) GetGroup(parser FieldGroupReader) MessageRejectError {
 	if !ok {
 		return ConditionallyRequiredFieldMissing(parser.Tag())
 	}
-	if m.scoped {
+	if m.scoped || m.reusable {
 		f = cloneOwnedField(f)
 	}
 
@@ -275,10 +286,18 @@ func (m *FieldMap) SetField(tag Tag, field FieldValueWriter) *FieldMap {
 	return m.SetBytes(tag, field.Write())
 }
 
-// SetBytes sets bytes. It is an allocating compatibility API. A bounded map
-// panics with ErrFieldCapacity before mutation if no field slot is available.
-// Session callback maps instead detach to ordinary storage on setter exhaustion.
+// SetBytes sets bytes. Repeatedly sent caller messages use fixed construction
+// storage and report capacity errors at send/append. Standalone maps allocate;
+// strict parse maps panic on exhaustion, and callback maps detach to owned data.
 func (m *FieldMap) SetBytes(tag Tag, value []byte) *FieldMap {
+	arena := m.mutableArena()
+	if m.constructionErr != nil {
+		return m
+	}
+	if arena != nil {
+		arena.setBytes(m, tag, value)
+		return m
+	}
 	f := m.getOrCreate(tag)
 	initField(f, tag, value)
 	return m
@@ -286,22 +305,55 @@ func (m *FieldMap) SetBytes(tag Tag, value []byte) *FieldMap {
 
 // SetBool is a SetField wrapper for bool fields.
 func (m *FieldMap) SetBool(tag Tag, value bool) *FieldMap {
+	arena := m.mutableArena()
+	if m.constructionErr != nil {
+		return m
+	}
+	if arena != nil {
+		text := "N"
+		if value {
+			text = "Y"
+		}
+		arena.setScalar(m, tag, nil, text, nil, true)
+		return m
+	}
 	return m.SetField(tag, FIXBoolean(value))
 }
 
 // SetInt is a SetField wrapper for int fields.
 func (m *FieldMap) SetInt(tag Tag, value int) *FieldMap {
+	arena := m.mutableArena()
+	if m.constructionErr != nil {
+		return m
+	}
+	if arena != nil {
+		var buffer [24]byte
+		arena.setScalar(m, tag, strconv.AppendInt(buffer[:0], int64(value), 10), "", nil, true)
+		return m
+	}
 	v := FIXInt(value)
 	return m.SetBytes(tag, v.Write())
 }
 
 // SetString is a SetField wrapper for string fields.
 func (m *FieldMap) SetString(tag Tag, value string) *FieldMap {
+	arena := m.mutableArena()
+	if m.constructionErr != nil {
+		return m
+	}
+	if arena != nil {
+		arena.setScalar(m, tag, nil, value, nil, true)
+		return m
+	}
 	return m.SetBytes(tag, []byte(value))
 }
 
 // Remove removes a tag from field map.
 func (m *FieldMap) Remove(tag Tag) {
+	if arena := m.mutableArena(); arena != nil {
+		arena.remove(m, tag)
+		return
+	}
 	if m.fixed != nil {
 		m.fixedRemove(tag)
 		return
@@ -314,12 +366,21 @@ func (m *FieldMap) Remove(tag Tag) {
 
 // Clear purges all fields from field map.
 func (m *FieldMap) Clear() {
+	if arena := m.mutableArena(); arena != nil {
+		arena.clear(m)
+		return
+	}
 	m.lock()
 	defer m.unlock()
 	m.clearNoLock()
 }
 
 func (m *FieldMap) clearNoLock() {
+	if arena := m.mutableArena(); arena != nil {
+		arena.clear(m)
+		return
+	}
+	m.constructionErr = nil
 	if m.fixed != nil {
 		m.fixedClear()
 		return
@@ -333,9 +394,14 @@ func (m *FieldMap) clearNoLock() {
 // CopyInto overwrites the given FieldMap with this one. Copying from a session
 // callback allocates owned field and group bytes that survive callback return.
 func (m *FieldMap) CopyInto(to *FieldMap) {
-	if (m.scoped || m.reusable) && m == to {
+	if m == to {
 		return
 	}
+	if err := m.constructionError(); err != nil {
+		panic(err)
+	}
+	to.detachArena()
+	to.constructionErr = nil
 	m.rlock()
 	defer m.runlock()
 	if to.fixed != nil && to.scoped {
@@ -428,15 +494,26 @@ func (m *FieldMap) getOrCreate(tag Tag) field {
 
 // Set is a setter for fields.
 func (m *FieldMap) Set(field FieldWriter) *FieldMap {
-	f := m.getOrCreate(field.Tag())
-	initField(f, field.Tag(), field.Write())
-	return m
+	tag := field.Tag()
+	value := field.Write()
+	return m.SetBytes(tag, value)
 }
 
 // SetGroup is a setter specific to group fields.
 func (m *FieldMap) SetGroup(field FieldGroupWriter) *FieldMap {
+	// Custom Write may call public initialization/copy APIs on its destination.
+	// Resolve the current storage only after that compatibility callback returns.
+	tag, values := field.Tag(), field.Write()
+	arena := m.mutableArena()
+	if m.constructionErr != nil {
+		return m
+	}
+	if arena != nil {
+		arena.setGroup(m, tag, values)
+		return m
+	}
 	if m.fixed != nil {
-		if _, found := m.lookup(field.Tag()); !found && m.fieldCount() == cap(m.fixed.tags) {
+		if _, found := m.lookup(tag); !found && m.fieldCount() == cap(m.fixed.tags) {
 			if !m.scoped {
 				panic(ErrFieldCapacity)
 			}
@@ -445,7 +522,7 @@ func (m *FieldMap) SetGroup(field FieldGroupWriter) *FieldMap {
 	}
 	m.lock()
 	defer m.unlock()
-	if !m.put(field.Tag(), field.Write()) {
+	if !m.put(tag, values) {
 		panic(ErrFieldCapacity)
 	}
 	return m

@@ -1,0 +1,32 @@
+diff --git a/session.go b/session.go
+index 902d638a..6a94bee4 100644
+--- a/session.go
++++ b/session.go
+@@ -1101,6 +1101,19 @@ func (s *session) onAdmin(msg interface{}) {
+ 	}
+ }
+ 
++// sendPendingAfterIncoming handles one coalesced output hint after the inbound
++// scope has ended. Returning to the main select preserves other event progress.
++func (s *session) sendPendingAfterIncoming() {
++	if s.Stopped() {
++		return
++	}
++	select {
++	case <-s.messageEvent:
++		s.SendAppMessages(s)
++	default:
++	}
++}
++
+ func (s *session) run() {
+ 	s.Start(s)
+ 	var stopChan = make(chan struct{})
+@@ -1150,6 +1163,7 @@ func (s *session) run() {
+ 				s.Disconnected(s)
+ 			} else {
+ 				s.Incoming(s, fixIn)
++				s.sendPendingAfterIncoming()
+ 			}
+ 
+ 		case evt := <-s.sessionEvent:

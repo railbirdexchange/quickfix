@@ -34,6 +34,9 @@ func (message *Message) AppendWithBodyBytesTo(dst, bodyBytes []byte) ([]byte, er
 }
 
 func (message *Message) appendTo(dst, bodyBytes []byte, useBodyBytes bool) ([]byte, error) {
+	if err := message.constructionError(); err != nil {
+		return dst, err
+	}
 	// Reserve the minimum 9=0<SOH> and 10=000<SOH> first, then count
 	// against the remaining capacity. Never sum unchecked wire lengths:
 	// repeated tag indexes can describe more bytes than fit in an int.
@@ -43,31 +46,47 @@ func (message *Message) appendTo(dst, bodyBytes []byte, useBodyBytes bool) ([]by
 	}
 	remaining -= 11
 	beginString, _ := message.Header.lookup(tagBeginString)
-	for _, value := range beginString {
-		if len(value.bytes) > remaining {
+	bodyLength := 0
+	if arena := message.arena; !useBodyBytes && arena != nil && arena.owner == message && arena.intact() {
+		// Ordinary reusable messages maintain exact encoded lengths during
+		// mutation. Only the original, intact owner may use those totals;
+		// replacement sections and explicit resend bodies use the field walk.
+		if arena.beginLength > remaining {
 			return dst, ErrBufferTooSmall
 		}
-		remaining -= len(value.bytes)
+		remaining -= arena.beginLength
+		bodyLength = arena.bodyLength
+		if bodyLength > remaining {
+			return dst, ErrBufferTooSmall
+		}
+		remaining -= bodyLength
+	} else {
+		for _, value := range beginString {
+			if len(value.bytes) > remaining {
+				return dst, ErrBufferTooSmall
+			}
+			remaining -= len(value.bytes)
+		}
+		headerLength, fits := message.Header.lengthWithin(tagBeginString, tagBodyLength, remaining)
+		if !fits {
+			return dst, ErrBufferTooSmall
+		}
+		remaining -= headerLength
+		bodyLength = len(bodyBytes)
+		if !useBodyBytes {
+			bodyLength, fits = message.Body.lengthWithin(0, 0, remaining)
+		}
+		if !fits || bodyLength > remaining {
+			return dst, ErrBufferTooSmall
+		}
+		remaining -= bodyLength
+		trailerLength, fits := message.Trailer.lengthWithin(tagCheckSum, tagCheckSum, remaining)
+		if !fits {
+			return dst, ErrBufferTooSmall
+		}
+		remaining -= trailerLength
+		bodyLength += headerLength + trailerLength
 	}
-	headerLength, fits := message.Header.lengthWithin(tagBeginString, tagBodyLength, remaining)
-	if !fits {
-		return dst, ErrBufferTooSmall
-	}
-	remaining -= headerLength
-	bodyLength := len(bodyBytes)
-	if !useBodyBytes {
-		bodyLength, fits = message.Body.lengthWithin(0, 0, remaining)
-	}
-	if !fits || bodyLength > remaining {
-		return dst, ErrBufferTooSmall
-	}
-	remaining -= bodyLength
-	trailerLength, fits := message.Trailer.lengthWithin(tagCheckSum, tagCheckSum, remaining)
-	if !fits {
-		return dst, ErrBufferTooSmall
-	}
-	remaining -= trailerLength
-	bodyLength += headerLength + trailerLength
 	if intTextLength(bodyLength)-1 > remaining {
 		return dst, ErrBufferTooSmall
 	}

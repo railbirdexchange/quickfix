@@ -1,0 +1,183 @@
+package quickfix
+
+import (
+	"bytes"
+	"strconv"
+	"testing"
+	"time"
+
+	"github.com/quickfixgo/quickfix/internal"
+	"github.com/stretchr/testify/require"
+)
+
+type incomingHandoffLog struct {
+	nullLog
+	onOutgoing func([]byte)
+}
+
+func (log *incomingHandoffLog) OnOutgoingBorrowed(wire []byte) { log.onOutgoing(wire) }
+
+func TestSessionIncomingHandoffRunScopeOrder(t *testing.T) {
+	fixture := newBoundedFullSession(t, false)
+	type observation struct {
+		callbackFinished, parsedReleased bool
+		nextTarget, expectedTarget       int
+	}
+	observed := make(chan observation, 1)
+	require.NoError(t, fixture.configure(func(application *boundedFullApplication) {
+		finished, expectedTarget := false, 0
+		application.onOrder = func(message *Message) MessageRejectError {
+			finished = false
+			sequence, reject := message.Header.GetInt(tagMsgSeqNum)
+			if reject != nil {
+				return reject
+			}
+			expectedTarget = sequence + 1
+			reject = application.handleOrder(message)
+			finished = true
+			return reject
+		}
+		application.session.outbound.log = &incomingHandoffLog{onOutgoing: func(wire []byte) {
+			if bytes.Contains(wire, []byte("\x0135=8\x01")) {
+				current := application.session
+				observed <- observation{finished, current.boundedIn.parsed.Message() == nil, current.store.NextTargetMsgSeqNum(), expectedTarget}
+			}
+		}}
+	}))
+	require.NoError(t, fixture.sendOrder(fixture.sendSequence))
+	_, err := fixture.readReport()
+	require.NoError(t, err)
+	select {
+	case got := <-observed:
+		require.True(t, got.callbackFinished, "outbound handoff entered an active application callback")
+		require.True(t, got.parsedReleased, "outbound handoff preceded Incoming's deferred parser reset")
+		require.Equal(t, got.expectedTarget, got.nextTarget, "outbound handoff preceded the incoming sequence commit")
+	case <-time.After(2 * time.Second):
+		t.Fatal("ordinary run loop did not hand off the response")
+	}
+	_, err = fixture.acknowledge(false)
+	require.NoError(t, err)
+}
+
+func TestSessionIncomingHandoffFrameReturn(t *testing.T) {
+	current, application, store := newScopedOutboundLifecycleSession(t)
+	writer, connection := newScopedBackpressureWriter(t, current, 1, nil)
+	connection.unblock()
+	callbackFinished, handedOff := false, false
+	application.fromApp = func(*Message) MessageRejectError {
+		require.NoError(t, current.queueForSend(scopedOutboundLifecycleOrder("reply")))
+		callbackFinished = true
+		return nil
+	}
+	current.outbound.log = &incomingHandoffLog{onOutgoing: func([]byte) {
+		handedOff = true
+		require.True(t, callbackFinished)
+		require.Nil(t, current.boundedIn.parsed.Message())
+		require.Len(t, current.boundedIn.ring.vacant, len(current.boundedIn.ring.slots), "raw inbound slot must be returned before writer handoff")
+		require.Equal(t, 2, store.NextTargetMsgSeqNum())
+	}}
+	inboundIntegrationDeliver(t, current, inboundIntegrationOrder(1, "request"))
+	current.sendPendingAfterIncoming()
+	require.True(t, handedOff)
+	finishScopedBackpressureWriter(t, current, writer)
+}
+
+func TestSessionIncomingHandoffConsumesAtMostOneHint(t *testing.T) {
+	current, _, _ := newScopedOutboundLifecycleSession(t)
+	current.messageEvent = make(chan bool, 2)
+	current.messageEvent <- true
+	current.messageEvent <- true
+	current.sendPendingAfterIncoming()
+	require.Len(t, current.messageEvent, 1, "handoff must return to the outer select after one hint")
+}
+
+func TestSessionIncomingHandoffStateGates(t *testing.T) {
+	for _, scenario := range []string{"no_hint", "stopped", "disconnected", "prelogon", "outside_schedule"} {
+		t.Run(scenario, func(t *testing.T) {
+			current, _, store := newScopedOutboundLifecycleSession(t)
+			require.NoError(t, current.queueForSend(scopedOutboundLifecycleOrder("queued")))
+			before := fingerprintBoundedFullStore(store)
+			switch scenario {
+			case "no_hint":
+				<-current.messageEvent
+				current.State = latentState{}
+			case "stopped":
+				current.stopped = true
+			case "disconnected":
+				current.State = latentState{}
+			case "prelogon":
+				current.State = logonState{}
+			case "outside_schedule":
+				current.State = logonState{}
+				now := time.Now().UTC()
+				var err error
+				current.SessionTime, err = internal.NewUTCTimeRange(
+					internal.NewTimeOfDay(now.Add(time.Hour).Clock()),
+					internal.NewTimeOfDay(now.Add(2*time.Hour).Clock()), nil)
+				require.NoError(t, err)
+			}
+			current.sendPendingAfterIncoming()
+			require.Equal(t, before, fingerprintBoundedFullStore(store), "dispatch must not rewrite already committed journal/sequence state")
+			if scenario == "no_hint" || scenario == "stopped" {
+				require.Equal(t, 1, current.outbound.count, "no dispatch may run without a hint or after stop")
+			} else {
+				require.Zero(t, current.outbound.count)
+				require.Len(t, current.outbound.vacant, len(current.outbound.slots))
+			}
+			if scenario == "stopped" {
+				require.Len(t, current.messageEvent, 1, "stopped session must not consume the hint")
+			}
+			if scenario == "outside_schedule" {
+				require.IsType(t, notSessionTime{}, current.State, "existing schedule check must still run")
+			}
+			current.dropQueued()
+		})
+	}
+}
+
+func TestSessionIncomingHandoffSlowWriterProgress(t *testing.T) {
+	for _, depth := range []int{0, 1} {
+		t.Run(strconv.Itoa(depth), func(t *testing.T) {
+			current, _, store := newScopedOutboundLifecycleSession(t)
+			writer, connection := newScopedBackpressureWriter(t, current, depth, nil)
+			// Establish the initial writer permit without relying on scheduling.
+			select {
+			case permit := <-writer.permits:
+				writer.permits <- permit
+			case <-time.After(2 * time.Second):
+				t.Fatal("writer did not advertise initial capacity")
+			}
+			require.NoError(t, current.queueForSend(scopedOutboundLifecycleOrder("first")))
+			current.sendPendingAfterIncoming()
+			scopedBackpressureWait(t, connection.entered, "writer did not enter the gated first write")
+			require.NoError(t, current.queueForSend(scopedOutboundLifecycleOrder("second")))
+			require.NoError(t, current.queueForSend(scopedOutboundLifecycleOrder("third")))
+			require.Len(t, current.messageEvent, 1, "multiple queued sends coalesce into one hint")
+			current.sendPendingAfterIncoming()
+			require.Equal(t, 2-depth, current.outbound.count, "handoff must return when writer permits are exhausted")
+			require.Equal(t, 4, store.NextSenderMsgSeqNum())
+
+			connection.unblock()
+			// No more incoming frames or producer notifications: only writer
+			// completion hints may drive the existing outer-loop dispatch path.
+			for current.outbound.count != 0 {
+				select {
+				case <-current.messageEvent:
+					current.SendAppMessages(current)
+				case <-time.After(2 * time.Second):
+					t.Fatal("consumed hint stranded pending output after writer completion")
+				}
+			}
+			finishScopedBackpressureWriter(t, current, writer)
+			wire := connection.wire[:connection.used]
+			previous := -1
+			for _, id := range []string{"first", "second", "third"} {
+				field := []byte("11=" + id + "\x01")
+				require.Equal(t, 1, bytes.Count(wire, field))
+				index := bytes.Index(wire, field)
+				require.Greater(t, index, previous, "handoff changed pending FIFO order")
+				previous = index
+			}
+		})
+	}
+}

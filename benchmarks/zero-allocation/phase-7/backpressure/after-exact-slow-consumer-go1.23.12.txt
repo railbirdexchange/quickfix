@@ -1,0 +1,7 @@
+=== RUN   TestBoundedFullSessionExactAllocations
+=== RUN   TestBoundedFullSessionExactAllocations/slow_consumer
+    bounded_full_session_allocations_test.go:45: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+--- PASS: TestBoundedFullSessionExactAllocations (3.88s)
+    --- PASS: TestBoundedFullSessionExactAllocations/slow_consumer (3.88s)
+PASS
+ok  	github.com/quickfixgo/quickfix	4.129s
