@@ -326,6 +326,27 @@ func (s *SessionSuite) TestCheckSessionTimeNoStartTimeEndTime() {
 	}
 }
 
+func (s *SessionSuite) TestIncomingWithoutScheduleStillEntersSessionTime() {
+	s.session.SessionTime = nil
+	s.session.State = notSessionTime{}
+	waiting := make(chan interface{})
+	s.session.notifyOnInSessionTime = waiting
+	s.IncrNextSenderMsgSeqNum()
+	s.IncrNextTargetMsgSeqNum()
+
+	// An unconnected input still performs schedule lifecycle processing before
+	// returning. Skipping the unused clock must not skip this transition.
+	s.session.Incoming(s.session, fixIn{})
+	s.State(latentState{})
+	s.NextSenderMsgSeqNum(2)
+	s.NextTargetMsgSeqNum(2)
+	select {
+	case <-waiting:
+	default:
+		s.Fail("session-time waiter was not notified")
+	}
+}
+
 func (s *SessionSuite) TestCheckSessionTimeInRange() {
 	var tests = []struct {
 		before, after sessionState

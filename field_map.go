@@ -57,6 +57,7 @@ type FieldMap struct {
 	tagSort
 	rwLock *sync.RWMutex
 	fixed  *fixedFieldMap
+	scoped bool
 }
 
 // ascending tags.
@@ -129,7 +130,9 @@ func (m FieldMap) getFieldNoLock(tag Tag, parser FieldValueReader) MessageReject
 	return nil
 }
 
-// GetBytes is a zero-copy GetField wrapper for []bytes fields.
+// GetBytes is a zero-copy GetField wrapper for []bytes fields. Values from a
+// MessageSlot or BorrowApplication callback follow that explicit borrowed
+// lifetime. Ordinary Application delivery retains its owned field bytes.
 func (m FieldMap) GetBytes(tag Tag) ([]byte, MessageRejectError) {
 	m.rlock()
 	defer m.runlock()
@@ -240,7 +243,8 @@ func (m FieldMap) getStringNoLock(tag Tag) (string, MessageRejectError) {
 	return string(val), nil
 }
 
-// GetGroup is a Get function specific to Group Fields.
+// GetGroup is a Get function specific to Group Fields. Reading from a session
+// callback allocates owned group bytes that survive callback return.
 func (m FieldMap) GetGroup(parser FieldGroupReader) MessageRejectError {
 	m.rlock()
 	defer m.runlock()
@@ -248,6 +252,9 @@ func (m FieldMap) GetGroup(parser FieldGroupReader) MessageRejectError {
 	f, ok := m.lookup(parser.Tag())
 	if !ok {
 		return ConditionallyRequiredFieldMissing(parser.Tag())
+	}
+	if m.scoped {
+		f = cloneOwnedField(f)
 	}
 
 	if _, err := parser.Read(f); err != nil {
@@ -267,6 +274,7 @@ func (m *FieldMap) SetField(tag Tag, field FieldValueWriter) *FieldMap {
 
 // SetBytes sets bytes. It is an allocating compatibility API. A bounded map
 // panics with ErrFieldCapacity before mutation if no field slot is available.
+// Session callback maps instead detach to ordinary storage on setter exhaustion.
 func (m *FieldMap) SetBytes(tag Tag, value []byte) *FieldMap {
 	f := m.getOrCreate(tag)
 	initField(f, tag, value)
@@ -319,20 +327,40 @@ func (m *FieldMap) clearNoLock() {
 	}
 }
 
-// CopyInto overwrites the given FieldMap with this one.
+// CopyInto overwrites the given FieldMap with this one. Copying from a session
+// callback allocates owned field and group bytes that survive callback return.
 func (m *FieldMap) CopyInto(to *FieldMap) {
+	if m.scoped && m == to {
+		return
+	}
 	m.rlock()
 	defer m.runlock()
+	if to.fixed != nil && to.scoped {
+		// A scoped destination may be a value copy of the session fields. An
+		// allocating copy must not clear that shared backing through the copy.
+		to.initWithOrdering(to.compare)
+		to.scoped = true
+	}
 	if to.fixed != nil {
 		if m.fixed == to.fixed {
-			return
-		}
-		if m.fieldCount() > cap(to.fixed.tags) {
+			if !m.scoped {
+				return
+			}
+			// A copied FieldMap value still shares the session backing. Detach
+			// the distinct destination rather than clearing the source's fields.
+			to.initWithOrdering(m.compare)
+		} else if m.fieldCount() > cap(to.fixed.tags) {
 			panic(ErrFieldCapacity)
 		}
+	}
+	if to.fixed != nil {
 		to.fixedClear()
 		m.eachField(func(tag Tag, values field) {
-			to.fixedGetOrCreate(tag)[0] = values[0]
+			if m.scoped {
+				to.put(tag, cloneOwnedField(values))
+			} else {
+				to.fixedGetOrCreate(tag)[0] = values[0]
+			}
 		})
 		to.compare = m.compare
 		return
@@ -340,6 +368,10 @@ func (m *FieldMap) CopyInto(to *FieldMap) {
 
 	to.tagLookup = make(map[Tag]field)
 	m.eachField(func(tag Tag, f field) {
+		if m.scoped {
+			to.tagLookup[tag] = cloneOwnedField(f)
+			return
+		}
 		clone := make(field, 1)
 		clone[0] = f[0]
 		to.tagLookup[tag] = clone
@@ -347,6 +379,24 @@ func (m *FieldMap) CopyInto(to *FieldMap) {
 	to.tags = make([]Tag, len(m.fieldTags()))
 	copy(to.tags, m.fieldTags())
 	to.compare = m.compare
+}
+
+func cloneOwnedField(values field) field {
+	cloned := make(field, len(values))
+	for index, value := range values {
+		cloned[index] = TagValue{tag: value.tag, value: bytes.Clone(value.value), bytes: bytes.Clone(value.bytes)}
+	}
+	return cloned
+}
+
+// detachScopedFields is only used by allocating setters. The fixed parser must
+// continue to use put directly so exhaustion never changes its storage model.
+func (m *FieldMap) detachScopedFields() {
+	var detached FieldMap
+	detached.initWithOrdering(m.compare)
+	m.CopyInto(&detached)
+	detached.scoped = true
+	*m = detached
 }
 
 func (m *FieldMap) add(f field) {
@@ -382,13 +432,16 @@ func (m *FieldMap) Set(field FieldWriter) *FieldMap {
 
 // SetGroup is a setter specific to group fields.
 func (m *FieldMap) SetGroup(field FieldGroupWriter) *FieldMap {
-	m.lock()
-	defer m.unlock()
 	if m.fixed != nil {
 		if _, found := m.lookup(field.Tag()); !found && m.fieldCount() == cap(m.fixed.tags) {
-			panic(ErrFieldCapacity)
+			if !m.scoped {
+				panic(ErrFieldCapacity)
+			}
+			m.detachScopedFields()
 		}
 	}
+	m.lock()
+	defer m.unlock()
 	if !m.put(field.Tag(), field.Write()) {
 		panic(ErrFieldCapacity)
 	}

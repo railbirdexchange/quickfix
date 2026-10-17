@@ -1,0 +1,33 @@
+File: scoped-profile.test
+Type: cpu
+Time: 2026-10-15 22:47:56 EDT
+Duration: 3.71s, Total samples = 3.23s (87.17%)
+Showing nodes accounting for 2.92s, 90.40% of 3.23s total
+Dropped 43 nodes (cum <= 0.02s)
+Showing top 25 nodes out of 97
+      flat  flat%   sum%        cum   cum%
+     1.99s 61.61% 61.61%      1.99s 61.61%  runtime.memclrNoHeapPointers
+     0.16s  4.95% 66.56%      0.24s  7.43%  github.com/quickfixgo/quickfix.validateWalkWithScratch
+     0.09s  2.79% 69.35%      0.09s  2.79%  runtime.walltime
+     0.06s  1.86% 71.21%      0.81s 25.08%  github.com/quickfixgo/quickfix.doParsing
+     0.05s  1.55% 72.76%      0.06s  1.86%  internal/runtime/maps.(*Iter).Next
+     0.05s  1.55% 74.30%      0.12s  3.72%  runtime.selectgo
+     0.04s  1.24% 75.54%      0.04s  1.24%  github.com/quickfixgo/quickfix.(*scopedInboundBenchmarkConnection).Read
+     0.04s  1.24% 76.78%      0.04s  1.24%  runtime.duffcopy
+     0.04s  1.24% 78.02%      0.04s  1.24%  time.nextStdChunk
+     0.03s  0.93% 78.95%      1.89s 58.51%  github.com/quickfixgo/quickfix.(*FieldMap).fixedClear (inline)
+     0.03s  0.93% 79.88%      0.03s  0.93%  github.com/quickfixgo/quickfix.(*FieldMap).put
+     0.03s  0.93% 80.80%      0.03s  0.93%  github.com/quickfixgo/quickfix.(*validationTagSet).add
+     0.03s  0.93% 81.73%      0.07s  2.17%  github.com/quickfixgo/quickfix.validEnumValues
+     0.03s  0.93% 82.66%      0.03s  0.93%  runtime.chanrecv
+     0.03s  0.93% 83.59%      0.03s  0.93%  runtime.lock2
+     0.03s  0.93% 84.52%      0.04s  1.24%  runtime.mapaccess1_faststr
+     0.03s  0.93% 85.45%      0.03s  0.93%  runtime.mapaccess2_fast64
+     0.02s  0.62% 86.07%      0.02s  0.62%  aeshashbody
+     0.02s  0.62% 86.69%      0.02s  0.62%  github.com/quickfixgo/quickfix.(*TagValue).parse
+     0.02s  0.62% 87.31%      0.02s  0.62%  github.com/quickfixgo/quickfix.(*fixedFieldMap).find
+     0.02s  0.62% 87.93%      0.04s  1.24%  github.com/quickfixgo/quickfix.FieldMap.Has
+     0.02s  0.62% 88.54%      0.02s  0.62%  internal/bytealg.IndexByteString
+     0.02s  0.62% 89.16%      0.05s  1.55%  runtime.mapaccess2_faststr
+     0.02s  0.62% 89.78%      0.02s  0.62%  runtime.memmove
+     0.02s  0.62% 90.40%      0.02s  0.62%  runtime.nanotime1

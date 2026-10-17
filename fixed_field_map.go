@@ -6,7 +6,7 @@ import (
 )
 
 // ErrFieldCapacity indicates that a bounded field map has no vacant field slot.
-// Legacy setters cannot return an error and panic with this value on exhaustion.
+// Strict bounded setters cannot return an error and panic on exhaustion.
 var ErrFieldCapacity = errors.New("quickfix: configured field capacity exhausted")
 
 const (
@@ -27,11 +27,13 @@ type fixedFieldEntry struct {
 type fixedFieldMap struct {
 	entries []fixedFieldEntry
 	tags    []Tag
+	touched []int
 }
 
 // initFixed allocates the entire lookup and tag index before use. Parsed fields
 // borrow their TagValue slices from the owning message slot. Ordinary setters
-// remain allocating compatibility APIs; they never enlarge the field capacity.
+// remain allocating compatibility APIs. Strict bounded maps never enlarge their
+// capacity; session callback setters may detach to ordinary storage instead.
 func (fields *FieldMap) initFixed(ordering tagOrder, maxFields int) {
 	maximumInt := int(^uint(0) >> 1)
 	if maxFields <= 0 || maxFields > maximumInt/2 {
@@ -50,6 +52,7 @@ func (fields *FieldMap) initFixed(ordering tagOrder, maxFields int) {
 	backing := &fixedFieldMap{
 		entries: make([]fixedFieldEntry, tableSize*2),
 		tags:    make([]Tag, 0, maxFields),
+		touched: make([]int, 0, tableSize*2),
 	}
 	*fields = FieldMap{fixed: backing, tagSort: tagSort{tags: backing.tags, compare: ordering}}
 }
@@ -121,6 +124,13 @@ func (fields *FieldMap) put(tag Tag, values field) bool {
 		fields.fixed.tags[count] = tag
 	}
 	entry := &fields.fixed.entries[index]
+	if entry.state == fixedFieldVacant {
+		// A removed entry remains in this list until clear. Recording only the
+		// first use bounds it by the table size even under remove/reinsert churn.
+		count := len(fields.fixed.touched)
+		fields.fixed.touched = fields.fixed.touched[:count+1]
+		fields.fixed.touched[count] = index
+	}
 	entry.tag = tag
 	entry.values = values
 	entry.state = fixedFieldOccupied
@@ -160,6 +170,10 @@ func (fields *FieldMap) eachField(visit func(Tag, field)) {
 func (fields *FieldMap) fixedGetOrCreate(tag Tag) field {
 	index, found := fields.fixed.find(tag)
 	if !found && (len(fields.fixed.tags) == cap(fields.fixed.tags) || index < 0) {
+		if fields.scoped {
+			fields.detachScopedFields()
+			return fields.getOrCreate(tag)
+		}
 		panic(ErrFieldCapacity)
 	}
 	entry := &fields.fixed.entries[index]
@@ -189,7 +203,10 @@ func (fields *FieldMap) fixedRemove(tag Tag) {
 }
 
 func (fields *FieldMap) fixedClear() {
-	clear(fields.fixed.entries)
+	for _, index := range fields.fixed.touched {
+		fields.fixed.entries[index] = fixedFieldEntry{}
+	}
+	fields.fixed.touched = fields.fixed.touched[:0]
 	fields.fixed.tags = fields.fixed.tags[:0]
 	fields.tags = fields.fixed.tags
 }

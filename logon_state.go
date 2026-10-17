@@ -32,7 +32,7 @@ func (s logonState) FixMsgIn(session *session, msg *Message) (nextState sessionS
 	}
 
 	if !bytes.Equal(msgType, msgTypeLogon) {
-		session.log.OnEventf("Invalid Session State: Received Msg %s while waiting for Logon", msg)
+		session.log.OnEventf("Invalid Session State: Received Msg %s while waiting for Logon", logMessageArgument(msg))
 		return latentState{}
 	}
 

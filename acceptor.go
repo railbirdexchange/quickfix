@@ -366,16 +366,17 @@ func (a *Acceptor) handleConnection(netConn net.Conn) {
 	}
 	msgIn := make(chan fixIn, session.InChanCapacity)
 	msgOut := make(chan []byte, outboundBufferSize)
-
-	if err := session.connect(msgIn, msgOut); err != nil {
-		a.globalLog.OnEventf("Unable to accept session %v connection: %v", sessID, err.Error())
+	readerControl, err := startBoundedRead(netConn, parser, session.boundedIn, msgIn, msgBytes.Bytes(), parser.lastRead)
+	if err != nil {
+		a.globalLog.OnEvent(err.Error())
 		return
 	}
 
-	go func() {
-		msgIn <- fixIn{msgBytes, parser.lastRead}
-		readLoop(parser, msgIn, a.globalLog)
-	}()
+	if err := session.connectWithReader(msgIn, msgOut, readerControl); err != nil {
+		readerControl.stopAndDrain(msgIn)
+		a.globalLog.OnEventf("Unable to accept session %v connection: %v", sessID, err.Error())
+		return
+	}
 
 	writeLoop(netConn, msgOut, a.globalLog)
 }

@@ -1,0 +1,26 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+cpu: Apple M4 Pro
+BenchmarkFIXUTCTimestampRead/seconds         	86046856	        13.76 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFIXUTCTimestampRead/seconds         	85629169	        13.87 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFIXUTCTimestampRead/seconds         	85700260	        13.97 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFIXUTCTimestampRead/seconds         	90397747	        13.96 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFIXUTCTimestampRead/seconds         	81824918	        13.78 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFIXUTCTimestampRead/millis          	80178846	        15.17 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFIXUTCTimestampRead/millis          	81393178	        15.28 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFIXUTCTimestampRead/millis          	76105310	        15.47 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFIXUTCTimestampRead/millis          	79493667	        15.22 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFIXUTCTimestampRead/millis          	72514856	        15.45 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFIXUTCTimestampRead/micros          	77140652	        15.93 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFIXUTCTimestampRead/micros          	78827659	        15.95 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFIXUTCTimestampRead/micros          	79042270	        16.09 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFIXUTCTimestampRead/micros          	72303133	        16.24 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFIXUTCTimestampRead/micros          	78206464	        15.94 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFIXUTCTimestampRead/nanos           	70915522	        17.22 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFIXUTCTimestampRead/nanos           	70982638	        16.95 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFIXUTCTimestampRead/nanos           	70584601	        16.90 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFIXUTCTimestampRead/nanos           	71496309	        17.15 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFIXUTCTimestampRead/nanos           	71264547	        16.91 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/quickfixgo/quickfix	25.655s

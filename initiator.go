@@ -181,6 +181,7 @@ func (i *Initiator) handleConnection(session *session, tlsConfig *tls.Config, di
 		var msgIn chan fixIn
 		var msgOut chan []byte
 		var outboundBufferSize int
+		var readerControl *boundedReadConnection
 
 		address := session.SocketConnectAddress[connectionAttempt%len(session.SocketConnectAddress)]
 		session.log.OnEventf("Connecting to: %v", address)
@@ -214,12 +215,21 @@ func (i *Initiator) handleConnection(session *session, tlsConfig *tls.Config, di
 		}
 		msgIn = make(chan fixIn, session.InChanCapacity)
 		msgOut = make(chan []byte, outboundBufferSize)
-		if err := session.connect(msgIn, msgOut); err != nil {
+		readerControl, err = startBoundedRead(netConn, newParser(bufio.NewReader(netConn)), session.boundedIn, msgIn, nil, time.Time{})
+		if err != nil {
+			session.log.OnEvent(err.Error())
+			_ = netConn.Close()
+			goto reconnect
+		}
+		if err := session.connectWithReader(msgIn, msgOut, readerControl); err != nil {
+			if readerControl != nil {
+				readerControl.stopAndDrain(msgIn)
+				_ = netConn.Close()
+			}
 			session.log.OnEventf("Failed to initiate: %v", err)
 			goto reconnect
 		}
 
-		go readLoop(newParser(bufio.NewReader(netConn)), msgIn, session.log)
 		disconnected = make(chan interface{})
 		go func() {
 			writeLoop(netConn, msgOut, session.log)

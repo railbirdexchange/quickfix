@@ -288,19 +288,33 @@ func (state inSession) resendMessages(session *session, beginSeqNo, endSeqNo int
 func (state inSession) processReject(session *session, msg *Message, rej MessageRejectError) sessionState {
 	switch TypedError := rej.(type) {
 	case targetTooHigh:
+		stashIndex := -1
+		if msg.inbound != nil {
+			var err error
+			stashIndex, err = session.boundedIn.ring.stashIndex(TypedError.ReceivedTarget)
+			if err != nil {
+				return session.failBoundedInbound(err)
+			}
+		}
 
 		var nextState resendState
-		switch currentState := session.State.(type) {
-		case resendState:
-			// Assumes target too high reject already sent.
+		currentState, recovering := session.State.(resendState)
+		if msg.inbound != nil {
+			currentState, recovering = boundedResendState(session.State)
+		}
+		if recovering {
 			nextState = currentState
-		default:
+		} else {
 			var err error
 			if nextState, err = session.doTargetTooHigh(TypedError); err != nil {
 				return handleStateError(session, err)
 			}
 		}
 
+		if msg.inbound != nil {
+			session.boundedIn.ring.retain(stashIndex, TypedError.ReceivedTarget, msg.inbound)
+			return nextState
+		}
 		if nextState.messageStash == nil {
 			nextState.messageStash = make(map[int]*Message)
 		}

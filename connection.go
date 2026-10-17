@@ -39,6 +39,6 @@ func readLoop(parser *parser, msgIn chan fixIn, log Log) {
 			log.OnEvent(err.Error())
 			return
 		}
-		msgIn <- fixIn{msg, parser.lastRead}
+		msgIn <- fixIn{bytes: msg, receiveTime: parser.lastRead}
 	}
 }

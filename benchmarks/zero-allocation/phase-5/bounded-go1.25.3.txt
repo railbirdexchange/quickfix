@@ -1,0 +1,21 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+cpu: Apple M4 Pro
+BenchmarkBoundedInboundOwnership/new_order_single         	  259422	      4279 ns/op	  24.07 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedInboundOwnership/new_order_single         	  288818	      4317 ns/op	  23.86 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedInboundOwnership/new_order_single         	  289358	      4323 ns/op	  23.82 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedInboundOwnership/new_order_single         	  271747	      4339 ns/op	  23.74 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedInboundOwnership/new_order_single         	  281655	      4357 ns/op	  23.64 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedInboundOwnership/repeating_group          	  220815	      5479 ns/op	  42.53 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedInboundOwnership/repeating_group          	  190538	      5519 ns/op	  42.22 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedInboundOwnership/repeating_group          	  212763	      5423 ns/op	  42.97 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedInboundOwnership/repeating_group          	  212644	      5432 ns/op	  42.90 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedInboundOwnership/repeating_group          	  214248	      5485 ns/op	  42.48 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedFraming                                   	22537098	        52.03 ns/op	1979.54 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedFraming                                   	23576506	        50.90 ns/op	2023.54 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedFraming                                   	23768121	        51.42 ns/op	2002.96 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedFraming                                   	22822998	        51.25 ns/op	2009.90 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedFraming                                   	23327298	        51.46 ns/op	2001.56 MB/s	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/quickfixgo/quickfix	20.125s
