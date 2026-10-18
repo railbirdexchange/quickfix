@@ -239,22 +239,20 @@ func (m FieldMap) GetTime(tag Tag) (t time.Time, err MessageRejectError) {
 	return val.Time, err
 }
 
-// GetString is a GetField wrapper for string fields.
+// GetString returns an owned string for the field.
 func (m FieldMap) GetString(tag Tag) (string, MessageRejectError) {
-	var val FIXString
-	if err := m.GetField(tag, &val); err != nil {
-		return "", err
-	}
-	return string(val), nil
+	m.rlock()
+	defer m.runlock()
+	return m.getStringNoLock(tag)
 }
 
-// GetString is a GetField wrapper for string fields.
+// getStringNoLock copies the value while the caller owns or locks the map.
 func (m FieldMap) getStringNoLock(tag Tag) (string, MessageRejectError) {
-	var val FIXString
-	if err := m.getFieldNoLock(tag, &val); err != nil {
-		return "", err
+	field, ok := m.lookup(tag)
+	if !ok {
+		return "", ConditionallyRequiredFieldMissing(tag)
 	}
-	return string(val), nil
+	return string(field[0].value), nil
 }
 
 // GetGroup is a Get function specific to Group Fields. Reading from a session
