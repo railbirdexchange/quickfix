@@ -111,6 +111,7 @@ func (suite *MessageRouterTestSuite) SetupTest() {
 	defer sessionsLock.Unlock()
 
 	sessions = make(map[SessionID]*session)
+	publishSessionNames()
 	suite.msg = NewMessage()
 }
 

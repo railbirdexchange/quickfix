@@ -18,10 +18,15 @@ package quickfix
 import (
 	"errors"
 	"sync"
+	"sync/atomic"
 )
 
 var sessionsLock sync.RWMutex
 var sessions = make(map[SessionID]*session)
+
+// Each published snapshot is immutable and contains only registered IDs.
+// Lifecycle changes use sessionsLock; String readers never acquire that lock.
+var registeredSessionNames atomic.Pointer[map[SessionID]string]
 var errDuplicateSessionID = errors.New("Duplicate SessionID")
 var errUnknownSession = errors.New("Unknown session")
 
@@ -95,6 +100,7 @@ func UnregisterSession(sessionID SessionID) error {
 
 	if _, ok := sessions[sessionID]; ok {
 		delete(sessions, sessionID)
+		publishSessionNames()
 		return nil
 	}
 
@@ -170,7 +176,29 @@ func registerSession(s *session) error {
 	}
 
 	sessions[s.sessionID] = s
+	publishSessionNames()
 	return nil
+}
+
+// publishSessionNames requires sessionsLock. Reuse the owned text for unchanged
+// IDs, and discard removed entries instead of retaining a historical cache.
+func publishSessionNames() {
+	if len(sessions) == 0 {
+		registeredSessionNames.Store(nil)
+		return
+	}
+	previous := registeredSessionNames.Load()
+	names := make(map[SessionID]string, len(sessions))
+	for id := range sessions {
+		if previous != nil {
+			if name, ok := (*previous)[id]; ok {
+				names[id] = name
+				continue
+			}
+		}
+		names[id] = id.format()
+	}
+	registeredSessionNames.Store(&names)
 }
 
 func lookupSession(sessionID SessionID) (s *session, ok bool) {

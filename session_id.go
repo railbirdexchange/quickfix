@@ -15,7 +15,7 @@
 
 package quickfix
 
-import "bytes"
+import "strings"
 
 // SessionID is a unique identifier of a Session.
 type SessionID struct {
@@ -27,7 +27,7 @@ func (s SessionID) IsFIXT() bool {
 	return s.BeginString == BeginStringFIXT11
 }
 
-func appendOptional(b *bytes.Buffer, delim, v string) {
+func appendOptional(b *strings.Builder, delim, v string) {
 	if len(v) == 0 {
 		return
 	}
@@ -37,20 +37,38 @@ func appendOptional(b *bytes.Buffer, delim, v string) {
 }
 
 func (s SessionID) String() string {
-	b := new(bytes.Buffer)
+	if names := registeredSessionNames.Load(); names != nil {
+		if name, ok := (*names)[s]; ok {
+			return name
+		}
+	}
+	return s.format()
+}
+
+// format owns the returned string. Registered sessions prepare it once; IDs
+// outside the registry retain the same formatting and independent lifetime.
+func (s SessionID) format() string {
+	size := len(s.BeginString) + len(s.SenderCompID) + len(s.TargetCompID) + 3
+	for _, optional := range [...]string{s.SenderSubID, s.SenderLocationID, s.TargetSubID, s.TargetLocationID, s.Qualifier} {
+		if optional != "" {
+			size += 1 + len(optional)
+		}
+	}
+	var b strings.Builder
+	b.Grow(size)
 	b.WriteString(s.BeginString)
 	b.WriteString(":")
 	b.WriteString(s.SenderCompID)
 
-	appendOptional(b, "/", s.SenderSubID)
-	appendOptional(b, "/", s.SenderLocationID)
+	appendOptional(&b, "/", s.SenderSubID)
+	appendOptional(&b, "/", s.SenderLocationID)
 
 	b.WriteString("->")
 	b.WriteString(s.TargetCompID)
 
-	appendOptional(b, "/", s.TargetSubID)
-	appendOptional(b, "/", s.TargetLocationID)
+	appendOptional(&b, "/", s.TargetSubID)
+	appendOptional(&b, "/", s.TargetLocationID)
 
-	appendOptional(b, ":", s.Qualifier)
+	appendOptional(&b, ":", s.Qualifier)
 	return b.String()
 }
