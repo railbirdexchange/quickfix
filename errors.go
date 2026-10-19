@@ -18,6 +18,7 @@ package quickfix
 import (
 	"errors"
 	"fmt"
+	"strconv"
 )
 
 // ErrDoNotSend is a convenience error to indicate a DoNotSend in ToApp.
@@ -125,8 +126,35 @@ func ValueIsIncorrect(tag Tag) MessageRejectError {
 
 // ConditionallyRequiredFieldMissing indicates that the requested field could not be found in the FIX message.
 func ConditionallyRequiredFieldMissing(tag Tag) MessageRejectError {
-	return NewBusinessMessageRejectError(fmt.Sprintf("Conditionally Required Field Missing (%d)", tag), rejectReasonConditionallyRequiredFieldMissing, &tag)
+	return &missingFieldReject{originalTag: tag, referenceTag: tag}
 }
+
+// Missing-field getters often have their errors checked without rendering text.
+// Keep their owned reference tag in the same allocation as the error, and format
+// only when requested. The original tag is immutable: callers may mutate the
+// separately exposed reference tag without changing the snapshotted error text.
+type missingFieldReject struct {
+	originalTag  Tag
+	referenceTag Tag
+}
+
+func (reject *missingFieldReject) Error() string {
+	const prefix = "Conditionally Required Field Missing ("
+	// A signed 64-bit tag needs at most 20 bytes, including the sign. This also
+	// covers 32-bit platforms without growing the local formatting buffer.
+	var buffer [len(prefix) + 20 + 1]byte
+	text := append(buffer[:0], prefix...)
+	text = strconv.AppendInt(text, int64(reject.originalTag), 10)
+	text = append(text, ')')
+	return string(text)
+}
+
+func (reject *missingFieldReject) RefTagID() *Tag { return &reject.referenceTag }
+func (*missingFieldReject) RejectReason() int {
+	return rejectReasonConditionallyRequiredFieldMissing
+}
+func (*missingFieldReject) BusinessRejectRefID() string { return "" }
+func (*missingFieldReject) IsBusinessReject() bool      { return true }
 
 // valueIsIncorrectNoTag returns an error indicating a field with value that is not valid.
 // FIXME: to be compliant with legacy tests, for certain value issues, do not include reftag? (11c_NewSeqNoLess).
