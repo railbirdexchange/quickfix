@@ -7,16 +7,17 @@ import (
 )
 
 type boundedInboundSession struct {
-	limits   ParseLimits
-	ring     *inboundRing
-	parsed   *MessageSlot
-	log      BorrowedLog
-	recovery resendState
-	pending  pendingTimeout
-	tooHigh  targetTooHigh
-	tooLow   targetTooLow
-	events   boundedEventBuffer
-	eventLog BorrowedEventLog
+	limits         ParseLimits
+	ring           *inboundRing
+	parsed         *MessageSlot
+	log            BorrowedLog
+	recovery       resendState
+	pending        pendingTimeout
+	tooHigh        targetTooHigh
+	tooLow         targetTooLow
+	events         boundedEventBuffer
+	eventLog       BorrowedEventLog
+	missingRejects preparedMissingRejects
 }
 
 func (s *session) configureBoundedInbound(settings *SessionSettings) error {
@@ -50,13 +51,14 @@ func (s *session) configureBoundedInbound(settings *SessionSettings) error {
 	if err != nil {
 		return err
 	}
-	parsed, err := NewMessageSlot(s.transportDataDictionary, s.appDataDictionary, limits)
+	rejects := prepareMissingRejects(s.transportDataDictionary, s.appDataDictionary)
+	parsed, err := newMessageSlot(s.transportDataDictionary, s.appDataDictionary, limits, rejects)
 	if err != nil {
 		return err
 	}
 	parsed.enableScopedCallbacks()
 	borrowedLog, _ := s.log.(BorrowedLog)
-	s.boundedIn = &boundedInboundSession{limits: limits, ring: ring, parsed: parsed, log: borrowedLog}
+	s.boundedIn = &boundedInboundSession{limits: limits, ring: ring, parsed: parsed, log: borrowedLog, missingRejects: rejects}
 	// Resolve borrowed event logging before the session begins processing.
 	s.boundedIn.eventLog, _ = s.log.(BorrowedEventLog)
 	return nil

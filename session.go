@@ -981,8 +981,8 @@ func (s *session) doReject(msg *Message, rej MessageRejectError) error {
 				// Fix42 knows up to invalid msg type.
 			}
 
-			if refTagID := rej.RefTagID(); refTagID != nil {
-				reply.Body.SetInt(tagRefTagID, int(*refTagID))
+			if refTagID, present := rej.RefTagID(); present {
+				reply.Body.SetInt(tagRefTagID, int(refTagID))
 			}
 		}
 		reply.Body.SetString(tagText, rej.Error())
@@ -991,8 +991,8 @@ func (s *session) doReject(msg *Message, rej MessageRejectError) error {
 			setControlBytes(&reply.Body.FieldMap, tagRefMsgType, msgType)
 		}
 	} else {
-		if refTagID := rej.RefTagID(); refTagID != nil {
-			if err := s.setControlRejectText(reply, rej.Error(), *refTagID); err != nil {
+		if refTagID, present := rej.RefTagID(); present {
+			if err := s.setControlRejectText(reply, rej.Error(), refTagID); err != nil {
 				return err
 			}
 		} else {

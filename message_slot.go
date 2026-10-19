@@ -47,6 +47,7 @@ type MessageSlot struct {
 	limits              ParseLimits
 	transportDictionary *datadictionary.DataDictionary
 	appDictionary       *datadictionary.DataDictionary
+	missingRejects      preparedMissingRejects
 	valid               bool
 	scopedFields        [3]FieldMap
 	parseFields         []TagValue
@@ -60,10 +61,20 @@ func NewMessageSlot(transport, application *datadictionary.DataDictionary, limit
 	if err := validateParseLimits(limits); err != nil {
 		return nil, err
 	}
-	slot := &MessageSlot{limits: limits, transportDictionary: transport, appDictionary: application}
+	return newMessageSlot(transport, application, limits, prepareMissingRejects(transport, application))
+}
+
+// Sessions share one immutable error table across inbound, replay and output
+// storage. Public slots prepare their own table before parsing starts.
+func newMessageSlot(transport, application *datadictionary.DataDictionary, limits ParseLimits, rejects preparedMissingRejects) (*MessageSlot, error) {
+	if err := validateParseLimits(limits); err != nil {
+		return nil, err
+	}
+	slot := &MessageSlot{limits: limits, transportDictionary: transport, appDictionary: application, missingRejects: rejects}
 	slot.message.Header.initFixed(headerFieldOrdering, limits.MaxFields)
 	slot.message.Body.initFixed(normalFieldOrder, limits.MaxFields)
 	slot.message.Trailer.initFixed(trailerFieldOrdering, limits.MaxFields)
+	slot.message.useMissingRejects(rejects)
 	slot.message.fields = make([]TagValue, 0, limits.MaxFields)
 	slot.message.groupStack = make([]*datadictionary.FieldDef, 0, limits.MaxGroupDepth)
 	slot.parseFields = slot.message.fields
@@ -102,6 +113,7 @@ func (slot *MessageSlot) restoreScopedFields() {
 	slot.message.fields = slot.parseFields
 	slot.message.groupStack = slot.parseGroupStack
 	slot.message.parseSlot = slot
+	slot.message.useMissingRejects(slot.missingRejects)
 	if slot.scopedFields[0].fixed == nil {
 		return
 	}

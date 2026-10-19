@@ -1,5 +1,10 @@
 # Missing-field reject allocation reduction
 
+Historical intermediate implementation at `32260f8f`. The final PR revision
+replaces the mutable reference and lazy text with
+[immutable prepared errors](../immutable-rejects/README.md); the measurements
+below are retained as the preceding stage, not the current contract.
+
 An absent field read through QuickFIX's public getters eagerly built formatted
 error text, a separate reference-tag allocation and a generic reject object even
 when the caller only checked the returned error. The saved PREPROD profile at

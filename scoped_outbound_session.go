@@ -44,7 +44,7 @@ func (s *session) configureOutbound(settings *SessionSettings) error {
 			return ErrInvalidOutboundLimits
 		}
 	}
-	ring.replay, err = NewMessageSlot(s.transportDataDictionary, s.appDataDictionary, s.boundedIn.limits)
+	ring.replay, err = newMessageSlot(s.transportDataDictionary, s.appDataDictionary, s.boundedIn.limits, s.boundedIn.missingRejects)
 	if err != nil {
 		return err
 	}
@@ -131,6 +131,7 @@ func (s *session) prepareOutbound(message, inReplyTo *Message, replacement bool)
 			return nil, err
 		}
 	}
+	message.useMissingRejects(s.boundedIn.missingRejects)
 	ring := s.outbound
 	var slot *outboundSlot
 	if replacement {

@@ -38,9 +38,13 @@ func TestFieldMapStringReadsPreserveValuesAndOwnership(test *testing.T) {
 				fields.Clear()
 				got, reject := getter.read(fields, tagMsgType)
 				wantReject := ConditionallyRequiredFieldMissing(tagMsgType)
+				if reject == nil {
+					test.Fatal("missing field did not return a reject")
+				}
+				refTagID, hasRefTagID := reject.RefTagID()
 				if got != "" || reject == nil || reject.Error() != wantReject.Error() ||
 					reject.RejectReason() != wantReject.RejectReason() || reject.IsBusinessReject() != wantReject.IsBusinessReject() ||
-					reject.RefTagID() == nil || *reject.RefTagID() != tagMsgType || reject.BusinessRejectRefID() != wantReject.BusinessRejectRefID() {
+					!hasRefTagID || refTagID != tagMsgType || reject.BusinessRejectRefID() != wantReject.BusinessRejectRefID() {
 					test.Fatalf("missing field changed: value=%q reject=%v", got, reject)
 				}
 			})

@@ -66,7 +66,7 @@ type boundedFullReject struct{ err error }
 func (e *boundedFullReject) Error() string             { return e.err.Error() }
 func (*boundedFullReject) RejectReason() int           { return 0 }
 func (*boundedFullReject) BusinessRejectRefID() string { return "" }
-func (*boundedFullReject) RefTagID() *Tag              { return nil }
+func (*boundedFullReject) RefTagID() (Tag, bool)       { return 0, false }
 func (*boundedFullReject) IsBusinessReject() bool      { return false }
 
 type boundedFullApplication struct {

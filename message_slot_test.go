@@ -261,8 +261,10 @@ func TestMessageSlotMalformedGroupCounts(t *testing.T) {
 		if want == nil || got == nil || want.Error() != got.Error() || want.RejectReason() != got.RejectReason() {
 			t.Fatalf("count %q reject got %v want %v", value, got, want)
 		}
-		if want.RefTagID() == nil || got.RefTagID() == nil || *want.RefTagID() != 453 || *got.RefTagID() != 453 {
-			t.Fatalf("count %q rejected a different field: got %v want %v", value, got.RefTagID(), want.RefTagID())
+		wantTag, hasWantTag := want.RefTagID()
+		gotTag, hasGotTag := got.RefTagID()
+		if !hasWantTag || !hasGotTag || wantTag != 453 || gotTag != 453 {
+			t.Fatalf("count %q rejected a different field: got (%d, %v) want (%d, %v)", value, gotTag, hasGotTag, wantTag, hasWantTag)
 		}
 	}
 	for _, malformed := range []string{"8=FIX.4.4\x019=20\x0135=D\x01453=1\x01448=no-terminator", "8=FIX.4.4\x019=20\x0135=D\x01453=1\x01448=A\x01"} {

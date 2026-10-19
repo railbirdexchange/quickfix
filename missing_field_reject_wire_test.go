@@ -8,11 +8,14 @@ import (
 
 func TestMissingFieldRejectCompletedWireAndLogLifetime(t *testing.T) {
 	for _, scenario := range []struct {
-		name   string
-		groups bool
+		name     string
+		groups   bool
+		tag      Tag
+		prepared bool
 	}{
-		{name: "FIX40"},
-		{name: "FIX44", groups: true},
+		{name: "FIX40", tag: 9999},
+		{name: "FIX44", groups: true, tag: 9999},
+		{name: "FIX44_prepared", groups: true, tag: 526, prepared: true},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			fixture := newScopedOutboundBenchmark(t, scenario.groups, "")
@@ -22,14 +25,24 @@ func TestMissingFieldRejectCompletedWireAndLogLifetime(t *testing.T) {
 			fixture.session.log = log
 			fixture.session.boundedIn.eventLog = nil
 
-			const originalTag Tag = 9999
-			_, reject := fixture.message.Body.GetString(originalTag)
-			if reject == nil || reject.RefTagID() == nil {
+			originalTag := scenario.tag
+			fields := &fixture.message.Body.FieldMap
+			if scenario.prepared {
+				fields = &fixture.session.boundedIn.parsed.message.Body.FieldMap
+			}
+			_, reject := fields.GetString(originalTag)
+			if reject == nil {
 				t.Fatal("missing field did not return a referenced reject")
 			}
-			reference := reject.RefTagID()
-			*reference = 10000
-			const reason = "Conditionally Required Field Missing (9999)"
+			if scenario.prepared && reject != fixture.session.boundedIn.missingRejects[originalTag] {
+				t.Fatal("configured missing field did not return the session's prepared reject")
+			}
+			reference, present := reject.RefTagID()
+			if !present || reference != originalTag {
+				t.Fatalf("reference tag = (%d, %v), want (%d, true)", reference, present, originalTag)
+			}
+			reference = 10000
+			reason := fmt.Sprintf("Conditionally Required Field Missing (%d)", originalTag)
 			if reject.Error() != reason || reject.RejectReason() != 8 || !reject.IsBusinessReject() || reject.BusinessRejectRefID() != "" {
 				t.Fatalf("missing-field reject changed its original text or classification: %v", reject)
 			}
@@ -50,7 +63,7 @@ func TestMissingFieldRejectCompletedWireAndLogLifetime(t *testing.T) {
 			}
 
 			message := fixture.peer.Message()
-			wantType, wantText := "3", reason+" (10000)"
+			wantType, wantText := "3", fmt.Sprintf("%s (%d)", reason, originalTag)
 			if scenario.groups {
 				wantType, wantText = "j", reason
 				if value, err := message.Body.GetInt(tagBusinessRejectReason); err != nil || value != 8 {
@@ -83,9 +96,12 @@ func TestMissingFieldRejectCompletedWireAndLogLifetime(t *testing.T) {
 			retainedFormat, retainedArguments := log.format, log.args
 
 			// A legacy logger may retain its arguments after the control, source,
-			// and peer message scopes finish. Later reference mutation must not
-			// rewrite either the original error text or that retained log value.
+			// and peer message scopes finish. Changing a returned reference value
+			// cannot rewrite the error or that retained log value.
 			fixture.message.Body.Clear()
+			if scenario.prepared {
+				fixture.session.boundedIn.parsed.Reset()
+			}
 			fixture.peer.Reset()
 			next, acquireErr := fixture.session.acquireControl("0")
 			if acquireErr != nil {
@@ -93,9 +109,9 @@ func TestMissingFieldRejectCompletedWireAndLogLifetime(t *testing.T) {
 			}
 			next.Body.SetString(tagText, "replacement control text")
 			fixture.session.releaseControl()
-			*reference = 10001
-			if reject.RefTagID() != reference || reject.Error() != reason {
-				t.Fatal("retained reject changed after message scope reuse")
+			reference = 10001
+			if tag, present := reject.RefTagID(); !present || tag != originalTag || reject.Error() != reason {
+				t.Fatalf("retained reject changed after message scope reuse or setting returned value to %d", reference)
 			}
 			if value := fmt.Sprintf(retainedFormat, retainedArguments...); value != "Message Rejected: "+reason {
 				t.Fatalf("retained reject log changed: %q", value)
@@ -104,9 +120,8 @@ func TestMissingFieldRejectCompletedWireAndLogLifetime(t *testing.T) {
 	}
 }
 
-func TestMissingFieldRejectConcurrentErrorAndReferenceMutation(t *testing.T) {
+func TestMissingFieldRejectConcurrentErrorAndReferenceValues(t *testing.T) {
 	reject := ConditionallyRequiredFieldMissing(44)
-	reference := reject.RefTagID()
 	const want = "Conditionally Required Field Missing (44)"
 	start := make(chan struct{})
 	var workers sync.WaitGroup
@@ -116,25 +131,22 @@ func TestMissingFieldRejectConcurrentErrorAndReferenceMutation(t *testing.T) {
 			defer workers.Done()
 			<-start
 			for iteration := 0; iteration < 1000; iteration++ {
-				if got := reject.Error(); got != want {
-					t.Errorf("concurrent error text = %q, want %q", got, want)
+				reference, present := reject.RefTagID()
+				if got := reject.Error(); got != want || !present || reference != 44 {
+					t.Errorf("concurrent error = %q, reference (%d, %v)", got, reference, present)
+					return
+				}
+				reference = Tag(iteration)
+				if tag, present := reject.RefTagID(); !present || tag != 44 {
+					t.Errorf("changing returned value to %d changed shared error", reference)
 					return
 				}
 			}
 		}()
 	}
-	workers.Add(1)
-	go func() {
-		defer workers.Done()
-		<-start
-		for iteration := 0; iteration < 1000; iteration++ {
-			*reference = Tag(iteration)
-		}
-	}()
 	close(start)
 	workers.Wait()
-	// Only inspect the mutable reference after its writer has finished.
-	if reject.RefTagID() != reference || *reference != 999 || reject.Error() != want {
-		t.Fatal("reference mutation changed the original error text or pointer")
+	if reference, present := reject.RefTagID(); !present || reference != 44 || reject.Error() != want {
+		t.Fatal("concurrent readers changed the retained error")
 	}
 }

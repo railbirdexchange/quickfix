@@ -429,8 +429,7 @@ func TestScopedControlEmptyTestRequestIDAndTimeoutState(t *testing.T) {
 }
 
 func TestScopedControlWarmedAllocations(t *testing.T) {
-	refTag := Tag(11)
-	reject := &messageRejectError{text: "Incorrect value", rejectReason: 5, refTagID: &refTag}
+	reject := &messageRejectError{text: "Incorrect value", rejectReason: 5, refTagID: 11, hasRefTagID: true}
 	for _, scenario := range []struct {
 		name string
 		send func(*session, *Message) error

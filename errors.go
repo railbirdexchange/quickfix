@@ -50,7 +50,9 @@ type MessageRejectError interface {
 	// RejectReason, tag 373 for session rejects, tag 380 for business rejects.
 	RejectReason() int
 	BusinessRejectRefID() string
-	RefTagID() *Tag
+	// RefTagID identifies the field associated with the rejection, when present.
+	// The returned value does not expose mutable storage owned by the error.
+	RefTagID() (Tag, bool)
 	IsBusinessReject() bool
 }
 
@@ -62,7 +64,7 @@ type RejectLogon struct {
 func (e RejectLogon) Error() string { return e.Text }
 
 // RefTagID implements MessageRejectError.
-func (RejectLogon) RefTagID() *Tag { return nil }
+func (RejectLogon) RefTagID() (Tag, bool) { return 0, false }
 
 // RejectReason implements MessageRejectError.
 func (RejectLogon) RejectReason() int { return 0 }
@@ -77,31 +79,44 @@ type messageRejectError struct {
 	rejectReason        int
 	text                string
 	businessRejectRefID string
-	refTagID            *Tag
+	refTagID            Tag
+	hasRefTagID         bool
 	isBusinessReject    bool
 }
 
 func (e messageRejectError) Error() string               { return e.text }
-func (e messageRejectError) RefTagID() *Tag              { return e.refTagID }
+func (e messageRejectError) RefTagID() (Tag, bool)       { return e.refTagID, e.hasRefTagID }
 func (e messageRejectError) RejectReason() int           { return e.rejectReason }
 func (e messageRejectError) BusinessRejectRefID() string { return e.businessRejectRefID }
 func (e messageRejectError) IsBusinessReject() bool      { return e.isBusinessReject }
 
 // NewMessageRejectError returns a MessageRejectError with the given error message, reject reason, and optional reftagid.
 func NewMessageRejectError(err string, rejectReason int, refTagID *Tag) MessageRejectError {
-	return messageRejectError{text: err, rejectReason: rejectReason, refTagID: refTagID}
+	return newMessageRejectError(err, rejectReason, refTagID)
+}
+
+func newMessageRejectError(text string, rejectReason int, refTagID *Tag) messageRejectError {
+	reject := messageRejectError{text: text, rejectReason: rejectReason}
+	if refTagID != nil {
+		reject.refTagID, reject.hasRefTagID = *refTagID, true
+	}
+	return reject
 }
 
 // NewBusinessMessageRejectError returns a MessageRejectError with the given error mesage, reject reason, and optional reftagid.
 // Reject is treated as a business level reject.
 func NewBusinessMessageRejectError(err string, rejectReason int, refTagID *Tag) MessageRejectError {
-	return messageRejectError{text: err, rejectReason: rejectReason, refTagID: refTagID, isBusinessReject: true}
+	reject := newMessageRejectError(err, rejectReason, refTagID)
+	reject.isBusinessReject = true
+	return reject
 }
 
 // NewBusinessMessageRejectErrorWithRefID returns a MessageRejectError with the given error mesage, reject reason, refID, and optional reftagid.
 // Reject is treated as a business level reject.
 func NewBusinessMessageRejectErrorWithRefID(err string, rejectReason int, businessRejectRefID string, refTagID *Tag) MessageRejectError {
-	return messageRejectError{text: err, rejectReason: rejectReason, refTagID: refTagID, businessRejectRefID: businessRejectRefID, isBusinessReject: true}
+	reject := newMessageRejectError(err, rejectReason, refTagID)
+	reject.businessRejectRefID, reject.isBusinessReject = businessRejectRefID, true
+	return reject
 }
 
 // IncorrectDataFormatForValue returns an error indicating a field that cannot be parsed as the type required.
@@ -126,30 +141,30 @@ func ValueIsIncorrect(tag Tag) MessageRejectError {
 
 // ConditionallyRequiredFieldMissing indicates that the requested field could not be found in the FIX message.
 func ConditionallyRequiredFieldMissing(tag Tag) MessageRejectError {
-	return &missingFieldReject{originalTag: tag, referenceTag: tag}
+	reject := newMissingFieldReject(tag)
+	return &reject
 }
 
-// Missing-field getters often have their errors checked without rendering text.
-// Keep their owned reference tag in the same allocation as the error, and format
-// only when requested. The original tag is immutable: callers may mutate the
-// separately exposed reference tag without changing the snapshotted error text.
+// Missing-field rejects are immutable and can be shared for configured tags.
+// Prepare their text once so rendering and retaining the error need no new work.
 type missingFieldReject struct {
-	originalTag  Tag
-	referenceTag Tag
+	tag  Tag
+	text string
 }
 
-func (reject *missingFieldReject) Error() string {
+func newMissingFieldReject(tag Tag) missingFieldReject {
 	const prefix = "Conditionally Required Field Missing ("
 	// A signed 64-bit tag needs at most 20 bytes, including the sign. This also
 	// covers 32-bit platforms without growing the local formatting buffer.
 	var buffer [len(prefix) + 20 + 1]byte
 	text := append(buffer[:0], prefix...)
-	text = strconv.AppendInt(text, int64(reject.originalTag), 10)
+	text = strconv.AppendInt(text, int64(tag), 10)
 	text = append(text, ')')
-	return string(text)
+	return missingFieldReject{tag: tag, text: string(text)}
 }
 
-func (reject *missingFieldReject) RefTagID() *Tag { return &reject.referenceTag }
+func (reject *missingFieldReject) Error() string         { return reject.text }
+func (reject *missingFieldReject) RefTagID() (Tag, bool) { return reject.tag, true }
 func (*missingFieldReject) RejectReason() int {
 	return rejectReasonConditionallyRequiredFieldMissing
 }

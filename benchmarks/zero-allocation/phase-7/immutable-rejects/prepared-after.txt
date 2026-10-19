@@ -1,0 +1,36 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+cpu: Apple M4 Pro
+BenchmarkPreparedMissingField/configured/unrendered         	83229775	        13.43 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPreparedMissingField/configured/unrendered         	89144217	        13.50 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPreparedMissingField/configured/unrendered         	91586448	        13.38 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPreparedMissingField/configured/unrendered         	91719452	        13.36 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPreparedMissingField/configured/unrendered         	91351724	        13.34 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPreparedMissingField/configured/render_twice       	78416852	        15.48 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPreparedMissingField/configured/render_twice       	78629013	        15.46 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPreparedMissingField/configured/render_twice       	78491652	        15.49 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPreparedMissingField/configured/render_twice       	74785188	        15.40 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPreparedMissingField/configured/render_twice       	74125549	        15.40 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPreparedMissingField/unknown/unrendered            	24116462	        46.18 ns/op	      72 B/op	       2 allocs/op
+BenchmarkPreparedMissingField/unknown/unrendered            	26310404	        46.70 ns/op	      72 B/op	       2 allocs/op
+BenchmarkPreparedMissingField/unknown/unrendered            	25579854	        46.06 ns/op	      72 B/op	       2 allocs/op
+BenchmarkPreparedMissingField/unknown/unrendered            	25716994	        46.06 ns/op	      72 B/op	       2 allocs/op
+BenchmarkPreparedMissingField/unknown/unrendered            	25654432	        46.13 ns/op	      72 B/op	       2 allocs/op
+BenchmarkPreparedMissingField/unknown/render_twice          	20958349	        51.15 ns/op	      72 B/op	       2 allocs/op
+BenchmarkPreparedMissingField/unknown/render_twice          	22993938	        51.34 ns/op	      72 B/op	       2 allocs/op
+BenchmarkPreparedMissingField/unknown/render_twice          	20728953	        52.70 ns/op	      72 B/op	       2 allocs/op
+BenchmarkPreparedMissingField/unknown/render_twice          	23162613	        51.30 ns/op	      72 B/op	       2 allocs/op
+BenchmarkPreparedMissingField/unknown/render_twice          	23759650	        51.76 ns/op	      72 B/op	       2 allocs/op
+BenchmarkPreparedRejectHeartbeat/unrendered                 	  633456	      1912 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPreparedRejectHeartbeat/unrendered                 	  635420	      1926 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPreparedRejectHeartbeat/unrendered                 	  644937	      1947 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPreparedRejectHeartbeat/unrendered                 	  640794	      1920 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPreparedRejectHeartbeat/unrendered                 	  618378	      1929 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPreparedRejectHeartbeat/render_twice               	  597339	      1931 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPreparedRejectHeartbeat/render_twice               	  641404	      1915 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPreparedRejectHeartbeat/render_twice               	  584594	      1928 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPreparedRejectHeartbeat/render_twice               	  608612	      1930 ns/op	       0 B/op	       0 allocs/op
+BenchmarkPreparedRejectHeartbeat/render_twice               	  620689	      1940 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/quickfixgo/quickfix	38.534s

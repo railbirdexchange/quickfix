@@ -23,6 +23,9 @@ func (control *scopedControl) init(session *session, limits ParseLimits) error {
 	if err := message.attachMessageArena(limits.MaxFrameBytes, limits.MaxFields); err != nil {
 		return err
 	}
+	if session.boundedIn != nil {
+		message.useMissingRejects(session.boundedIn.missingRejects)
+	}
 	message.outboundFields = &outboundFields{owner: message}
 	control.message = message
 	control.original = *message

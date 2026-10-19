@@ -56,12 +56,13 @@ func (t tagSort) Less(i, j int) bool { return t.compare(t.tags[i], t.tags[j]) }
 type FieldMap struct {
 	tagLookup map[Tag]field
 	tagSort
-	rwLock       *sync.RWMutex
-	fixed        *fixedFieldMap
-	scoped       bool
-	reusable     bool
-	arena        *messageArena
-	arenaSection int
+	rwLock         *sync.RWMutex
+	fixed          *fixedFieldMap
+	scoped         bool
+	reusable       bool
+	arena          *messageArena
+	arenaSection   int
+	missingRejects preparedMissingRejects
 	// constructionErr preserves a failed section through cold arena detachment.
 	constructionErr error
 }
@@ -118,7 +119,7 @@ func (m FieldMap) GetField(tag Tag, parser FieldValueReader) MessageRejectError 
 
 	f, ok := m.lookup(tag)
 	if !ok {
-		return ConditionallyRequiredFieldMissing(tag)
+		return m.missingFieldReject(tag)
 	}
 
 	if err := parser.Read(f[0].value); err != nil {
@@ -132,7 +133,7 @@ func (m FieldMap) GetField(tag Tag, parser FieldValueReader) MessageRejectError 
 func (m FieldMap) getFieldNoLock(tag Tag, parser FieldValueReader) MessageRejectError {
 	f, ok := m.lookup(tag)
 	if !ok {
-		return ConditionallyRequiredFieldMissing(tag)
+		return m.missingFieldReject(tag)
 	}
 
 	if err := parser.Read(f[0].value); err != nil {
@@ -153,7 +154,7 @@ func (m FieldMap) GetBytes(tag Tag) ([]byte, MessageRejectError) {
 
 	f, ok := m.lookup(tag)
 	if !ok {
-		return nil, ConditionallyRequiredFieldMissing(tag)
+		return nil, m.missingFieldReject(tag)
 	}
 
 	return f[0].value, nil
@@ -176,7 +177,7 @@ func (m FieldMap) getBytesIfPresent(tag Tag) ([]byte, bool) {
 func (m FieldMap) getBytesNoLock(tag Tag) ([]byte, MessageRejectError) {
 	f, ok := m.lookup(tag)
 	if !ok {
-		return nil, ConditionallyRequiredFieldMissing(tag)
+		return nil, m.missingFieldReject(tag)
 	}
 
 	return f[0].value, nil
@@ -250,7 +251,7 @@ func (m FieldMap) GetString(tag Tag) (string, MessageRejectError) {
 func (m FieldMap) getStringNoLock(tag Tag) (string, MessageRejectError) {
 	field, ok := m.lookup(tag)
 	if !ok {
-		return "", ConditionallyRequiredFieldMissing(tag)
+		return "", m.missingFieldReject(tag)
 	}
 	return string(field[0].value), nil
 }
@@ -263,7 +264,7 @@ func (m FieldMap) GetGroup(parser FieldGroupReader) MessageRejectError {
 
 	f, ok := m.lookup(parser.Tag())
 	if !ok {
-		return ConditionallyRequiredFieldMissing(parser.Tag())
+		return m.missingFieldReject(parser.Tag())
 	}
 	if m.scoped || m.reusable {
 		f = cloneOwnedField(f)
@@ -408,6 +409,7 @@ func (m *FieldMap) CopyInto(to *FieldMap) {
 		to.initWithOrdering(to.compare)
 		to.scoped = true
 	}
+	to.missingRejects = m.missingRejects
 	if to.fixed != nil {
 		if m.fixed == to.fixed {
 			if !m.scoped && !m.reusable {

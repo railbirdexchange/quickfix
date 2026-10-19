@@ -141,6 +141,32 @@ Owned delivery instead detaches that arena before preparing the send.
 
 ## Scopes and callback lifetimes
 
+### Missing-field errors
+
+`MessageRejectError.RefTagID()` now returns `(Tag, bool)`. Callers use
+`tag, present := reject.RefTagID()`; custom implementations must adopt that
+signature. The boolean distinguishes an absent reference from a present zero
+tag. Generic reject constructors still accept `*Tag`, but copy its value at
+construction: changing that input later does not change the error.
+
+Session setup prepares immutable missing-field errors and their text for the
+union of configured transport/application dictionary tags. Inbound, replay,
+control and outgoing field maps share that table; public `NewMessageSlot`
+constructs its own table. Missing getters for those tags, `RefTagID()` and
+repeated `Error()` calls allocate nothing. Errors can be retained beyond
+callback return, frame reuse and session teardown because they contain only
+immutable tag/text data, with no reference to mutable message storage.
+
+The table never grows while processing traffic. Unknown tags, direct calls to
+`ConditionallyRequiredFieldMissing`, and unconfigured standalone field maps
+construct an owned error with cached text and can allocate. Existing allocating
+convenience APIs and arbitrary application errors retain their separate costs.
+The [paired evidence](benchmarks/zero-allocation/phase-7/immutable-rejects/README.md)
+includes completed FIX 4.4 heartbeats, repeated text reads, unknown-tag fallback,
+retained errors and exact whole-interval allocation checks.
+
+### Message storage
+
 Each mutable message, frame, output slot and journal entry has one owner.
 Callbacks retain their existing signatures and run synchronously in their
 existing processing/send scope. Default ownership adapters sit at delivery

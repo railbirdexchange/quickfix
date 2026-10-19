@@ -25,9 +25,7 @@ func snapshotBoundedReject(reject MessageRejectError) boundedRejectSnapshot {
 		text: reject.Error(), businessRef: reject.BusinessRejectRefID(), reason: reject.RejectReason(),
 		present: true, business: reject.IsBusinessReject(),
 	}
-	if tag := reject.RefTagID(); tag != nil {
-		snapshot.hasTag, snapshot.refTag = true, *tag
-	}
+	snapshot.refTag, snapshot.hasTag = reject.RefTagID()
 	return snapshot
 }
 
