@@ -1,0 +1,36 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+cpu: Apple M4 Pro
+BenchmarkStaticRejectEvent/required         	380985943	         3.073 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectEvent/required         	394274962	         3.089 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectEvent/required         	388922986	         3.102 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectEvent/required         	385949248	         3.118 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectEvent/required         	392038726	         3.067 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectEvent/enum             	252707967	         4.644 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectEvent/enum             	253118454	         4.614 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectEvent/enum             	249029799	         4.635 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectEvent/enum             	263826549	         4.691 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectEvent/enum             	256785283	         4.789 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectEvent/format           	369441967	         3.267 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectEvent/format           	368359740	         3.285 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectEvent/format           	363666715	         3.266 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectEvent/format           	361837591	         3.286 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectEvent/format           	368363743	         3.284 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectEvent/dynamic          	68546782	        16.60 ns/op	      64 B/op	       1 allocs/op
+BenchmarkStaticRejectEvent/dynamic          	72988260	        16.55 ns/op	      64 B/op	       1 allocs/op
+BenchmarkStaticRejectEvent/dynamic          	71937770	        16.54 ns/op	      64 B/op	       1 allocs/op
+BenchmarkStaticRejectEvent/dynamic          	72619078	        16.40 ns/op	      64 B/op	       1 allocs/op
+BenchmarkStaticRejectEvent/dynamic          	73872674	        16.72 ns/op	      64 B/op	       1 allocs/op
+BenchmarkStaticRejectEvent/filtered         	269424626	         4.506 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectEvent/filtered         	276096247	         4.471 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectEvent/filtered         	279605053	         4.419 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectEvent/filtered         	274475598	         4.529 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectEvent/filtered         	277251006	         4.498 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectEvent/legacy           	17686843	        66.16 ns/op	      96 B/op	       3 allocs/op
+BenchmarkStaticRejectEvent/legacy           	18732438	        65.39 ns/op	      96 B/op	       3 allocs/op
+BenchmarkStaticRejectEvent/legacy           	17961920	        64.67 ns/op	      96 B/op	       3 allocs/op
+BenchmarkStaticRejectEvent/legacy           	17812456	        64.57 ns/op	      96 B/op	       3 allocs/op
+BenchmarkStaticRejectEvent/legacy           	18743385	        65.89 ns/op	      96 B/op	       3 allocs/op
+PASS
+ok  	github.com/quickfixgo/quickfix	44.605s

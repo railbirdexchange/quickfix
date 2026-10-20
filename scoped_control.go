@@ -137,6 +137,12 @@ func (s *session) sendHeartbeat(inReplyTo *Message, testRequestID []byte) error 
 func (s *session) logControlReject(reason string) {
 	const prefix = "Message Rejected: "
 	if s.boundedIn != nil && s.boundedIn.eventLog != nil && len(reason) <= len(s.controls.events)-len(prefix) {
+		if text := staticRejectEventText(reason); text != "" {
+			// Fixed event literals already have the owned lifetime required by
+			// retaining log hooks; do not route them through mutable scratch.
+			s.boundedIn.eventLog.OnEvent(text)
+			return
+		}
 		text := append(s.controls.events[:0], prefix...)
 		text = append(text, reason...)
 		s.boundedIn.eventLog.OnEventBorrowed(text)
@@ -144,6 +150,43 @@ func (s *session) logControlReject(reason string) {
 	}
 	// Unknown loggers retain the legacy format and owned string arguments.
 	s.log.OnEventf("Message Rejected: %v", reason)
+}
+
+// Only complete fixed diagnostics use this path. Dynamic detail keeps the
+// existing borrowed-event lifetime, and unknown loggers keep OnEventf.
+func staticRejectEventText(reason string) string {
+	const prefix = "Message Rejected: "
+	switch reason {
+	case "Required tag missing":
+		return prefix + "Required tag missing"
+	case rejectTextIncorrectDataFormat:
+		return prefix + rejectTextIncorrectDataFormat
+	case rejectTextValueIsIncorrect:
+		return prefix + rejectTextValueIsIncorrect
+	case rejectTextTagNotDefined:
+		return prefix + rejectTextTagNotDefined
+	case rejectTextDuplicateTag:
+		return prefix + rejectTextDuplicateTag
+	case rejectTextIncorrectGroupCount:
+		return prefix + rejectTextIncorrectGroupCount
+	case rejectTextFieldOrder:
+		return prefix + rejectTextFieldOrder
+	case rejectTextEmptyValue:
+		return prefix + rejectTextEmptyValue
+	case "Invalid MsgType":
+		return prefix + "Invalid MsgType"
+	case "Unsupported Message Type":
+		return prefix + "Unsupported Message Type"
+	case "Invalid tag number":
+		return prefix + "Invalid tag number"
+	case "CompID problem":
+		return prefix + "CompID problem"
+	case "SendingTime accuracy problem":
+		return prefix + "SendingTime accuracy problem"
+	case "Repeating group fields out of order":
+		return prefix + "Repeating group fields out of order"
+	}
+	return ""
 }
 
 func (s *session) sendTestRequest() error {
