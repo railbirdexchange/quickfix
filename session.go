@@ -51,10 +51,16 @@ type session struct {
 	application  Application
 	Validator
 	stateMachine
-	stateTimer *internal.EventTimer
-	peerTimer  *internal.EventTimer
-	sentReset  bool
-	stopOnce   sync.Once
+	stateTimer                            *internal.EventTimer
+	peerTimer                             *internal.EventTimer
+	sentReset                             bool
+	stopOnce                              sync.Once
+	retired                               bool // Protected by sendMutex; only terminal dynamic retirement sets it.
+	reservation                           *sessionReservation
+	storeClosed                           bool // Construction/retirement owner only.
+	storeCloseErr                         error
+	runStop                               <-chan struct{}
+	logonTimeoutTimer, logoutTimeoutTimer *time.Timer
 
 	targetDefaultApplVerID string
 
@@ -349,6 +355,9 @@ func (s *session) queueForSend(msg *Message) error {
 
 	s.sendMutex.Lock()
 	defer s.sendMutex.Unlock()
+	if s.retired {
+		return errUnknownSession
+	}
 	if s.outbound != nil {
 		slot, err := s.prepareOutbound(msg, nil, false)
 		if err != nil {
@@ -395,6 +404,9 @@ func (s *session) sendInReplyTo(msg *Message, inReplyTo *Message) error {
 	s.sendMutex.Lock()
 	s.finishSendStage("send_mutex_wait", nil, lockStartedAt, true)
 	defer s.sendMutex.Unlock()
+	if s.retired {
+		return errUnknownSession
+	}
 	if s.outbound != nil {
 		slot, err := s.prepareOutbound(msg, inReplyTo, false)
 		if err != nil {
@@ -421,6 +433,9 @@ func (s *session) dropAndReset() error {
 	defer s.resendMutex.Unlock()
 	s.sendMutex.Lock()
 	defer s.sendMutex.Unlock()
+	if s.retired {
+		return errUnknownSession
+	}
 
 	s.dropQueued()
 	if err := s.store.Reset(); err != nil {
@@ -442,6 +457,9 @@ func (s *session) dropAndSendInReplyTo(msg *Message, inReplyTo *Message) error {
 	defer s.resendMutex.Unlock()
 	s.sendMutex.Lock()
 	defer s.sendMutex.Unlock()
+	if s.retired {
+		return errUnknownSession
+	}
 	if s.outbound != nil {
 		slot, err := s.prepareOutbound(msg, inReplyTo, true)
 		if err != nil {
@@ -462,6 +480,29 @@ func (s *session) dropAndSendInReplyTo(msg *Message, inReplyTo *Message) error {
 	s.sendQueued(true)
 
 	return nil
+}
+
+// retireDynamic runs only after the dynamic session loop has returned, or before
+// an unstarted session has transferred to it. Socket ownership has already joined.
+// Mark terminal before dropping routing so callers holding an earlier lookup
+// cannot persist into a closed store. Close runs without engine locks.
+func (s *session) retireDynamic() error {
+	s.resendMutex.Lock()
+	s.sendMutex.Lock()
+	s.retired = true
+	s.dropQueued()
+	s.sendMutex.Unlock()
+	s.resendMutex.Unlock()
+	unregisterSessionInstance(s)
+	return s.closeStore()
+}
+
+func (s *session) closeStore() error {
+	if !s.storeClosed && s.store != nil {
+		s.storeClosed = true
+		s.storeCloseErr = s.store.Close()
+	}
+	return s.storeCloseErr
 }
 
 func (s *session) prepMessageForSend(msg *Message, inReplyTo *Message) (msgBytes []byte, err error) {
@@ -769,8 +810,25 @@ func (s *session) initiateLogoutInReplyTo(reason string, inReplyTo *Message) (er
 		return
 	}
 	s.log.OnEvent("Inititated logout request")
-	time.AfterFunc(s.LogoutTimeout, func() { s.sessionEvent <- internal.LogoutTimeout })
+	if s.logoutTimeoutTimer != nil {
+		s.logoutTimeoutTimer.Stop()
+	}
+	s.logoutTimeoutTimer = s.scheduleTimeout(s.LogoutTimeout, internal.LogoutTimeout)
 	return
+}
+
+func (s *session) scheduleTimeout(delay time.Duration, event internal.Event) *time.Timer {
+	// Capture only this run's channels, never the session or a later run's stop
+	// channel. A callback already firing must be able to leave after run exits.
+	events, stop := s.sessionEvent, s.runStop
+	return time.AfterFunc(delay, func() { deliverSessionTimeout(events, stop, event) })
+}
+
+func deliverSessionTimeout(events chan<- internal.Event, stop <-chan struct{}, event internal.Event) {
+	select {
+	case events <- event:
+	case <-stop:
+	}
 }
 
 func (s *session) verify(msg *Message) MessageRejectError {
@@ -1114,8 +1172,9 @@ func (s *session) onAdmin(msg interface{}) {
 }
 
 func (s *session) run() {
-	s.Start(s)
 	var stopChan = make(chan struct{})
+	s.runStop = stopChan
+	s.Start(s)
 	s.stateTimer = internal.NewEventTimer(func() {
 		select {
 		// Deadlock in write to chan s.sessionEvent after s.Stopped()==true and end of loop session.go:766 because no reader of chan s.sessionEvent.
@@ -1143,6 +1202,12 @@ func (s *session) run() {
 
 	defer func() {
 		close(stopChan)
+		if s.logonTimeoutTimer != nil {
+			s.logonTimeoutTimer.Stop()
+		}
+		if s.logoutTimeoutTimer != nil {
+			s.logoutTimeoutTimer.Stop()
+		}
 		s.stateTimer.Stop()
 		s.peerTimer.Stop()
 		ticker.Stop()

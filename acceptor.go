@@ -44,6 +44,9 @@ type Acceptor struct {
 	dynamicQualifier      bool
 	dynamicQualifierCount int
 	dynamicSessionChan    chan *session
+	dynamicSessionStop    chan struct{}
+	dynamicSetupGroup     sync.WaitGroup
+	dynamicStopping       bool // Protected by sessionsLock; admission/setup only.
 	sessionAddr           sync.Map
 	sessionHostPort       map[SessionID]int
 	listeners             map[string]net.Listener
@@ -127,6 +130,8 @@ func (a *Acceptor) Start() (err error) {
 	}
 	if a.dynamicSessions {
 		a.dynamicSessionChan = make(chan *session)
+		a.dynamicSessionStop = make(chan struct{})
+		a.dynamicStopping = false
 		a.sessionGroup.Add(1)
 		go func() {
 			a.dynamicSessionsLoop()
@@ -151,6 +156,15 @@ func (a *Acceptor) Stop() {
 	}
 	a.listenerShutdown.Wait()
 	if a.dynamicSessions {
+		sessionsLock.Lock()
+		if !a.dynamicStopping {
+			a.dynamicStopping = true
+			close(a.dynamicSessionStop)
+		}
+		sessionsLock.Unlock()
+		// Constructors either transfer to the dynamic owner or retire their own
+		// unstarted session. Never close their handoff channel underneath them.
+		a.dynamicSetupGroup.Wait()
 		close(a.dynamicSessionChan)
 	}
 	for _, session := range a.sessions {
@@ -172,8 +186,24 @@ func (a *Acceptor) RemoteAddr(sessionID SessionID) (net.Addr, bool) {
 	if !ok || addr == nil {
 		return nil, false
 	}
-	val, ok := addr.(net.Addr)
-	return val, ok
+	val, ok := addr.(*sessionAddress)
+	if !ok {
+		return nil, false
+	}
+	return val.address, true
+}
+
+type sessionAddress struct {
+	owner   *session
+	address net.Addr
+}
+
+func (a *Acceptor) removeSessionAddress(s *session) {
+	if value, ok := a.sessionAddr.Load(s.sessionID); ok {
+		if address, ok := value.(*sessionAddress); ok && address.owner == s {
+			a.sessionAddr.CompareAndDelete(s.sessionID, address)
+		}
+	}
 }
 
 // NewAcceptor creates and initializes a new Acceptor.
@@ -339,26 +369,34 @@ func (a *Acceptor) handleConnection(netConn net.Conn) {
 	}
 
 	if a.dynamicQualifier {
+		sessionsLock.Lock()
 		a.dynamicQualifierCount++
 		sessID.Qualifier = strconv.Itoa(a.dynamicQualifierCount)
+		sessionsLock.Unlock()
 	}
 	session, ok := a.sessions[sessID]
+	dynamicSetupOwned := false
+	defer func() {
+		if dynamicSetupOwned {
+			a.dynamicSetupGroup.Done()
+		}
+	}()
 	if !ok {
 		if !a.dynamicSessions {
 			a.globalLog.OnEventf("Session %v not found for incoming message: %s", sessID, msgBytes)
 			return
 		}
-		dynamicSession, err := a.sessionFactory.createSession(sessID, a.storeFactory, a.settings.globalSettings.clone(), a.logFactory, a.app)
+		dynamicSession, err := a.startDynamicSession(sessID)
 		if err != nil {
 			a.globalLog.OnEventf("Dynamic session %v failed to create: %v", sessID, err)
 			return
 		}
-		a.dynamicSessionChan <- dynamicSession
 		session = dynamicSession
+		dynamicSetupOwned = true
 		defer session.stop()
 	}
 
-	a.sessionAddr.Store(sessID, netConn.RemoteAddr())
+	a.sessionAddr.Store(sessID, &sessionAddress{owner: session, address: netConn.RemoteAddr()})
 	outboundBufferSize, err := a.socketOutboundBufferSize(sessID)
 	if err != nil {
 		a.globalLog.OnEventf("Invalid outbound buffer size for session %v: %v", sessID, err)
@@ -379,8 +417,53 @@ func (a *Acceptor) handleConnection(netConn net.Conn) {
 		a.globalLog.OnEventf("Unable to accept session %v connection: %v", sessID, err.Error())
 		return
 	}
+	if dynamicSetupOwned {
+		dynamicSetupOwned = false
+		a.dynamicSetupGroup.Done()
+	}
 
 	<-writer.done
+}
+
+func (a *Acceptor) startDynamicSession(id SessionID) (*session, error) {
+	sessionsLock.Lock()
+	if a.dynamicStopping {
+		sessionsLock.Unlock()
+		return nil, errUnknownSession
+	}
+	a.dynamicSetupGroup.Add(1)
+	sessionsLock.Unlock()
+	transferred := false
+	defer func() {
+		if !transferred {
+			a.dynamicSetupGroup.Done()
+		}
+	}()
+	s, err := a.sessionFactory.createOwnedSession(id, a.storeFactory, a.settings.globalSettings.clone(), a.logFactory, a.app, true)
+	if err != nil {
+		return nil, err
+	}
+	select {
+	case a.dynamicSessionChan <- s:
+		// The connection handler retains setup ownership through address
+		// publication, IO startup and the acknowledged connect (or cleanup).
+		// Stop cannot retire this run while its handler can still connect it.
+		transferred = true
+		return s, nil
+	case <-a.dynamicSessionStop:
+		a.retireDynamicSession(s)
+		return nil, errUnknownSession
+	}
+}
+
+func (a *Acceptor) retireDynamicSession(s *session) {
+	err := s.retireDynamic()
+	a.removeSessionAddress(s)
+	if err != nil {
+		a.globalLog.OnEventf("Dynamic session %v store close failed; identity quarantined until restart: %v", s.sessionID, err)
+		return
+	}
+	releaseSessionReservation(s.sessionID, s.reservation)
 }
 
 func (a *Acceptor) socketOutboundBufferSize(sessionID SessionID) (int, error) {
@@ -432,17 +515,12 @@ LOOP:
 			sessions[sessionID] = session
 			go func() {
 				session.run()
-				err := UnregisterSession(session.sessionID)
-				if err != nil {
-					a.globalLog.OnEventf("Unregister dynamic session %v failed: %v", session.sessionID, err)
-					return
-				}
+				a.retireDynamicSession(session)
 				complete <- sessionID
 			}()
 		case id := <-complete:
-			session, ok := sessions[id]
+			_, ok := sessions[id]
 			if ok {
-				a.sessionAddr.Delete(session.sessionID)
 				delete(sessions, id)
 			} else {
 				a.globalLog.OnEventf("Missing dynamic session %v!", id)

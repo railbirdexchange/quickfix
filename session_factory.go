@@ -70,26 +70,40 @@ func (f sessionFactory) createSession(
 	sessionID SessionID, storeFactory MessageStoreFactory, settings *SessionSettings,
 	logFactory LogFactory, application Application,
 ) (session *session, err error) {
+	return f.createOwnedSession(sessionID, storeFactory, settings, logFactory, application, false)
+}
+
+func (f sessionFactory) createOwnedSession(
+	sessionID SessionID, storeFactory MessageStoreFactory, settings *SessionSettings,
+	logFactory LogFactory, application Application, dynamic bool,
+) (session *session, err error) {
+	reservation, err := reserveSessionID(sessionID, dynamic)
+	if err != nil {
+		return nil, err
+	}
+	committed := false
+	defer func() {
+		if committed {
+			return
+		}
+		if session != nil {
+			unregisterSessionInstance(session)
+			if closeErr := session.closeStore(); closeErr != nil {
+				session.log.OnEventf("Failed to close message store for session %v after createSession error: %v", sessionID, closeErr)
+				return // Keep the identity quarantined; Close did not prove completion.
+			}
+		}
+		releaseSessionReservation(sessionID, reservation)
+	}()
 
 	if session, err = f.newSession(sessionID, storeFactory, settings, logFactory, application); err != nil {
 		return
 	}
-
-	// Close the store on the error path to avoid leaking durable-store resources.
-	// After newSession because that's where session.store is initialized.
-	defer func() {
-		if err != nil && session != nil && session.store != nil {
-			if closeErr := session.store.Close(); closeErr != nil {
-				session.log.OnEventf("Failed to close message store for session %v after createSession error: %v", sessionID, closeErr)
-			}
-		}
-	}()
-
-	if err = registerSession(session); err != nil {
-		return
-	}
+	session.reservation = reservation
+	registerReservedSession(session)
 	application.OnCreate(session.sessionID)
 	session.log.OnEvent("Created session")
+	committed = true
 
 	return
 }
@@ -469,7 +483,7 @@ func (f sessionFactory) newSession(
 		return
 	}
 	if err = s.configureOutbound(settings); err != nil {
-		s.store.Close()
+		s.closeStore()
 		return
 	}
 

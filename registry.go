@@ -24,6 +24,14 @@ import (
 var sessionsLock sync.RWMutex
 var sessions = make(map[SessionID]*session)
 
+// Reservations cover construction and the complete dynamic-session lifetime.
+// Public unregister only removes routing; it cannot permit overlapping stores.
+// A failed Close leaves this small identity-only claim quarantined until restart.
+// The map and claims are protected by sessionsLock; no session is retained here.
+type sessionReservation struct{ dynamic bool }
+
+var sessionReservations = make(map[SessionID]*sessionReservation)
+
 // Each published snapshot is immutable and contains only registered IDs.
 // Lifecycle changes use sessionsLock; String readers never acquire that lock.
 var registeredSessionNames atomic.Pointer[map[SessionID]string]
@@ -109,7 +117,9 @@ func UnregisterSession(sessionID SessionID) error {
 
 // SetNextTargetMsgSeqNum set the next expected target message sequence number for the session matching the session id.
 func SetNextTargetMsgSeqNum(sessionID SessionID, seqNum int) error {
-	session, ok := lookupSession(sessionID)
+	sessionsLock.RLock()
+	defer sessionsLock.RUnlock()
+	session, ok := sessions[sessionID]
 	if !ok {
 		return errUnknownSession
 	}
@@ -128,12 +138,17 @@ func SetNextSenderMsgSeqNum(sessionID SessionID, seqNum int) error {
 	defer session.resendMutex.Unlock()
 	session.sendMutex.Lock()
 	defer session.sendMutex.Unlock()
+	if session.retired {
+		return errUnknownSession
+	}
 	return session.store.SetNextSenderMsgSeqNum(seqNum)
 }
 
 // GetExpectedSenderNum retrieves the expected sender sequence number for the session matching the session id.
 func GetExpectedSenderNum(sessionID SessionID) (int, error) {
-	session, ok := lookupSession(sessionID)
+	sessionsLock.RLock()
+	defer sessionsLock.RUnlock()
+	session, ok := sessions[sessionID]
 	if !ok {
 		return 0, errUnknownSession
 	}
@@ -142,7 +157,9 @@ func GetExpectedSenderNum(sessionID SessionID) (int, error) {
 
 // GetExpectedTargetNum retrieves the next target sequence number for the session matching the session id.
 func GetExpectedTargetNum(sessionID SessionID) (int, error) {
-	session, ok := lookupSession(sessionID)
+	sessionsLock.RLock()
+	defer sessionsLock.RUnlock()
+	session, ok := sessions[sessionID]
 	if !ok {
 		return 0, errUnknownSession
 	}
@@ -174,10 +191,56 @@ func registerSession(s *session) error {
 	if _, ok := sessions[s.sessionID]; ok {
 		return errDuplicateSessionID
 	}
+	if _, ok := sessionReservations[s.sessionID]; ok {
+		return errDuplicateSessionID
+	}
 
 	sessions[s.sessionID] = s
 	publishSessionNames()
 	return nil
+}
+
+func reserveSessionID(id SessionID, dynamic bool) (*sessionReservation, error) {
+	sessionsLock.Lock()
+	defer sessionsLock.Unlock()
+	if _, exists := sessions[id]; exists {
+		return nil, errDuplicateSessionID
+	}
+	if _, exists := sessionReservations[id]; exists {
+		return nil, errDuplicateSessionID
+	}
+	reservation := &sessionReservation{dynamic: dynamic}
+	sessionReservations[id] = reservation
+	return reservation, nil
+}
+
+func registerReservedSession(s *session) {
+	sessionsLock.Lock()
+	defer sessionsLock.Unlock()
+	sessions[s.sessionID] = s
+	if !s.reservation.dynamic {
+		delete(sessionReservations, s.sessionID)
+	}
+	publishSessionNames()
+}
+
+func releaseSessionReservation(id SessionID, reservation *sessionReservation) {
+	sessionsLock.Lock()
+	defer sessionsLock.Unlock()
+	if reservation != nil && sessionReservations[id] == reservation {
+		delete(sessionReservations, id)
+	}
+}
+
+// Removal waits for registry-owned sequence reads/writes, but never waits for
+// sender locks or store Close while holding the registry lock.
+func unregisterSessionInstance(s *session) {
+	sessionsLock.Lock()
+	defer sessionsLock.Unlock()
+	if sessions[s.sessionID] == s {
+		delete(sessions, s.sessionID)
+		publishSessionNames()
+	}
 }
 
 // publishSessionNames requires sessionsLock. Reuse the owned text for unchanged

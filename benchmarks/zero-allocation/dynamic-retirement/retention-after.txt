@@ -1,0 +1,11 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+cpu: Apple M4 Pro
+BenchmarkDynamicSessionRetainedHeap 	       1	 196261209 ns/op	         0 open-stores	         1.000 owner-joined	      3021 retained-B/session	19107656 B/op	    1008 allocs/op
+BenchmarkDynamicSessionRetainedHeap 	       1	 998783458 ns/op	         0 open-stores	         1.000 owner-joined	       133.0 retained-B/session	19083928 B/op	     925 allocs/op
+BenchmarkDynamicSessionRetainedHeap 	       1	 997490625 ns/op	         0 open-stores	         1.000 owner-joined	       133.0 retained-B/session	19083928 B/op	     925 allocs/op
+BenchmarkDynamicSessionRetainedHeap 	       1	 998523625 ns/op	         0 open-stores	         1.000 owner-joined	       133.0 retained-B/session	19083928 B/op	     925 allocs/op
+BenchmarkDynamicSessionRetainedHeap 	       1	 996558334 ns/op	         0 open-stores	         1.000 owner-joined	       133.0 retained-B/session	19083928 B/op	     925 allocs/op
+PASS
+ok  	github.com/quickfixgo/quickfix	4.487s
