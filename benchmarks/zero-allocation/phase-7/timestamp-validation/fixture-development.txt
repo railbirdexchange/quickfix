@@ -1,0 +1,5 @@
+--- FAIL: TestTimestampValidationSessionReject (0.03s)
+    validation_timestamp_test.go:141: expected timestamp format reject: <nil>
+FAIL
+FAIL	github.com/quickfixgo/quickfix	0.666s
+FAIL

@@ -1,0 +1,71 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+cpu: Apple M4 Pro
+BenchmarkSessionRequiredReject      	   72295	      3372 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRequiredReject      	   70326	      3478 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRequiredReject      	   70444	      3468 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRequiredReject      	   69318	      3424 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRequiredReject      	   70816	      3435 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTimestampValidationValue/seconds         	15785491	        14.49 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTimestampValidationValue/seconds         	15892242	        15.11 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTimestampValidationValue/seconds         	17106404	        15.31 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTimestampValidationValue/seconds         	16173732	        14.78 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTimestampValidationValue/seconds         	16673952	        14.69 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTimestampValidationValue/nanos           	13659517	        17.75 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTimestampValidationValue/nanos           	13935932	        17.35 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTimestampValidationValue/nanos           	13402984	        17.76 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTimestampValidationValue/nanos           	13547202	        17.65 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTimestampValidationValue/nanos           	13400272	        17.70 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTimestampValidationValue/comma           	 3280666	        75.96 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTimestampValidationValue/comma           	 3144576	        74.10 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTimestampValidationValue/comma           	 3256494	        74.06 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTimestampValidationValue/comma           	 3133152	        75.27 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTimestampValidationValue/comma           	 3326520	        72.36 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTimestampValidationValue/signed_fraction 	 3091562	        81.48 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTimestampValidationValue/signed_fraction 	 3076543	        77.58 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTimestampValidationValue/signed_fraction 	 3173892	        76.88 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTimestampValidationValue/signed_fraction 	 3133518	        80.26 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTimestampValidationValue/signed_fraction 	 3156148	        80.21 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTimestampValidationValue/negative_zero   	 3464076	        72.03 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTimestampValidationValue/negative_zero   	 3327009	        72.12 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTimestampValidationValue/negative_zero   	 3291962	        70.61 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTimestampValidationValue/negative_zero   	 3269101	        70.30 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTimestampValidationValue/negative_zero   	 3271428	        68.64 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTimestampValidationValue/invalid_calendar         	 2485986	        96.08 ns/op	     104 B/op	       2 allocs/op
+BenchmarkTimestampValidationValue/invalid_calendar         	 2508696	        97.20 ns/op	     104 B/op	       2 allocs/op
+BenchmarkTimestampValidationValue/invalid_calendar         	 2388136	        99.95 ns/op	     104 B/op	       2 allocs/op
+BenchmarkTimestampValidationValue/invalid_calendar         	 2330013	       100.0 ns/op	     104 B/op	       2 allocs/op
+BenchmarkTimestampValidationValue/invalid_calendar         	 2294096	        99.53 ns/op	     104 B/op	       2 allocs/op
+BenchmarkTimestampValidationValue/invalid_fraction         	 2163200	       110.6 ns/op	     136 B/op	       3 allocs/op
+BenchmarkTimestampValidationValue/invalid_fraction         	 2144175	       112.3 ns/op	     136 B/op	       3 allocs/op
+BenchmarkTimestampValidationValue/invalid_fraction         	 2136736	       110.6 ns/op	     136 B/op	       3 allocs/op
+BenchmarkTimestampValidationValue/invalid_fraction         	 2184204	       111.6 ns/op	     136 B/op	       3 allocs/op
+BenchmarkTimestampValidationValue/invalid_fraction         	 2140658	       114.1 ns/op	     136 B/op	       3 allocs/op
+BenchmarkTimestampValidationValue/invalid_length           	 9000238	        27.20 ns/op	      80 B/op	       2 allocs/op
+BenchmarkTimestampValidationValue/invalid_length           	 8974170	        27.62 ns/op	      80 B/op	       2 allocs/op
+BenchmarkTimestampValidationValue/invalid_length           	 8754158	        27.43 ns/op	      80 B/op	       2 allocs/op
+BenchmarkTimestampValidationValue/invalid_length           	 8667075	        28.19 ns/op	      80 B/op	       2 allocs/op
+BenchmarkTimestampValidationValue/invalid_length           	 8630480	        27.93 ns/op	      80 B/op	       2 allocs/op
+BenchmarkSessionTimestampValidation/valid                  	  375824	       631.2 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionTimestampValidation/valid                  	  376970	       634.7 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionTimestampValidation/valid                  	  386520	       623.2 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionTimestampValidation/valid                  	  382540	       637.9 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionTimestampValidation/valid                  	  375448	       637.4 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionTimestampValidation/comma_signed           	  353104	       689.9 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionTimestampValidation/comma_signed           	  350372	       707.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionTimestampValidation/comma_signed           	  347229	       703.5 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionTimestampValidation/comma_signed           	  346630	       685.6 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionTimestampValidation/comma_signed           	  354836	       701.4 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionTimestampValidation/invalid_calendar       	  534570	       402.9 ns/op	     104 B/op	       2 allocs/op
+BenchmarkSessionTimestampValidation/invalid_calendar       	  542449	       407.2 ns/op	     104 B/op	       2 allocs/op
+BenchmarkSessionTimestampValidation/invalid_calendar       	  548252	       394.8 ns/op	     104 B/op	       2 allocs/op
+BenchmarkSessionTimestampValidation/invalid_calendar       	  498722	       412.0 ns/op	     104 B/op	       2 allocs/op
+BenchmarkSessionTimestampValidation/invalid_calendar       	  560496	       397.6 ns/op	     104 B/op	       2 allocs/op
+BenchmarkSessionTimestampReject                            	   62955	      3636 ns/op	     104 B/op	       2 allocs/op
+BenchmarkSessionTimestampReject                            	   59342	      3791 ns/op	     104 B/op	       2 allocs/op
+BenchmarkSessionTimestampReject                            	   60874	      3759 ns/op	     104 B/op	       2 allocs/op
+BenchmarkSessionTimestampReject                            	   63169	      3679 ns/op	     104 B/op	       2 allocs/op
+BenchmarkSessionTimestampReject                            	   59569	      3778 ns/op	     104 B/op	       2 allocs/op
+PASS
+ok  	github.com/quickfixgo/quickfix	22.693s

@@ -20,12 +20,48 @@ func validFieldValue(kind string, value []byte) bool {
 		}
 		return validationDigits(value)
 	case "UTCTIMESTAMP", "TIME":
-		var timestamp FIXUTCTimestamp
-		return timestamp.Read(value) == nil
+		return validTimestampValue(value)
 	case "QTY", "QUANTITY", "AMT", "PRICE", "PRICEOFFSET", "PERCENTAGE", "FLOAT":
 		return validFloatValue(value)
 	}
 	return false
+}
+
+// validTimestampValue preserves the public reader's length-selected time.Parse
+// acceptance without constructing errors that boolean validation discards.
+func validTimestampValue(value []byte) bool {
+	switch len(value) {
+	case 17, 21, 24, 27:
+	default:
+		return false
+	}
+	if len(value) == 17 || value[17] == '.' && value[18] != '+' && value[18] != '-' {
+		_, _, ok := readCanonicalUTCTimestamp(value)
+		return ok
+	}
+	if value[17] != '.' && value[17] != ',' {
+		return false
+	}
+
+	// time.Parse accepts comma fractions and parses the fixed-width fraction
+	// with signed atoi. A leading plus or negative zero can be normalized
+	// without changing its width; negative nonzero fractions are rejected.
+	var normalized [27]byte
+	copy(normalized[:], value)
+	normalized[17] = '.'
+	switch value[18] {
+	case '-':
+		for _, digit := range value[19:] {
+			if digit != '0' {
+				return false
+			}
+		}
+		normalized[18] = '0'
+	case '+':
+		normalized[18] = '0'
+	}
+	_, _, ok := readCanonicalUTCTimestamp(normalized[:len(value)])
+	return ok
 }
 
 // validEnumValues deliberately preserves empty components. bytes.Fields would
