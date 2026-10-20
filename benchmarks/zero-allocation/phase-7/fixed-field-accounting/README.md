@@ -81,6 +81,51 @@ Its fixed copying connection, bounded store and null logger are component
 fixtures; the 2.287 microseconds is not a PREPROD socket latency or a whole-service
 throughput result.
 
+## Matched real-TCP control
+
+The existing `BenchmarkBoundedFullSession` ordinary and groups scenarios were
+also measured unchanged, first at parent
+`549a129ac2ce277a3fe8d81cb325da525a8d14a0`, then at candidate
+`22aa04daf73729d407643ff45fd52da497de566d`. Both worktrees were clean before
+measurement. The same Go 1.27.2 toolchain, one CPU and five one-second samples
+were used serially, with no other local builds, tests or load clients running.
+The three full-session fixture sources and `go.mod` have identical
+[before](tcp-before-source.sha256) and [after](tcp-after-source.sha256) hashes.
+Separate [before head](tcp-before-head.txt), [after head](tcp-after-head.txt),
+[before compiler](tcp-before-toolchain.txt) and
+[after compiler](tcp-after-toolchain.txt) receipts identify the captures.
+
+One operation sends **32 NewOrderSingle requests**, reads and validates their
+32 execution-report responses over real loopback TCP, then sends a heartbeat
+acknowledgement and waits for the session-owner checkpoint. That checkpoint
+verifies sequence progression, all 33 output slots returned, and zero retained
+journal entries. Dictionary validation, optional groups, application handling,
+variable-field response construction, persistence, socket writes, peer
+validation and acknowledgement are timed. Setup and warm-up are excluded.
+
+| Scenario | Before ns / 32-request batch | After ns / 32-request batch | Median change | Before B/op / allocs/op | After B/op / allocs/op |
+|---|---:|---:|---:|---:|---:|
+| Ordinary | 248,605 | 249,291 | +0.28% | 0 / 0 | 0 / 0 |
+| Groups | 279,054 | 282,042 | +1.07% | 0 / 0 | 0 / 0 |
+
+All ten samples per head report 0 B/op and 0 allocs/op. Raw captures:
+[before](tcp-before.txt), [after](tcp-after.txt), PASS in 51.229s and 51.953s.
+The separate exact allocation assertions described below remain the proof
+against per-operation rounding.
+
+This control does **not demonstrate a TCP timing improvement**. Its callback
+does not call `Message.String`, so it measures the existing bounded core flow,
+separately from the owned-string component improved above. Dividing these batch
+times by 32 gives amortized elapsed time per request, including shared
+acknowledgement overhead; neither the batch times nor that normalization are
+individual-message RTT, engine CPU time or PREPROD latency.
+
+```sh
+GOTOOLCHAIN=auto rtk proxy go test . -run '^$' -bench '^BenchmarkBoundedFullSession$/^(ordinary|groups)$' -benchmem -benchtime=1s -count=5 -cpu=1 -timeout=120s
+```
+
+## Mandatory allocation baseline
+
 The mandatory [baseline before](baseline-before.txt) and
 [baseline after](baseline-after.txt) retain the standard five-sample capture.
 Their allocation rows are unchanged: reused parsing with or without dictionary

@@ -46,6 +46,24 @@ String allocation remains necessary under the current public contract. The
 smallest setup fixture became slightly slower; no universal setup-time gain is
 claimed.
 
+The unchanged real-TCP `BenchmarkBoundedFullSession` control also passed at
+parent `549a129` and candidate `22aa04d`, using the same Go 1.27.2,
+five one-second samples and CPU=1:
+
+| TCP scenario | Before ns / batch | After ns / batch | B/op / allocs/op, both |
+|---|---:|---:|---:|
+| Ordinary | 248,605 | 249,291 | 0 / 0 |
+| Groups | 279,054 | 282,042 | 0 / 0 |
+
+Each batch comprises 32 requests and their 32 validated responses, then a
+heartbeat acknowledgement/checkpoint proving completed writes, all 33 output
+slots returned and zero retained journal entries. These are batch elapsed
+times, not individual RTT or CPU time. The +0.28% / +1.07% median changes do not
+demonstrate a TCP speedup. This control does not call `Message.String` in the
+callback; it remains separate from the String component result above. Raw
+captures, matching fixture hashes and head/toolchain receipts are in the linked
+evidence README.
+
 The mandatory allocation baseline passed before and after with unchanged
 allocation rows. Focused tests passed for field/group accounting, tombstones,
 remove/reinsert, disjoint index capacities, sorting, reference clearing, capacity
