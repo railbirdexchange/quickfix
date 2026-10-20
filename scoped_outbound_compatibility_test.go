@@ -288,8 +288,8 @@ func TestOrdinaryOutboundObserverPreservesStagesAndOwnedType(t *testing.T) {
 	const messageType = "CUSTOM.APPLICATION.MESSAGE.TYPE"
 	fixture := newScopedOutboundBenchmark(t, false, messageType)
 	defer fixture.close()
-	var events []SendStageEvent
-	SetSendStageObserver(func(event SendStageEvent) { events = append(events, event) })
+	recorded := make(chan SendStageEvent, 16)
+	SetSendStageObserver(func(event SendStageEvent) { recorded <- event })
 	defer SetSendStageObserver(nil)
 	if err := fixture.process(); err != nil {
 		t.Fatal(err)
@@ -298,6 +298,7 @@ func TestOrdinaryOutboundObserverPreservesStagesAndOwnedType(t *testing.T) {
 	for index := range value {
 		value[index] = '?'
 	}
+	events := heartbeatLegacyStageEvents(recorded)
 	want := []string{"to_app", "build_message", "persist", "outbound_channel_wait"}
 	if len(events) != len(want) {
 		t.Fatalf("observer stages: %+v", events)

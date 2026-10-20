@@ -18,12 +18,18 @@ var (
 // the socket writer, or the vacant channel. Only encoded bytes cross to the
 // writer; the application continues to own its original Message.
 type outboundSlot struct {
-	wire []byte
-	ring *outboundRing
+	wire         []byte
+	ring         *outboundRing
+	queuedAt     time.Time
+	observedType string
+	observing    bool
 }
 
 func (slot *outboundSlot) release() {
 	slot.wire = slot.wire[:0]
+	slot.queuedAt = time.Time{}
+	slot.observedType = ""
+	slot.observing = false
 	slot.ring.vacant <- slot
 }
 
@@ -31,6 +37,7 @@ func (slot *outboundSlot) release() {
 // sendMutex. Its vacant channel transfers sole ownership from writer to sender
 // without requiring the session event loop to reclaim completed writes.
 type outboundRing struct {
+	sessionID             SessionID // Immutable for this ring's lifetime.
 	slots                 []outboundSlot
 	vacant                chan *outboundSlot
 	pending               []*outboundSlot
@@ -85,6 +92,7 @@ func (ring *outboundRing) enqueue(slot *outboundSlot) {
 		panic("quickfix: outbound slot enqueued without pending reservation")
 	}
 	index := (ring.head + ring.count) % len(ring.pending)
+	slot.queuedAt = startSendStage()
 	ring.pending[index] = slot
 	ring.count++
 }
@@ -157,14 +165,7 @@ func (writer *outboundWriter) run() {
 		if cap(writer.ready) != 0 {
 			writer.permits <- struct{}{}
 		}
-		err := writer.write(slot.wire)
-		if err != nil {
-			writer.err = err
-			// Publish failure before returning ownership. A waiting sender must
-			// not use this slot to commit another message after a failed write.
-			close(writer.failed)
-		}
-		slot.release()
+		err := writer.writeSlot(slot)
 		// This notification occurs after both the completed write and the
 		// ownership return. It also lets the session drain a pending queue.
 		writer.notify()
@@ -172,6 +173,50 @@ func (writer *outboundWriter) run() {
 			return
 		}
 	}
+}
+
+func (writer *outboundWriter) writeSlot(slot *outboundSlot) error {
+	if slot.observing {
+		return writer.writeObservedSlot(slot)
+	}
+	err := writer.write(slot.wire)
+	writer.finishSlotWrite(slot, err)
+	return err
+}
+
+func (writer *outboundWriter) finishSlotWrite(slot *outboundSlot, err error) {
+	if err != nil {
+		writer.err = err
+		// Publish failure before returning ownership. A waiting sender must
+		// not use this slot to commit another message after a failed write.
+		close(writer.failed)
+	}
+	slot.release()
+}
+
+func (writer *outboundWriter) writeObservedSlot(slot *outboundSlot) error {
+	// Copy all metadata before returning ownership. The next sender may reuse
+	// this slot immediately, and an observer may retain its independently
+	// owned strings after the ring and connection have gone away.
+	queuedAt := slot.queuedAt
+	event := SendStageEvent{SessionID: slot.ring.sessionID, MsgType: slot.observedType}
+	startedAt := time.Now()
+	err := writer.write(slot.wire)
+	writtenAt := time.Now()
+	writer.finishSlotWrite(slot, err)
+	releasedAt := time.Now()
+
+	if !queuedAt.IsZero() {
+		event.Stage, event.Duration, event.Success = "outbound_queue_wait", startedAt.Sub(queuedAt), true
+		observeSendStage(event)
+	}
+	event.Stage, event.Duration, event.Success = "socket_write", writtenAt.Sub(startedAt), err == nil
+	observeSendStage(event)
+	if !queuedAt.IsZero() {
+		event.Stage, event.Duration = "outbound_complete", releasedAt.Sub(queuedAt)
+		observeSendStage(event)
+	}
+	return err
 }
 
 func (writer *outboundWriter) notify() {

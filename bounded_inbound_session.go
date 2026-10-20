@@ -51,7 +51,8 @@ func (s *session) configureBoundedInbound(settings *SessionSettings) error {
 	if err != nil {
 		return err
 	}
-	metadata := newSessionFieldMetadata(s.sessionID, prepareMissingRejects(s.transportDataDictionary, s.appDataDictionary))
+	metadata := newSessionFieldMetadata(s.sessionID, prepareMissingRejects(s.transportDataDictionary, s.appDataDictionary),
+		s.transportDataDictionary, s.appDataDictionary)
 	parsed, err := newMessageSlot(s.transportDataDictionary, s.appDataDictionary, limits, metadata)
 	if err != nil {
 		return err

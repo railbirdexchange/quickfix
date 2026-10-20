@@ -1,6 +1,9 @@
 package quickfix
 
-import "testing"
+import (
+	"sync/atomic"
+	"testing"
+)
 
 var heartbeatStringResult string
 
@@ -49,11 +52,11 @@ func BenchmarkHeartbeatObservedStringReads(benchmark *testing.B) {
 		benchmark.Run(reads.name, func(benchmark *testing.B) {
 			fixture := newHeartbeatStoreFixture(benchmark, "borrowed_external")
 			defer fixture.close()
-			var events, invalidEvents int
+			var events, invalidEvents atomic.Uint64
 			SetSendStageObserver(func(event SendStageEvent) {
-				events++
+				events.Add(1)
 				if event.Stage == "" || event.Duration < 0 || !event.Success || (event.MsgType != "" && event.MsgType != "0") {
-					invalidEvents++
+					invalidEvents.Add(1)
 				}
 			})
 			defer SetSendStageObserver(nil)
@@ -71,7 +74,7 @@ func BenchmarkHeartbeatObservedStringReads(benchmark *testing.B) {
 					benchmark.Fatal(err)
 				}
 			}
-			warmupEvents := events
+			warmupEvents := events.Load()
 			benchmark.ReportAllocs()
 			benchmark.ResetTimer()
 			for range benchmark.N {
@@ -80,8 +83,9 @@ func BenchmarkHeartbeatObservedStringReads(benchmark *testing.B) {
 				}
 			}
 			benchmark.StopTimer()
-			if invalidEvents != 0 || warmupEvents == 0 || events*66 != warmupEvents*(benchmark.N+66) {
-				benchmark.Fatalf("observer events=%d warmup=%d invalid=%d", events, warmupEvents, invalidEvents)
+			eventCount, invalidCount := events.Load(), invalidEvents.Load()
+			if invalidCount != 0 || warmupEvents == 0 || eventCount*66 != warmupEvents*uint64(benchmark.N+66) {
+				benchmark.Fatalf("observer events=%d warmup=%d invalid=%d", eventCount, warmupEvents, invalidCount)
 			}
 		})
 	}

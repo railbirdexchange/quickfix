@@ -34,6 +34,7 @@ func (s *session) configureOutbound(settings *SessionSettings) error {
 	if err != nil {
 		return err
 	}
+	ring.sessionID = s.sessionID
 	ring.writeTimeout = 30 * time.Second
 	if settings.HasSetting(config.OutboundWriteTimeout) {
 		ring.writeTimeout, err = settings.DurationSetting(config.OutboundWriteTimeout)
@@ -156,10 +157,10 @@ func (s *session) prepareOutbound(message, inReplyTo *Message, replacement bool)
 	admin := isAdminMessageType(messageType)
 	// Header construction can move arena bytes. An enabled observer retains an
 	// owned snapshot; disabled observation needs only the booleans above.
-	observeStages := sendStageObserverState.enabled.Load() && messageType != nil
+	observeStages := sendStageObserverState.Load() != nil && messageType != nil
 	var observedMessageType string
 	if observeStages {
-		observedMessageType = string(messageType)
+		observedMessageType = s.sendStageMessageType(messageType)
 	}
 	pendingReset := ring.resetPending.Load()
 	if pendingReset && !logon {
@@ -409,7 +410,7 @@ func (s *session) flushOutbound(blockUntilSent bool) error {
 			case <-writer.permits:
 			default:
 				if !started.IsZero() {
-					s.observeSendStage("outbound_channel_wait", fixMsgTypeFromRaw(s.outbound.front().wire), time.Since(started), false)
+					s.observeSendStage("outbound_channel_wait", s.sendStageMessageType(fixMsgTypeBytesFromRaw(s.outbound.front().wire)), time.Since(started), false)
 				}
 				return nil
 			}
@@ -422,7 +423,10 @@ func (s *session) flushOutbound(blockUntilSent bool) error {
 		slot := s.outbound.pop()
 		var messageType string
 		if !started.IsZero() {
-			messageType = fixMsgTypeFromRaw(slot.wire)
+			// The callback may have replaced MsgType. Snapshot the encoded
+			// value independently of the pre-callback prepared-stage value.
+			messageType = s.sendStageMessageType(fixMsgTypeBytesFromRaw(slot.wire))
+			slot.observedType, slot.observing = messageType, true
 		}
 		// Logging finishes while the sender still owns the slot. Generic
 		// retaining loggers receive a detached copy before writer handoff.

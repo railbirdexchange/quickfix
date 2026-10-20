@@ -18,8 +18,8 @@ func TestHeartbeatObserverNilAndEmptyTypeSnapshot(t *testing.T) {
 			fixture := newScopedOutboundBenchmark(t, false, "D")
 			defer fixture.close()
 			fixture.message.Header.SetBytes(tagMsgType, test.value)
-			var events []SendStageEvent
-			SetSendStageObserver(func(event SendStageEvent) { events = append(events, event) })
+			recorded := make(chan SendStageEvent, 16)
+			SetSendStageObserver(func(event SendStageEvent) { recorded <- event })
 			defer SetSendStageObserver(nil)
 			// Prepare directly: nil/empty MsgType values are intentionally invalid
 			// wire input. This tests their existing observation behavior without
@@ -31,6 +31,7 @@ func TestHeartbeatObserverNilAndEmptyTypeSnapshot(t *testing.T) {
 				t.Fatal(err)
 			}
 			slot.release()
+			events := heartbeatLegacyStageEvents(recorded)
 			if len(events) != test.count {
 				t.Fatalf("events=%+v, want %d prepared-stage events", events, test.count)
 			}
@@ -56,8 +57,8 @@ func TestHeartbeatObserverRetainsOriginalTypeAcrossCallbackAndReuse(t *testing.T
 	}
 	application := &scopedOutboundHookApplication{scopedOutboundBenchmarkApplication: fixture.application}
 	fixture.session.application = BorrowApplication(application)
-	var events []SendStageEvent
-	SetSendStageObserver(func(event SendStageEvent) { events = append(events, event) })
+	recorded := make(chan SendStageEvent, 32)
+	SetSendStageObserver(func(event SendStageEvent) { recorded <- event })
 	defer SetSendStageObserver(nil)
 	inputs := []string{original, "SECOND.CUSTOM.APPLICATION.TYPE"}
 	wires := []string{"CALLBACK.REPLACED.APPLICATION.TYPE", "SECOND.CALLBACK.WIRE.TYPE"}
@@ -78,6 +79,7 @@ func TestHeartbeatObserverRetainsOriginalTypeAcrossCallbackAndReuse(t *testing.T
 	for index := range value {
 		value[index] = '?'
 	}
+	events := heartbeatLegacyStageEvents(recorded)
 	want := []string{"to_app", "build_message", "persist", "outbound_channel_wait"}
 	if len(events) != 2*len(want) {
 		t.Fatalf("unexpected observed stages: %+v", events)
@@ -109,9 +111,9 @@ func TestHeartbeatObserverEnableTransitions(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			fixture := newScopedOutboundBenchmark(t, false, "CUSTOM.TYPE")
 			defer fixture.close()
-			var originalEvents, replacementEvents []SendStageEvent
-			originalObserver := func(event SendStageEvent) { originalEvents = append(originalEvents, event) }
-			replacementObserver := func(event SendStageEvent) { replacementEvents = append(replacementEvents, event) }
+			originalRecorded, replacementRecorded := make(chan SendStageEvent, 16), make(chan SendStageEvent, 16)
+			originalObserver := func(event SendStageEvent) { originalRecorded <- event }
+			replacementObserver := func(event SendStageEvent) { replacementRecorded <- event }
 			SetSendStageObserver(originalObserver)
 			defer SetSendStageObserver(nil)
 			application := &scopedOutboundHookApplication{scopedOutboundBenchmarkApplication: fixture.application}
@@ -154,6 +156,8 @@ func TestHeartbeatObserverEnableTransitions(t *testing.T) {
 			if err := fixture.process(); err != nil {
 				t.Fatal(err)
 			}
+			originalEvents := heartbeatLegacyStageEvents(originalRecorded)
+			replacementEvents := heartbeatLegacyStageEvents(replacementRecorded)
 			if len(originalEvents) != 0 || len(replacementEvents) != len(want) {
 				t.Fatalf("observer transition changed event delivery: original=%+v replacement=%+v want=%v", originalEvents, replacementEvents, want)
 			}
@@ -163,5 +167,24 @@ func TestHeartbeatObserverEnableTransitions(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// These fixtures preserve the original prepared/handoff event semantics.
+// Writer lifecycle events are checked separately and may overlap the handoff
+// callback, so collection uses a bounded channel rather than a shared slice.
+func heartbeatLegacyStageEvents(recorded <-chan SendStageEvent) []SendStageEvent {
+	var events []SendStageEvent
+	for {
+		select {
+		case event := <-recorded:
+			switch event.Stage {
+			case "outbound_queue_wait", "socket_write", "outbound_complete":
+			default:
+				events = append(events, event)
+			}
+		default:
+			return events
+		}
 	}
 }

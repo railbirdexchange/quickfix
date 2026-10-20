@@ -4,6 +4,7 @@ package quickfix
 
 import (
 	"runtime"
+	"sync/atomic"
 	"testing"
 )
 
@@ -14,11 +15,11 @@ func TestHeartbeatObservedStringReadsExactAllocations(test *testing.T) {
 	defer runtime.GOMAXPROCS(previous)
 	fixture := newHeartbeatStoreFixture(test, "borrowed_external")
 	defer fixture.close()
-	var events, invalidEvents int
+	var events, invalidEvents atomic.Uint64
 	SetSendStageObserver(func(event SendStageEvent) {
-		events++
+		events.Add(1)
 		if event.Stage == "" || event.Duration < 0 || !event.Success || (event.MsgType != "" && event.MsgType != "0") {
-			invalidEvents++
+			invalidEvents.Add(1)
 		}
 	})
 	defer SetSendStageObserver(nil)
@@ -36,7 +37,7 @@ func TestHeartbeatObservedStringReadsExactAllocations(test *testing.T) {
 			test.Fatal(err)
 		}
 	}
-	warmupEvents := events
+	warmupEvents := events.Load()
 	var before, after runtime.MemStats
 	var operationError error
 	completed := 0
@@ -53,8 +54,9 @@ func TestHeartbeatObservedStringReadsExactAllocations(test *testing.T) {
 	if operationError != nil || completed != 100 {
 		test.Fatalf("completed=%d error=%v", completed, operationError)
 	}
-	if invalidEvents != 0 || warmupEvents == 0 || events*66 != warmupEvents*166 {
-		test.Fatalf("observer events=%d warmup=%d invalid=%d", events, warmupEvents, invalidEvents)
+	eventCount, invalidCount := events.Load(), invalidEvents.Load()
+	if invalidCount != 0 || warmupEvents == 0 || eventCount*66 != warmupEvents*166 {
+		test.Fatalf("observer events=%d warmup=%d invalid=%d", eventCount, warmupEvents, invalidCount)
 	}
 	if allocations != 0 || allocatedBytes != 0 {
 		test.Fatalf("100 completed observed heartbeats allocated %d objects / %d bytes", allocations, allocatedBytes)
