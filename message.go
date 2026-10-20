@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/quickfixgo/quickfix/datadictionary"
@@ -710,14 +711,40 @@ func (m *Message) String() string {
 		return m.rawMessage.String()
 	}
 
-	return string(m.build())
+	m.cook(m.Body.length(), m.Body.total())
+	if err := m.constructionError(); err != nil {
+		panic(err)
+	}
+	var wire strings.Builder
+	wire.Grow(m.Header.serializedLength() + m.Body.serializedLength() + m.Trailer.serializedLength())
+	m.Header.writeString(&wire)
+	m.Body.writeString(&wire)
+	m.Trailer.writeString(&wire)
+	return wire.String()
 }
+
+// All valid checksum strings share one immutable backing allocation prepared at
+// startup. SetString retains its existing owned-value behavior in both maps.
+var checkSumStrings = func() (values [256]string) {
+	var digits [3 * 256]byte
+	for value := range values {
+		offset := 3 * value
+		digits[offset] = byte(value/100) + '0'
+		digits[offset+1] = byte(value/10%10) + '0'
+		digits[offset+2] = byte(value%10) + '0'
+	}
+	text := string(digits[:])
+	for value := range values {
+		values[value] = text[3*value : 3*value+3]
+	}
+	return values
+}()
 
 func formatCheckSum(value int) string {
 	if value < 0 || value > 255 {
 		return fmt.Sprintf("%03d", value)
 	}
-	return string([]byte{byte(value/100) + '0', byte(value/10%10) + '0', byte(value%10) + '0'})
+	return checkSumStrings[value]
 }
 
 // Build constructs a []byte from a Message instance.

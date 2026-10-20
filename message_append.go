@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 	"strconv"
+	"strings"
 )
 
 // ErrBufferTooSmall indicates that the caller-owned output has insufficient
@@ -139,7 +140,7 @@ func (fields *FieldMap) lengthWithin(first, second Tag, limit int) (int, bool) {
 	return length, true
 }
 
-func (fields *FieldMap) appendOwned(dst []byte, first, second Tag) []byte {
+func (fields *FieldMap) sortedTagsOwned() []Tag {
 	tags := fields.fieldTags()
 	slices.SortFunc(tags, func(left, right Tag) int {
 		if fields.compare(left, right) {
@@ -150,7 +151,11 @@ func (fields *FieldMap) appendOwned(dst []byte, first, second Tag) []byte {
 		}
 		return 0
 	})
-	for _, tag := range tags {
+	return tags
+}
+
+func (fields *FieldMap) appendOwned(dst []byte, first, second Tag) []byte {
+	for _, tag := range fields.sortedTagsOwned() {
 		if first != 0 && tag == first || second != 0 && tag == second {
 			continue
 		}
@@ -172,6 +177,17 @@ func (fields *FieldMap) appendLegacy(dst []byte) []byte {
 	fields.lock()
 	defer fields.unlock()
 	return fields.appendOwned(dst, 0, 0)
+}
+
+func (fields *FieldMap) writeString(dst *strings.Builder) {
+	fields.lock()
+	defer fields.unlock()
+	for _, tag := range fields.sortedTagsOwned() {
+		values, _ := fields.lookup(tag)
+		for _, value := range values {
+			dst.Write(value.bytes)
+		}
+	}
 }
 
 func intTextLength(value int) int {
