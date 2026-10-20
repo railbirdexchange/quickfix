@@ -54,7 +54,7 @@ func (fields *FieldMap) initFixed(ordering tagOrder, maxFields int) {
 		tags:    make([]Tag, 0, maxFields),
 		touched: make([]int, 0, tableSize*2),
 	}
-	*fields = FieldMap{fixed: backing, tagSort: tagSort{tags: backing.tags, compare: ordering}, missingRejects: fields.missingRejects}
+	*fields = FieldMap{fixed: backing, tagSort: tagSort{tags: backing.tags, compare: ordering}, metadata: fields.metadata}
 }
 
 // find returns either the existing entry or a vacant/tombstone insertion slot.

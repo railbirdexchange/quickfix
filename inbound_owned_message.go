@@ -31,7 +31,7 @@ func materializeInboundMessage(parsed *Message) *Message {
 	// Legacy setters may subsequently replace or enlarge their own section.
 	tags := make([]Tag, parsed.Header.fieldCount()+parsed.Body.fieldCount()+parsed.Trailer.fieldCount())
 	for _, section := range sections {
-		section.destination.missingRejects = section.source.missingRejects
+		section.destination.metadata = section.source.metadata
 		count := section.source.fieldCount()
 		section.destination.tags = tags[:0:count]
 		tags = tags[count:]

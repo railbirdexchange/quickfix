@@ -38,14 +38,10 @@ func prepareMissingRejects(transport, application *datadictionary.DataDictionary
 }
 
 func (fields FieldMap) missingFieldReject(tag Tag) MessageRejectError {
-	if reject := fields.missingRejects[tag]; reject != nil {
-		return reject
+	if fields.metadata != nil {
+		if reject := fields.metadata.missingRejects[tag]; reject != nil {
+			return reject
+		}
 	}
 	return ConditionallyRequiredFieldMissing(tag)
-}
-
-func (message *Message) useMissingRejects(rejects preparedMissingRejects) {
-	message.Header.missingRejects = rejects
-	message.Body.missingRejects = rejects
-	message.Trailer.missingRejects = rejects
 }

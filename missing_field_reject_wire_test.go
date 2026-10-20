@@ -34,7 +34,7 @@ func TestMissingFieldRejectCompletedWireAndLogLifetime(t *testing.T) {
 			if reject == nil {
 				t.Fatal("missing field did not return a referenced reject")
 			}
-			if scenario.prepared && reject != fixture.session.boundedIn.missingRejects[originalTag] {
+			if scenario.prepared && reject != fixture.session.boundedIn.metadata.missingRejects[originalTag] {
 				t.Fatal("configured missing field did not return the session's prepared reject")
 			}
 			reference, present := reject.RefTagID()

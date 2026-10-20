@@ -20,7 +20,7 @@ func TestPreparedMissingRejectGetterAndLifetime(t *testing.T) {
 	const tag Tag = 526
 	message := slot.Message()
 	fields := &message.Body.FieldMap
-	want := fields.missingRejects[tag]
+	want := fields.metadata.missingRejects[tag]
 	if want == nil {
 		t.Fatal("configured tag has no prepared reject")
 	}
@@ -90,7 +90,7 @@ func TestPreparedMissingRejectDictionaryUnionAndFallback(t *testing.T) {
 	if len(rejects) != 3 || rejects[8] == nil || rejects[35] == nil || rejects[526] == nil {
 		t.Fatal("prepared errors did not cover the dictionary union")
 	}
-	fields := FieldMap{missingRejects: rejects}
+	fields := FieldMap{metadata: &fieldMetadata{missingRejects: rejects}}
 	fields.init()
 	for _, tag := range []Tag{0, -1, 100001, Tag(int(^uint(0) >> 1)), Tag(-int(^uint(0)>>1) - 1)} {
 		_, reject := fields.GetString(tag)
@@ -112,13 +112,13 @@ func TestPreparedMissingRejectSessionStorageAndConcurrency(t *testing.T) {
 	fixture := newPreparedRejectHeartbeatFixture(t)
 	defer fixture.close()
 	current := fixture.session
-	want := current.boundedIn.missingRejects[526]
+	want := current.boundedIn.metadata.missingRejects[526]
 	if want == nil {
 		t.Fatal("session did not prepare its dictionary errors")
 	}
 	for _, message := range []*Message{&current.boundedIn.parsed.message, &current.outbound.replay.message, current.controls.message} {
 		for _, fields := range []*FieldMap{&message.Header.FieldMap, &message.Body.FieldMap, &message.Trailer.FieldMap} {
-			if fields.missingRejects[526] != want {
+			if fields.metadata.missingRejects[526] != want {
 				t.Fatal("session storage did not share the initialized error")
 			}
 		}
@@ -136,14 +136,14 @@ func TestPreparedMissingRejectSessionStorageAndConcurrency(t *testing.T) {
 	// Caller-owned output may have come from another dictionary/session.
 	message := NewMessage()
 	message.Header.SetString(tagMsgType, "D")
-	message.useMissingRejects(prepareMissingRejects(&datadictionary.DataDictionary{FieldTypeByTag: map[int]*datadictionary.FieldType{1: nil}}, nil))
+	message.useFieldMetadata(&fieldMetadata{missingRejects: prepareMissingRejects(&datadictionary.DataDictionary{FieldTypeByTag: map[int]*datadictionary.FieldType{1: nil}}, nil)})
 	fixture.controlApplication.hook = nil
 	slot, err := current.prepareOutbound(message, nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	slot.release()
-	if message.Body.missingRejects[526] != want {
+	if message.Body.metadata.missingRejects[526] != want {
 		t.Fatal("outgoing message kept another session's prepared errors")
 	}
 	// All goroutines share immutable errors, but own separate mutable messages.
@@ -152,7 +152,7 @@ func TestPreparedMissingRejectSessionStorageAndConcurrency(t *testing.T) {
 		workers.Add(1)
 		go func() {
 			defer workers.Done()
-			fields := FieldMap{missingRejects: current.boundedIn.missingRejects}
+			fields := FieldMap{metadata: current.boundedIn.metadata}
 			fields.init()
 			for range 1000 {
 				_, reject := fields.GetString(526)

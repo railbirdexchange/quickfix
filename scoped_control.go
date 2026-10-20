@@ -24,7 +24,7 @@ func (control *scopedControl) init(session *session, limits ParseLimits) error {
 		return err
 	}
 	if session.boundedIn != nil {
-		message.useMissingRejects(session.boundedIn.missingRejects)
+		message.useFieldMetadata(session.boundedIn.metadata)
 	}
 	message.outboundFields = &outboundFields{owner: message}
 	control.message = message

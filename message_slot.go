@@ -47,7 +47,7 @@ type MessageSlot struct {
 	limits              ParseLimits
 	transportDictionary *datadictionary.DataDictionary
 	appDictionary       *datadictionary.DataDictionary
-	missingRejects      preparedMissingRejects
+	metadata            *fieldMetadata
 	valid               bool
 	scopedFields        [3]FieldMap
 	parseFields         []TagValue
@@ -61,20 +61,24 @@ func NewMessageSlot(transport, application *datadictionary.DataDictionary, limit
 	if err := validateParseLimits(limits); err != nil {
 		return nil, err
 	}
-	return newMessageSlot(transport, application, limits, prepareMissingRejects(transport, application))
+	var metadata *fieldMetadata
+	if rejects := prepareMissingRejects(transport, application); rejects != nil {
+		metadata = &fieldMetadata{missingRejects: rejects}
+	}
+	return newMessageSlot(transport, application, limits, metadata)
 }
 
-// Sessions share one immutable error table across inbound, replay and output
-// storage. Public slots prepare their own table before parsing starts.
-func newMessageSlot(transport, application *datadictionary.DataDictionary, limits ParseLimits, rejects preparedMissingRejects) (*MessageSlot, error) {
+// Sessions share immutable field metadata across inbound, replay and output
+// storage. Public slots prepare reject-only metadata before parsing starts.
+func newMessageSlot(transport, application *datadictionary.DataDictionary, limits ParseLimits, metadata *fieldMetadata) (*MessageSlot, error) {
 	if err := validateParseLimits(limits); err != nil {
 		return nil, err
 	}
-	slot := &MessageSlot{limits: limits, transportDictionary: transport, appDictionary: application, missingRejects: rejects}
+	slot := &MessageSlot{limits: limits, transportDictionary: transport, appDictionary: application, metadata: metadata}
 	slot.message.Header.initFixed(headerFieldOrdering, limits.MaxFields)
 	slot.message.Body.initFixed(normalFieldOrder, limits.MaxFields)
 	slot.message.Trailer.initFixed(trailerFieldOrdering, limits.MaxFields)
-	slot.message.useMissingRejects(rejects)
+	slot.message.useFieldMetadata(metadata)
 	slot.message.fields = make([]TagValue, 0, limits.MaxFields)
 	slot.message.groupStack = make([]*datadictionary.FieldDef, 0, limits.MaxGroupDepth)
 	slot.parseFields = slot.message.fields
@@ -113,7 +117,7 @@ func (slot *MessageSlot) restoreScopedFields() {
 	slot.message.fields = slot.parseFields
 	slot.message.groupStack = slot.parseGroupStack
 	slot.message.parseSlot = slot
-	slot.message.useMissingRejects(slot.missingRejects)
+	slot.message.useFieldMetadata(slot.metadata)
 	if slot.scopedFields[0].fixed == nil {
 		return
 	}

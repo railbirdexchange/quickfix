@@ -56,13 +56,13 @@ func (t tagSort) Less(i, j int) bool { return t.compare(t.tags[i], t.tags[j]) }
 type FieldMap struct {
 	tagLookup map[Tag]field
 	tagSort
-	rwLock         *sync.RWMutex
-	fixed          *fixedFieldMap
-	scoped         bool
-	reusable       bool
-	arena          *messageArena
-	arenaSection   int
-	missingRejects preparedMissingRejects
+	rwLock       *sync.RWMutex
+	fixed        *fixedFieldMap
+	scoped       bool
+	reusable     bool
+	arena        *messageArena
+	arenaSection int
+	metadata     *fieldMetadata
 	// constructionErr preserves a failed section through cold arena detachment.
 	constructionErr error
 }
@@ -253,7 +253,7 @@ func (m FieldMap) getStringNoLock(tag Tag) (string, MessageRejectError) {
 	if !ok {
 		return "", m.missingFieldReject(tag)
 	}
-	return string(field[0].value), nil
+	return m.metadata.ownedString(tag, field[0].value), nil
 }
 
 // GetGroup is a Get function specific to Group Fields. Reading from a session
@@ -409,7 +409,7 @@ func (m *FieldMap) CopyInto(to *FieldMap) {
 		to.initWithOrdering(to.compare)
 		to.scoped = true
 	}
-	to.missingRejects = m.missingRejects
+	to.metadata = m.metadata
 	if to.fixed != nil {
 		if m.fixed == to.fixed {
 			if !m.scoped && !m.reusable {
