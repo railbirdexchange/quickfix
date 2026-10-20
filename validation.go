@@ -116,16 +116,16 @@ func validateFIXWithScratch(d *datadictionary.DataDictionary, settings Validator
 		}
 	}
 
-	if err := validateFieldContent(msg, settings.CheckFieldsHaveValues, settings.CheckFieldsOutOfOrder); err != nil {
+	if err := validateFieldContent(msg, settings.CheckFieldsHaveValues, settings.CheckFieldsOutOfOrder, required); err != nil {
 		return err
 	}
 
 	if settings.RejectInvalidMessage && d != nil {
-		if err := validateFields(d, d, settings, msg); err != nil {
+		if err := validateFields(d, d, settings, msg, required); err != nil {
 			return err
 		}
 
-		if err := validateWalkWithScratch(d, d, settings, msgType, msg, scratch); err != nil {
+		if err := validateWalkWithScratch(d, d, settings, msgType, msg, scratch, required); err != nil {
 			return err
 		}
 	}
@@ -148,16 +148,16 @@ func validateFIXTWithScratch(transportDD, appDD *datadictionary.DataDictionary, 
 		}
 	}
 
-	if err := validateFieldContent(msg, settings.CheckFieldsHaveValues, settings.CheckFieldsOutOfOrder); err != nil {
+	if err := validateFieldContent(msg, settings.CheckFieldsHaveValues, settings.CheckFieldsOutOfOrder, required); err != nil {
 		return err
 	}
 
 	if settings.RejectInvalidMessage && appDD != nil && transportDD != nil {
-		if err := validateFields(transportDD, appDD, settings, msg); err != nil {
+		if err := validateFields(transportDD, appDD, settings, msg, required); err != nil {
 			return err
 		}
 
-		if err := validateWalkWithScratch(transportDD, appDD, settings, msgType, msg, scratch); err != nil {
+		if err := validateWalkWithScratch(transportDD, appDD, settings, msgType, msg, scratch, required); err != nil {
 			return err
 		}
 	}
@@ -173,7 +173,7 @@ func validateMsgType(d *datadictionary.DataDictionary, msgType string, _ *Messag
 }
 
 func validateWalk(transportDD *datadictionary.DataDictionary, appDD *datadictionary.DataDictionary, settings ValidatorSettings, msgType string, msg *Message) MessageRejectError {
-	return validateWalkWithScratch(transportDD, appDD, settings, msgType, msg, nil)
+	return validateWalkWithScratch(transportDD, appDD, settings, msgType, msg, nil, nil)
 }
 
 const validationInlineTagCapacity = 512
@@ -276,11 +276,11 @@ func (seen *validationTagSet) spill(tag Tag) {
 	seen.overflow.Add(int(tag))
 }
 
-func validateWalkWithScratch(transportDD *datadictionary.DataDictionary, appDD *datadictionary.DataDictionary, settings ValidatorSettings, msgType string, msg *Message, scratch *validationTagSet) MessageRejectError {
+func validateWalkWithScratch(transportDD *datadictionary.DataDictionary, appDD *datadictionary.DataDictionary, settings ValidatorSettings, msgType string, msg *Message, scratch *validationTagSet, metadata *validationRequiredMetadata) MessageRejectError {
 	if scratch == nil {
 		return validateWalkWithLocalScratch(transportDD, appDD, settings, msgType, msg)
 	}
-	return validateWalkWithTagSet(transportDD, appDD, settings, msgType, msg, scratch)
+	return validateWalkWithTagSet(transportDD, appDD, settings, msgType, msg, scratch, metadata)
 }
 
 // Keep the public validator's stack table in its own call frame. Session
@@ -288,10 +288,10 @@ func validateWalkWithScratch(transportDD *datadictionary.DataDictionary, appDD *
 func validateWalkWithLocalScratch(transportDD, appDD *datadictionary.DataDictionary, settings ValidatorSettings, msgType string, msg *Message) MessageRejectError {
 	var tags [2 * validationInlineTagCapacity]Tag
 	seen := validationTagSet{tags: tags[:], limit: validationInlineTagCapacity}
-	return validateWalkWithTagSet(transportDD, appDD, settings, msgType, msg, &seen)
+	return validateWalkWithTagSet(transportDD, appDD, settings, msgType, msg, &seen, nil)
 }
 
-func validateWalkWithTagSet(transportDD, appDD *datadictionary.DataDictionary, settings ValidatorSettings, msgType string, msg *Message, seen *validationTagSet) MessageRejectError {
+func validateWalkWithTagSet(transportDD, appDD *datadictionary.DataDictionary, settings ValidatorSettings, msgType string, msg *Message, seen *validationTagSet, metadata *validationRequiredMetadata) MessageRejectError {
 	remainingFields := msg.fields
 	bodyDef := appDD.Messages[msgType]
 
@@ -313,33 +313,37 @@ func validateWalkWithTagSet(transportDD, appDD *datadictionary.DataDictionary, s
 		}
 
 		if !seen.add(tag) {
-			return tagAppearsMoreThanOnce(tag)
+			return metadata.reject(tag, rejectReasonTagAppearsMoreThanOnce)
 		}
 
 		if fieldDef, ok = messageDef.Fields[int(tag)]; !ok {
 			if !checkFieldNotDefined(settings, tag) {
-				return TagNotDefinedForThisMessageType(tag)
+				return metadata.reject(tag, rejectReasonTagNotDefinedForThisMessageType)
 			}
 			remainingFields = remainingFields[1:]
 			continue
 		}
 
-		if remainingFields, err = validateVisitField(fieldDef, remainingFields); err != nil {
+		if remainingFields, err = validateVisitFieldWithMetadata(fieldDef, remainingFields, metadata); err != nil {
 			return err
 		}
 	}
 
 	if len(remainingFields) != 0 {
-		return TagNotDefinedForThisMessageType(remainingFields[0].tag)
+		return metadata.reject(remainingFields[0].tag, rejectReasonTagNotDefinedForThisMessageType)
 	}
 
 	return nil
 }
 
 func validateVisitField(fieldDef *datadictionary.FieldDef, fields []TagValue) ([]TagValue, MessageRejectError) {
+	return validateVisitFieldWithMetadata(fieldDef, fields, nil)
+}
+
+func validateVisitFieldWithMetadata(fieldDef *datadictionary.FieldDef, fields []TagValue, metadata *validationRequiredMetadata) ([]TagValue, MessageRejectError) {
 	if len(fieldDef.Fields) > 0 {
 		var err MessageRejectError
-		if fields, err = validateVisitGroupField(fieldDef, fields); err != nil {
+		if fields, err = validateVisitGroupField(fieldDef, fields, metadata); err != nil {
 			return nil, err
 		}
 		return fields, nil
@@ -348,12 +352,12 @@ func validateVisitField(fieldDef *datadictionary.FieldDef, fields []TagValue) ([
 	return fields[1:], nil
 }
 
-func validateVisitGroupField(fieldDef *datadictionary.FieldDef, fieldStack []TagValue) ([]TagValue, MessageRejectError) {
+func validateVisitGroupField(fieldDef *datadictionary.FieldDef, fieldStack []TagValue, metadata *validationRequiredMetadata) ([]TagValue, MessageRejectError) {
 	numInGroupTag := fieldStack[0].tag
 	var numInGroup FIXInt
 
 	if err := numInGroup.Read(fieldStack[0].value); err != nil {
-		return nil, IncorrectDataFormatForValue(numInGroupTag)
+		return nil, metadata.reject(numInGroupTag, rejectReasonIncorrectDataFormatForValue)
 	}
 
 	fieldStack = fieldStack[1:]
@@ -376,12 +380,12 @@ func validateVisitGroupField(fieldDef *datadictionary.FieldDef, fieldStack []Tag
 
 		if int(fieldStack[0].tag) == childDefs[0].Tag() {
 			var err MessageRejectError
-			if fieldStack, err = validateVisitField(childDefs[0], fieldStack); err != nil {
+			if fieldStack, err = validateVisitFieldWithMetadata(childDefs[0], fieldStack, metadata); err != nil {
 				return fieldStack, err
 			}
 		} else {
 			if childDefs[0].Required() {
-				return fieldStack, RequiredTagMissing(Tag(childDefs[0].Tag()))
+				return fieldStack, metadata.missing(Tag(childDefs[0].Tag()))
 			}
 		}
 
@@ -389,13 +393,13 @@ func validateVisitGroupField(fieldDef *datadictionary.FieldDef, fieldStack []Tag
 	}
 
 	if groupCount != int(numInGroup) {
-		return fieldStack, incorrectNumInGroupCountForRepeatingGroup(numInGroupTag)
+		return fieldStack, metadata.reject(numInGroupTag, rejectReasonIncorrectNumInGroupCountForRepeatingGroup)
 	}
 
 	return fieldStack, nil
 }
 
-func validateFieldContent(msg *Message, checkFieldsHaveValues, checkFieldsOutOfOrder bool) MessageRejectError {
+func validateFieldContent(msg *Message, checkFieldsHaveValues, checkFieldsOutOfOrder bool, metadata *validationRequiredMetadata) MessageRejectError {
 	if !checkFieldsHaveValues && !checkFieldsOutOfOrder {
 		return nil
 	}
@@ -404,18 +408,18 @@ func validateFieldContent(msg *Message, checkFieldsHaveValues, checkFieldsOutOfO
 	for _, field := range msg.fields {
 		t := field.tag
 		if checkFieldsHaveValues && len(field.value) == 0 {
-			return TagSpecifiedWithoutAValue(t)
+			return metadata.reject(t, rejectReasonTagSpecifiedWithoutAValue)
 		}
 		switch {
 		case inHeader && t.IsHeader():
 		case inHeader && !t.IsHeader():
 			inHeader = false
 		case !inHeader && t.IsHeader() && checkFieldsOutOfOrder:
-			return tagSpecifiedOutOfRequiredOrder(t)
+			return metadata.reject(t, rejectReasonTagSpecifiedOutOfRequiredOrder)
 		case t.IsTrailer():
 			inTrailer = true
 		case inTrailer && !t.IsTrailer() && checkFieldsOutOfOrder:
-			return tagSpecifiedOutOfRequiredOrder(t)
+			return metadata.reject(t, rejectReasonTagSpecifiedOutOfRequiredOrder)
 		}
 	}
 
@@ -458,20 +462,21 @@ func validateFields(transportDD *datadictionary.DataDictionary,
 	appDD *datadictionary.DataDictionary,
 	settings ValidatorSettings,
 	message *Message,
+	metadata *validationRequiredMetadata,
 ) MessageRejectError {
 	for index := range message.fields {
 		field := &message.fields[index]
 		switch {
 		case field.tag.IsHeader():
-			if err := validateField(transportDD, settings, field); err != nil {
+			if err := validateField(transportDD, settings, field, metadata); err != nil {
 				return err
 			}
 		case field.tag.IsTrailer():
-			if err := validateField(transportDD, settings, field); err != nil {
+			if err := validateField(transportDD, settings, field, metadata); err != nil {
 				return err
 			}
 		default:
-			if err := validateField(appDD, settings, field); err != nil {
+			if err := validateField(appDD, settings, field, metadata); err != nil {
 				return err
 			}
 		}
@@ -498,9 +503,10 @@ func checkFieldNotDefined(settings ValidatorSettings, field Tag) bool {
 func validateField(d *datadictionary.DataDictionary,
 	settings ValidatorSettings,
 	field *TagValue,
+	metadata *validationRequiredMetadata,
 ) MessageRejectError {
 	if len(field.value) == 0 {
-		return TagSpecifiedWithoutAValue(field.tag)
+		return metadata.reject(field.tag, rejectReasonTagSpecifiedWithoutAValue)
 	}
 
 	fieldType, isMessageField := getFieldType(d, int(field.tag))
@@ -513,11 +519,11 @@ func validateField(d *datadictionary.DataDictionary,
 	}
 
 	if !validEnumValues(fieldType, field.value) {
-		return ValueIsIncorrect(field.tag)
+		return metadata.reject(field.tag, rejectReasonValueIsIncorrect)
 	}
 
 	if !validFieldValue(fieldType.Type, field.value) {
-		return IncorrectDataFormatForValue(field.tag)
+		return metadata.reject(field.tag, rejectReasonIncorrectDataFormatForValue)
 	}
 
 	return nil

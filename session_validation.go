@@ -6,10 +6,11 @@ import "github.com/quickfixgo/quickfix/datadictionary"
 // Session dictionaries are immutable. Public validators retain direct dictionary
 // traversal, including their existing concurrent-use behavior.
 type validationRequiredMetadata struct {
-	header   []Tag
-	trailer  []Tag
-	messages map[string][]Tag
-	rejects  map[Tag]MessageRejectError
+	header     []Tag
+	trailer    []Tag
+	messages   map[string][]Tag
+	rejects    map[Tag]MessageRejectError
+	configured map[configuredValidationReject]*configuredValidationReject
 }
 
 func newValidationRequiredMetadata(transport, application *datadictionary.DataDictionary) *validationRequiredMetadata {
@@ -17,18 +18,27 @@ func newValidationRequiredMetadata(transport, application *datadictionary.DataDi
 		return nil
 	}
 	metadata := &validationRequiredMetadata{
-		header:   copyValidationRequiredTags(transport.Header.RequiredTags),
-		trailer:  copyValidationRequiredTags(transport.Trailer.RequiredTags),
-		messages: make(map[string][]Tag, len(application.Messages)),
-		rejects:  make(map[Tag]MessageRejectError),
+		header:     copyValidationRequiredTags(transport.Header.RequiredTags),
+		trailer:    copyValidationRequiredTags(transport.Trailer.RequiredTags),
+		messages:   make(map[string][]Tag, len(application.Messages)),
+		rejects:    make(map[Tag]MessageRejectError),
+		configured: make(map[configuredValidationReject]*configuredValidationReject),
 	}
+	metadata.prepareConfiguredFields(transport)
+	if application != transport {
+		metadata.prepareConfiguredFields(application)
+	}
+	metadata.prepareConfiguredGroups(transport.Header)
+	metadata.prepareConfiguredGroups(transport.Trailer)
 	metadata.prepareRejects(metadata.header)
 	metadata.prepareRejects(metadata.trailer)
 	for messageType, definition := range application.Messages {
 		tags := copyValidationRequiredTags(definition.RequiredTags)
 		metadata.messages[messageType] = tags
 		metadata.prepareRejects(tags)
+		metadata.prepareConfiguredGroups(definition)
 	}
+	metadata.finishConfiguredRejects()
 	return metadata
 }
 

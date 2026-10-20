@@ -138,6 +138,11 @@ func TestBoundedValidationPairedFaultPrecedence(t *testing.T) {
 				t.Fatal(err)
 			}
 			assertBoundedRejectEqual(t, reject, fixture.want)
+			sessionOwned, err := newSessionValidator(defaultValidatorSettings, dictionary, nil, len(message.fields))
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertBoundedRejectEqual(t, sessionOwned.Validate(message), fixture.want)
 		})
 	}
 }

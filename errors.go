@@ -84,6 +84,32 @@ type messageRejectError struct {
 	isBusinessReject    bool
 }
 
+// These diagnostics contain no message data. The private session validator can
+// prepare immutable tag/reason values while public constructors keep owned errors.
+const (
+	rejectTextIncorrectDataFormat = "Incorrect data format for value"
+	rejectTextValueIsIncorrect    = "Value is incorrect (out of range) for this tag"
+	rejectTextTagNotDefined       = "Tag not defined for this message type"
+	rejectTextDuplicateTag        = "Tag appears more than once"
+	rejectTextIncorrectGroupCount = "Incorrect NumInGroup count for repeating group"
+	rejectTextFieldOrder          = "Tag specified out of required order"
+	rejectTextEmptyValue          = "Tag specified without a value"
+)
+
+// Parameter-free rejects contain only fixed values. Store the immutable
+// interface once so returning it does not box another messageRejectError.
+var (
+	incorrectValueNoTagReject MessageRejectError = messageRejectError{
+		text: rejectTextValueIsIncorrect, rejectReason: rejectReasonValueIsIncorrect,
+	}
+	invalidMessageTypeReject MessageRejectError = messageRejectError{
+		text: "Invalid MsgType", rejectReason: rejectReasonInvalidMsgType,
+	}
+	unsupportedMessageTypeReject MessageRejectError = messageRejectError{
+		text: "Unsupported Message Type", rejectReason: rejectReasonUnsupportedMessageType, isBusinessReject: true,
+	}
+)
+
 func (e messageRejectError) Error() string               { return e.text }
 func (e messageRejectError) RefTagID() (Tag, bool)       { return e.refTagID, e.hasRefTagID }
 func (e messageRejectError) RejectReason() int           { return e.rejectReason }
@@ -121,7 +147,7 @@ func NewBusinessMessageRejectErrorWithRefID(err string, rejectReason int, busine
 
 // IncorrectDataFormatForValue returns an error indicating a field that cannot be parsed as the type required.
 func IncorrectDataFormatForValue(tag Tag) MessageRejectError {
-	return NewMessageRejectError("Incorrect data format for value", rejectReasonIncorrectDataFormatForValue, &tag)
+	return NewMessageRejectError(rejectTextIncorrectDataFormat, rejectReasonIncorrectDataFormatForValue, &tag)
 }
 
 // repeatingGroupFieldsOutOfOrder returns an error indicating a problem parsing repeating groups fields.
@@ -136,7 +162,7 @@ func repeatingGroupFieldsOutOfOrder(tag Tag, reason string) MessageRejectError {
 
 // ValueIsIncorrect returns an error indicating a field with value that is not valid.
 func ValueIsIncorrect(tag Tag) MessageRejectError {
-	return NewMessageRejectError("Value is incorrect (out of range) for this tag", rejectReasonValueIsIncorrect, &tag)
+	return NewMessageRejectError(rejectTextValueIsIncorrect, rejectReasonValueIsIncorrect, &tag)
 }
 
 // ConditionallyRequiredFieldMissing indicates that the requested field could not be found in the FIX message.
@@ -174,27 +200,27 @@ func (*missingFieldReject) IsBusinessReject() bool      { return true }
 // valueIsIncorrectNoTag returns an error indicating a field with value that is not valid.
 // FIXME: to be compliant with legacy tests, for certain value issues, do not include reftag? (11c_NewSeqNoLess).
 func valueIsIncorrectNoTag() MessageRejectError {
-	return NewMessageRejectError("Value is incorrect (out of range) for this tag", rejectReasonValueIsIncorrect, nil)
+	return incorrectValueNoTagReject
 }
 
 // InvalidMessageType returns an error to indicate an invalid message type.
 func InvalidMessageType() MessageRejectError {
-	return NewMessageRejectError("Invalid MsgType", rejectReasonInvalidMsgType, nil)
+	return invalidMessageTypeReject
 }
 
 // UnsupportedMessageType returns an error to indicate an unhandled message.
 func UnsupportedMessageType() MessageRejectError {
-	return NewBusinessMessageRejectError("Unsupported Message Type", rejectReasonUnsupportedMessageType, nil)
+	return unsupportedMessageTypeReject
 }
 
 // TagNotDefinedForThisMessageType returns an error for an invalid tag appearing in a message.
 func TagNotDefinedForThisMessageType(tag Tag) MessageRejectError {
-	return NewMessageRejectError("Tag not defined for this message type", rejectReasonTagNotDefinedForThisMessageType, &tag)
+	return NewMessageRejectError(rejectTextTagNotDefined, rejectReasonTagNotDefinedForThisMessageType, &tag)
 }
 
 // tagAppearsMoreThanOnce return an error for multiple tags in a message not detected as a repeating group.
 func tagAppearsMoreThanOnce(tag Tag) MessageRejectError {
-	return NewMessageRejectError("Tag appears more than once", rejectReasonTagAppearsMoreThanOnce, &tag)
+	return NewMessageRejectError(rejectTextDuplicateTag, rejectReasonTagAppearsMoreThanOnce, &tag)
 }
 
 // RequiredTagMissing returns a validation error when a required field cannot be found in a message.
@@ -204,17 +230,17 @@ func RequiredTagMissing(tag Tag) MessageRejectError {
 
 // incorrectNumInGroupCountForRepeatingGroup returns a validation error when the num in group value for a group does not match actual group size.
 func incorrectNumInGroupCountForRepeatingGroup(tag Tag) MessageRejectError {
-	return NewMessageRejectError("Incorrect NumInGroup count for repeating group", rejectReasonIncorrectNumInGroupCountForRepeatingGroup, &tag)
+	return NewMessageRejectError(rejectTextIncorrectGroupCount, rejectReasonIncorrectNumInGroupCountForRepeatingGroup, &tag)
 }
 
 // tagSpecifiedOutOfRequiredOrder returns validation error when the group order does not match the spec.
 func tagSpecifiedOutOfRequiredOrder(tag Tag) MessageRejectError {
-	return NewMessageRejectError("Tag specified out of required order", rejectReasonTagSpecifiedOutOfRequiredOrder, &tag)
+	return NewMessageRejectError(rejectTextFieldOrder, rejectReasonTagSpecifiedOutOfRequiredOrder, &tag)
 }
 
 // TagSpecifiedWithoutAValue returns a validation error for when a field has no value.
 func TagSpecifiedWithoutAValue(tag Tag) MessageRejectError {
-	return NewMessageRejectError("Tag specified without a value", rejectReasonTagSpecifiedWithoutAValue, &tag)
+	return NewMessageRejectError(rejectTextEmptyValue, rejectReasonTagSpecifiedWithoutAValue, &tag)
 }
 
 // InvalidTagNumber returns a validation error for messages with invalid tags.
