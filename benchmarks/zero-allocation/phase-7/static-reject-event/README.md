@@ -120,3 +120,26 @@ and [diagnosis](../../phase-1/README.md#existing-optional-mongo-logger-test-fail
 are retained separately; no live Mongo verification is claimed here.
 
 No deployment, service change or infrastructure change is part of this revision.
+
+## Recovery qualification regression
+
+`TestScopedLogoutTimeoutBeforeCompletedRequestWrite` gates the actual outbound
+writer, verifies the Logout response timer is armed, and explicitly delivers the
+normal timeout event while the request write remains blocked. It observes the
+timeout log and `OnLogout` without any incoming admin response. Teardown waits
+for the accepted write, then returns all inbound/outbound slots and closes the
+socket. The hour-long test timer avoids a scheduling race; no runtime timeout
+setting or state-machine behavior changes.
+
+Together with the existing graceful Logout drain fixture, this test passed
+20 repetitions (0.772 seconds) and a separate 10-repetition race run
+(1.909 seconds) on 2026-10-20:
+
+```sh
+GOTOOLCHAIN=auto rtk proxy go test . -run '^TestScoped(LogoutTimeoutBeforeCompletedRequestWrite|OutboundGracefulLogoutCompletesBeforeSocketClose)$' -count=20
+GOTOOLCHAIN=auto rtk proxy go test . -race -run '^TestScoped(LogoutTimeoutBeforeCompletedRequestWrite|OutboundGracefulLogoutCompletesBeforeSocketClose)$' -count=10
+```
+
+This establishes the local timeout/write lifecycle, not the cause of the
+PREPROD client's missing Logout reply. The allocation measurements above remain
+the unchanged runtime comparison.
