@@ -428,26 +428,26 @@ func validateRequired(transportDD *datadictionary.DataDictionary, appDD *datadic
 	}
 	// On a missing field, retain the original traversal and reject selection.
 	// Compiled order is used only for successful session validation.
-	if err := validateRequiredFieldMap(message, transportDD.Header.RequiredTags, message.Header.FieldMap); err != nil {
+	if err := validateRequiredFieldMap(compiled, transportDD.Header.RequiredTags, message.Header.FieldMap); err != nil {
 		return err
 	}
 
-	if err := validateRequiredFieldMap(message, appDD.Messages[msgType].RequiredTags, message.Body.FieldMap); err != nil {
+	if err := validateRequiredFieldMap(compiled, appDD.Messages[msgType].RequiredTags, message.Body.FieldMap); err != nil {
 		return err
 	}
 
-	if err := validateRequiredFieldMap(message, transportDD.Trailer.RequiredTags, message.Trailer.FieldMap); err != nil {
+	if err := validateRequiredFieldMap(compiled, transportDD.Trailer.RequiredTags, message.Trailer.FieldMap); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func validateRequiredFieldMap(_ *Message, requiredTags map[int]struct{}, fieldMap FieldMap) MessageRejectError {
+func validateRequiredFieldMap(compiled *validationRequiredMetadata, requiredTags map[int]struct{}, fieldMap FieldMap) MessageRejectError {
 	for required := range requiredTags {
 		requiredTag := Tag(required)
 		if !fieldMap.Has(requiredTag) {
-			return RequiredTagMissing(requiredTag)
+			return compiled.missing(requiredTag)
 		}
 	}
 

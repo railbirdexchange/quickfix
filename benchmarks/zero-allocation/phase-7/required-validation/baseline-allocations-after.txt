@@ -1,0 +1,10 @@
+BenchmarkAllocationBaseline/build/new_order_single 152 6
+BenchmarkAllocationBaseline/decimal/read_max_uint128 0 0
+BenchmarkAllocationBaseline/decimal/read_overflow 168 5
+BenchmarkAllocationBaseline/decimal/read_short 0 0
+BenchmarkAllocationBaseline/decimal/read_signed_fraction 0 0
+BenchmarkAllocationBaseline/frame/read_steady_state 160 2
+BenchmarkAllocationBaseline/parse/reused_message_with_dictionary 0 0
+BenchmarkAllocationBaseline/parse/reused_message_with_repeating_group 0 0
+BenchmarkAllocationBaseline/parse/reused_message_without_dictionary 0 0
+BenchmarkAllocationBaseline/validate/valid_new_order_single 0 0
