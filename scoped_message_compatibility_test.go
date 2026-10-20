@@ -410,7 +410,7 @@ func TestScopedFixedResetClearsTouchedEntriesAfterChurn(t *testing.T) {
 	if &backing.touched[:cap(backing.touched)][0] != touchedStorage || len(backing.touched) > len(backing.entries) {
 		t.Fatal("tag churn grew touched-entry storage")
 	}
-	seen := make(map[int]bool)
+	seen := make(map[Tag]bool)
 	for _, index := range backing.touched {
 		if seen[index] {
 			t.Fatal("touched-entry index contains duplicates")

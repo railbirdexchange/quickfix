@@ -27,7 +27,9 @@ type fixedFieldEntry struct {
 type fixedFieldMap struct {
 	entries []fixedFieldEntry
 	tags    []Tag
-	touched []int
+	// touched contains table indexes. Tag has the same int representation;
+	// using it here lets both bounded indexes share one disjoint allocation.
+	touched []Tag
 }
 
 // initFixed allocates the entire lookup and tag index before use. Parsed fields
@@ -49,10 +51,15 @@ func (fields *FieldMap) initFixed(ordering tagOrder, maxFields int) {
 	if tableSize > maximumInt/2 {
 		panic("quickfix: fixed field lookup capacity overflows int")
 	}
+	// tableSize is a power of two bounded by MaxInt/2 above. Consequently
+	// 3*tableSize fits in int, including this length with maxFields <= tableSize.
+	indexes := make([]Tag, maxFields+tableSize*2)
 	backing := &fixedFieldMap{
 		entries: make([]fixedFieldEntry, tableSize*2),
-		tags:    make([]Tag, 0, maxFields),
-		touched: make([]int, 0, tableSize*2),
+		// Full slice expressions keep tag insertion/sorting disjoint from
+		// the touched entries used by reset and accounting.
+		tags:    indexes[:0:maxFields],
+		touched: indexes[maxFields:maxFields:len(indexes)],
 	}
 	*fields = FieldMap{fixed: backing, tagSort: tagSort{tags: backing.tags, compare: ordering}, metadata: fields.metadata}
 }
@@ -129,7 +136,7 @@ func (fields *FieldMap) put(tag Tag, values field) bool {
 		// first use bounds it by the table size even under remove/reinsert churn.
 		count := len(fields.fixed.touched)
 		fields.fixed.touched = fields.fixed.touched[:count+1]
-		fields.fixed.touched[count] = index
+		fields.fixed.touched[count] = Tag(index)
 	}
 	entry.tag = tag
 	entry.values = values
@@ -227,7 +234,7 @@ func (fields *FieldMap) fixedSortedTags() []Tag {
 
 func (backing *fixedFieldMap) total() int {
 	total := 0
-	for index := range backing.entries {
+	for _, index := range backing.touched {
 		entry := &backing.entries[index]
 		if entry.state != fixedFieldOccupied {
 			continue
@@ -243,7 +250,7 @@ func (backing *fixedFieldMap) total() int {
 
 func (backing *fixedFieldMap) length() int {
 	length := 0
-	for index := range backing.entries {
+	for _, index := range backing.touched {
 		entry := &backing.entries[index]
 		if entry.state != fixedFieldOccupied {
 			continue
