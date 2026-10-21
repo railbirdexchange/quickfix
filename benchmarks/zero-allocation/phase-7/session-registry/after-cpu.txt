@@ -1,0 +1,20 @@
+File: quickfix.test
+Type: cpu
+Time: 2026-10-21 12:12:58 EDT
+Duration: 3.13s, Total samples = 17.94s (573.47%)
+Showing nodes accounting for 17.84s, 99.44% of 17.94s total
+Dropped 27 nodes (cum <= 0.09s)
+Showing top 12 nodes out of 14
+      flat  flat%   sum%        cum   cum%
+     3.17s 17.67% 17.67%     16.66s 92.87%  github.com/puzpuzpuz/xsync/v4.(*Map[go.shape.struct { BeginString string; TargetCompID string; TargetSubID string; TargetLocationID string; SenderCompID string; SenderSubID string; SenderLocationID string; Qualifier string },go.shape.struct { github.com/quickfixgo/quickfix.session *github.com/quickfixgo/quickfix.session; github.com/quickfixgo/quickfix.name string }]).Load
+     3.07s 17.11% 34.78%      3.07s 17.11%  internal/runtime/maps.memHashAES
+     2.99s 16.67% 51.45%      4.97s 27.70%  type:.eq.SSSSSSSS
+     2.74s 15.27% 66.72%      5.81s 32.39%  internal/runtime/maps.MemHash
+     1.98s 11.04% 77.76%      1.98s 11.04%  runtime.memequal
+     1.15s  6.41% 84.17%      8.18s 45.60%  hash/maphash.comparableHash[go.shape.struct { BeginString string; TargetCompID string; TargetSubID string; TargetLocationID string; SenderCompID string; SenderSubID string; SenderLocationID string; Qualifier string }]
+     0.98s  5.46% 89.63%      6.79s 37.85%  runtime.strhash
+     0.70s  3.90% 93.53%     17.36s 96.77%  github.com/quickfixgo/quickfix.lookupSession (inline)
+     0.34s  1.90% 95.43%      8.52s 47.49%  hash/maphash.Comparable[go.shape.struct { BeginString string; TargetCompID string; TargetSubID string; TargetLocationID string; SenderCompID string; SenderSubID string; SenderLocationID string; Qualifier string }] (inline)
+     0.33s  1.84% 97.27%     17.84s 99.44%  github.com/quickfixgo/quickfix.BenchmarkSessionRegistry.func1.1
+     0.24s  1.34% 98.61%      7.03s 39.19%  type:.hash.SSSSSSSS
+     0.15s  0.84% 99.44%      0.15s  0.84%  testing.(*PB).Next (inline)

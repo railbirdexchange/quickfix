@@ -18,11 +18,24 @@ package quickfix
 import (
 	"errors"
 	"sync"
-	"sync/atomic"
+
+	"github.com/puzpuzpuz/xsync/v4"
 )
 
+// sessionsLock coordinates lifecycle changes, identity reservations and store
+// operations that must finish before retirement. Routing and send lookups do
+// not acquire it.
 var sessionsLock sync.RWMutex
-var sessions = make(map[SessionID]*session)
+
+// Publish the immutable name with its session so readers see both together.
+// Each lifecycle change replaces only its entry; it does not rebuild a second
+// map containing the names of every registered session.
+type registeredSession struct {
+	session *session
+	name    string
+}
+
+var sessions = xsync.NewMap[SessionID, registeredSession]()
 
 // Reservations cover construction and the complete dynamic-session lifetime.
 // Public unregister only removes routing; it cannot permit overlapping stores.
@@ -32,9 +45,6 @@ type sessionReservation struct{ dynamic bool }
 
 var sessionReservations = make(map[SessionID]*sessionReservation)
 
-// Each published snapshot is immutable and contains only registered IDs.
-// Lifecycle changes use sessionsLock; String readers never acquire that lock.
-var registeredSessionNames atomic.Pointer[map[SessionID]string]
 var errDuplicateSessionID = errors.New("Duplicate SessionID")
 var errUnknownSession = errors.New("Unknown session")
 
@@ -106,9 +116,8 @@ func UnregisterSession(sessionID SessionID) error {
 	sessionsLock.Lock()
 	defer sessionsLock.Unlock()
 
-	if _, ok := sessions[sessionID]; ok {
-		delete(sessions, sessionID)
-		publishSessionNames()
+	if _, ok := sessions.Load(sessionID); ok {
+		sessions.Delete(sessionID)
 		return nil
 	}
 
@@ -119,7 +128,7 @@ func UnregisterSession(sessionID SessionID) error {
 func SetNextTargetMsgSeqNum(sessionID SessionID, seqNum int) error {
 	sessionsLock.RLock()
 	defer sessionsLock.RUnlock()
-	session, ok := sessions[sessionID]
+	session, ok := lookupSession(sessionID)
 	if !ok {
 		return errUnknownSession
 	}
@@ -148,7 +157,7 @@ func SetNextSenderMsgSeqNum(sessionID SessionID, seqNum int) error {
 func GetExpectedSenderNum(sessionID SessionID) (int, error) {
 	sessionsLock.RLock()
 	defer sessionsLock.RUnlock()
-	session, ok := sessions[sessionID]
+	session, ok := lookupSession(sessionID)
 	if !ok {
 		return 0, errUnknownSession
 	}
@@ -159,7 +168,7 @@ func GetExpectedSenderNum(sessionID SessionID) (int, error) {
 func GetExpectedTargetNum(sessionID SessionID) (int, error) {
 	sessionsLock.RLock()
 	defer sessionsLock.RUnlock()
-	session, ok := sessions[sessionID]
+	session, ok := lookupSession(sessionID)
 	if !ok {
 		return 0, errUnknownSession
 	}
@@ -188,22 +197,21 @@ func registerSession(s *session) error {
 	sessionsLock.Lock()
 	defer sessionsLock.Unlock()
 
-	if _, ok := sessions[s.sessionID]; ok {
+	if _, ok := sessions.Load(s.sessionID); ok {
 		return errDuplicateSessionID
 	}
 	if _, ok := sessionReservations[s.sessionID]; ok {
 		return errDuplicateSessionID
 	}
 
-	sessions[s.sessionID] = s
-	publishSessionNames()
+	sessions.Store(s.sessionID, registeredSession{session: s, name: s.sessionID.format()})
 	return nil
 }
 
 func reserveSessionID(id SessionID, dynamic bool) (*sessionReservation, error) {
 	sessionsLock.Lock()
 	defer sessionsLock.Unlock()
-	if _, exists := sessions[id]; exists {
+	if _, exists := sessions.Load(id); exists {
 		return nil, errDuplicateSessionID
 	}
 	if _, exists := sessionReservations[id]; exists {
@@ -217,11 +225,10 @@ func reserveSessionID(id SessionID, dynamic bool) (*sessionReservation, error) {
 func registerReservedSession(s *session) {
 	sessionsLock.Lock()
 	defer sessionsLock.Unlock()
-	sessions[s.sessionID] = s
+	sessions.Store(s.sessionID, registeredSession{session: s, name: s.sessionID.format()})
 	if !s.reservation.dynamic {
 		delete(sessionReservations, s.sessionID)
 	}
-	publishSessionNames()
 }
 
 func releaseSessionReservation(id SessionID, reservation *sessionReservation) {
@@ -237,37 +244,12 @@ func releaseSessionReservation(id SessionID, reservation *sessionReservation) {
 func unregisterSessionInstance(s *session) {
 	sessionsLock.Lock()
 	defer sessionsLock.Unlock()
-	if sessions[s.sessionID] == s {
-		delete(sessions, s.sessionID)
-		publishSessionNames()
+	if entry, ok := sessions.Load(s.sessionID); ok && entry.session == s {
+		sessions.Delete(s.sessionID)
 	}
-}
-
-// publishSessionNames requires sessionsLock. Reuse the owned text for unchanged
-// IDs, and discard removed entries instead of retaining a historical cache.
-func publishSessionNames() {
-	if len(sessions) == 0 {
-		registeredSessionNames.Store(nil)
-		return
-	}
-	previous := registeredSessionNames.Load()
-	names := make(map[SessionID]string, len(sessions))
-	for id := range sessions {
-		if previous != nil {
-			if name, ok := (*previous)[id]; ok {
-				names[id] = name
-				continue
-			}
-		}
-		names[id] = id.format()
-	}
-	registeredSessionNames.Store(&names)
 }
 
 func lookupSession(sessionID SessionID) (s *session, ok bool) {
-	sessionsLock.RLock()
-	defer sessionsLock.RUnlock()
-
-	s, ok = sessions[sessionID]
-	return
+	entry, ok := sessions.Load(sessionID)
+	return entry.session, ok
 }

@@ -9,12 +9,18 @@ reusable response construction storage in that same engine.
 
 The measured target is the warmed, bounded path from a TCP frame through
 dictionary/group parsing, validation, ordinary application handling, encoding,
-resend-journal commit, completed write and output-slot return. Source remains
-compatible with Go 1.23. The callback-boundary correction restores owned
+resend-journal commit, completed write and output-slot return. Source requires
+Go 1.24 or newer. The callback-boundary correction restores owned
 lifetimes for unchanged applications; those ownership copies allocate. The
 explicit borrowed profile is the warmed zero-allocation contract.
 
-The current [focused Go 1.23 check](benchmarks/zero-allocation/phase-7/callback-boundary/focused-third-go1.23.12.txt)
+The [generic session registry](benchmarks/zero-allocation/phase-7/session-registry/README.md)
+uses xsync v4 for lock-free routing/send lookups and keeps session names in
+immutable registry entries. It requires Go 1.24 or newer. Its Go 1.27.2
+qualification preserves exact zero allocation across all seven completed-write
+scenarios; registration/removal still allocates outside that warmed boundary.
+
+The historical [focused Go 1.23 check](benchmarks/zero-allocation/phase-7/callback-boundary/focused-third-go1.23.12.txt)
 passed in 18.835 seconds. It includes all seven exact borrowed TCP allocation
 intervals, public-constructor TCP coverage and generated-control ownership
 regressions. Each exact interval completes 100 warmed cycles with zero added
@@ -365,7 +371,7 @@ setup-allocated channels and a reused timer; no goroutine is created per cycle.
 Owner-copied snapshots establish unchanged committed state before preparation,
 and the writer-failure case checks that a blocked send fails without committing.
 The historical [backpressure regression checks](benchmarks/zero-allocation/phase-7/backpressure/)
-record the correction's origin. The current
+record the correction's origin. The historical
 [focused callback-boundary run](benchmarks/zero-allocation/phase-7/callback-boundary/focused-third-go1.23.12.txt)
 includes all seven exact intervals with explicit borrowed delivery. Final
 all-package/vet/race, exact-allocation, source verification and complete benchmark

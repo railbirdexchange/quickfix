@@ -1,0 +1,46 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+cpu: Apple M4 Pro
+BenchmarkSessionRegistry/lookup_100_sessions           	26917144	        42.83 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRegistry/lookup_100_sessions           	28624360	        42.30 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRegistry/lookup_100_sessions           	28254018	        42.33 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRegistry/lookup_100_sessions           	28423249	        42.74 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRegistry/lookup_100_sessions           	26875524	        42.44 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRegistry/lookup_100_sessions-8         	221915427	         5.410 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRegistry/lookup_100_sessions-8         	221727577	         5.409 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRegistry/lookup_100_sessions-8         	217004110	         5.415 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRegistry/lookup_100_sessions-8         	221780542	         5.414 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRegistry/lookup_100_sessions-8         	221904056	         5.418 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRegistry/route_fixt_default_100_sessions           	11467880	       104.9 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRegistry/route_fixt_default_100_sessions           	11549238	       103.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRegistry/route_fixt_default_100_sessions           	11686930	       104.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRegistry/route_fixt_default_100_sessions           	11638902	       103.4 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRegistry/route_fixt_default_100_sessions           	11570446	       104.3 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRegistry/route_fixt_default_100_sessions-8         	45864400	        25.92 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRegistry/route_fixt_default_100_sessions-8         	45075500	        26.19 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRegistry/route_fixt_default_100_sessions-8         	45806406	        26.14 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRegistry/route_fixt_default_100_sessions-8         	45791476	        25.98 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRegistry/route_fixt_default_100_sessions-8         	45502015	        26.21 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRegistry/name_100_sessions                         	28921934	        41.37 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRegistry/name_100_sessions                         	27312013	        41.43 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRegistry/name_100_sessions                         	29144044	        41.66 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRegistry/name_100_sessions                         	29335788	        41.20 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRegistry/name_100_sessions                         	29032286	        41.21 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRegistry/name_100_sessions-8                       	229063696	         5.236 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRegistry/name_100_sessions-8                       	229422805	         5.236 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRegistry/name_100_sessions-8                       	229270539	         5.477 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRegistry/name_100_sessions-8                       	219904737	         5.395 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRegistry/name_100_sessions-8                       	224041033	         5.396 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRegistry/register_unregister_with_100_sessions     	 4223020	       283.9 ns/op	     240 B/op	       2 allocs/op
+BenchmarkSessionRegistry/register_unregister_with_100_sessions     	 4182939	       285.0 ns/op	     240 B/op	       2 allocs/op
+BenchmarkSessionRegistry/register_unregister_with_100_sessions     	 4239862	       284.0 ns/op	     240 B/op	       2 allocs/op
+BenchmarkSessionRegistry/register_unregister_with_100_sessions     	 4175422	       283.9 ns/op	     240 B/op	       2 allocs/op
+BenchmarkSessionRegistry/register_unregister_with_100_sessions     	 4276832	       282.4 ns/op	     240 B/op	       2 allocs/op
+BenchmarkSessionRegistry/register_unregister_with_100_sessions-8   	 4573506	       260.2 ns/op	     240 B/op	       2 allocs/op
+BenchmarkSessionRegistry/register_unregister_with_100_sessions-8   	 4685973	       260.7 ns/op	     240 B/op	       2 allocs/op
+BenchmarkSessionRegistry/register_unregister_with_100_sessions-8   	 4608964	       260.1 ns/op	     240 B/op	       2 allocs/op
+BenchmarkSessionRegistry/register_unregister_with_100_sessions-8   	 4628769	       260.1 ns/op	     240 B/op	       2 allocs/op
+BenchmarkSessionRegistry/register_unregister_with_100_sessions-8   	 4512439	       261.0 ns/op	     240 B/op	       2 allocs/op
+PASS
+ok  	github.com/quickfixgo/quickfix	57.476s

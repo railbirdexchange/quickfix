@@ -73,34 +73,36 @@ func TestSessionIdentityLifecycle(t *testing.T) {
 	id := SessionID{BeginString: "FIXT.1.1", SenderCompID: "identity-lifecycle", TargetCompID: "peer", Qualifier: "one"}
 	registerIdentityFixture(t, id)
 	retained := id.String()
-	snapshot := registeredSessionNames.Load()
+	entry, present := sessions.Load(id)
+	if !present {
+		t.Fatal("registered ID missing")
+	}
 	if err := registerSession(&session{sessionID: id}); err != errDuplicateSessionID {
 		t.Fatalf("duplicate: %v", err)
 	}
-	if registeredSessionNames.Load() != snapshot {
-		t.Fatal("duplicate changed snapshot")
+	if got, ok := sessions.Load(id); !ok || got != entry {
+		t.Fatal("duplicate changed registration")
 	}
 	other := id
 	other.Qualifier = "two"
 	if err := UnregisterSession(other); err != errUnknownSession {
 		t.Fatalf("unknown: %v", err)
 	}
-	if registeredSessionNames.Load() != snapshot {
-		t.Fatal("unknown removal changed snapshot")
+	if got, ok := sessions.Load(id); !ok || got != entry {
+		t.Fatal("unknown removal changed registration")
 	}
 	registerIdentityFixture(t, other)
 	if err := UnregisterSession(id); err != nil {
 		t.Fatal(err)
 	}
-	names := registeredSessionNames.Load()
-	if _, present := (*names)[id]; present {
-		t.Fatal("removed ID retained in current snapshot")
+	if _, present := sessions.Load(id); present {
+		t.Fatal("removed ID retained in registry")
 	}
-	if (*names)[other] != "FIXT.1.1:identity-lifecycle->peer:two" {
+	if got, ok := sessions.Load(other); !ok || got.name != "FIXT.1.1:identity-lifecycle->peer:two" {
 		t.Fatal("other ID removed")
 	}
-	if (*snapshot)[id] != retained {
-		t.Fatal("published snapshot mutated")
+	if entry.name != retained {
+		t.Fatal("published entry mutated")
 	}
 	if err := registerSession(&session{sessionID: id}); err != nil {
 		t.Fatal(err)

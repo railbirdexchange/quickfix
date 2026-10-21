@@ -37,10 +37,8 @@ func appendOptional(b *strings.Builder, delim, v string) {
 }
 
 func (s SessionID) String() string {
-	if names := registeredSessionNames.Load(); names != nil {
-		if name, ok := (*names)[s]; ok {
-			return name
-		}
+	if entry, ok := sessions.Load(s); ok {
+		return entry.name
 	}
 	return s.format()
 }
