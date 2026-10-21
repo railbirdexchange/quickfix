@@ -62,8 +62,8 @@ func TestMessageRouterMissingAndUnmatchedFields(test *testing.T) {
 		omitVersion bool
 		want        MessageRejectError
 	}{
-		{name: "no_begin_or_type", omitBegin: true, omitType: true},
-		{name: "no_begin", omitBegin: true, msgType: "D"},
+		{name: "no_begin_or_type", omitBegin: true, omitType: true, want: ConditionallyRequiredFieldMissing(tagBeginString)},
+		{name: "no_begin", omitBegin: true, msgType: "D", want: ConditionallyRequiredFieldMissing(tagBeginString)},
 		{name: "no_type", beginString: BeginStringFIX44, omitType: true, want: ConditionallyRequiredFieldMissing(tagMsgType)},
 		{name: "unsupported", beginString: BeginStringFIX44, msgType: "D", want: UnsupportedMessageType()},
 		{name: "empty_type", beginString: BeginStringFIX44, want: UnsupportedMessageType()},

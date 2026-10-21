@@ -29,8 +29,8 @@ flowchart LR
 ## Paired measurements
 
 Measured October 21, 2026, on Apple M4 Pro, darwin/arm64, Go 1.27.2.
-Parent runtime: `22800fcc32be905c6a31f1532d089bebdce19de5`. The candidate is the
-implementation in this PR. Both use the identical new benchmark fixture.
+Parent runtime: `22800fcc32be905c6a31f1532d089bebdce19de5`. Candidate runtime:
+`b830f01c67b42e0f8ec2aff7b9c118558b97e594`. Both use the identical new benchmark fixture.
 Setup and warm-up are outside timing; each fixture registers 100 sessions.
 Five independent one-second samples run at each CPU setting, with no concurrent
 task-owned builds or tests. CPU profiling and correctness/race runs are separate.
@@ -56,6 +56,9 @@ allocates its name and map entry. Generic-map resizing occurs on lifecycle
 writes, not lookup.
 
 Raw results: [before](before.txt), [after](after.txt).
+
+The subsequent router missing-header correction is measured separately in
+[routing header errors](../routing-header-errors/README.md).
 
 ```sh
 GOTOOLCHAIN=auto rtk proxy go test . -run '^$' -bench '^BenchmarkSessionRegistry$' -benchmem -benchtime=1s -count=5 -cpu=1,8

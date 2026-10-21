@@ -53,11 +53,15 @@ func (c MessageRouter) AddRoute(beginString string, msgType string, router Messa
 	routes[msgType] = router
 }
 
-// Route may be called from the fromApp/fromAdmin callbacks. Messages that cannot be routed will be rejected with UnsupportedMessageType.
+// Route may be called from the fromApp/fromAdmin callbacks. Missing BeginString
+// or MsgType returns the corresponding field error. After resolving the routing
+// headers and any required FIXT application version, an unregistered admin
+// message or BusinessMessageReject (j) is ignored. Other unregistered application
+// messages return UnsupportedMessageType.
 func (c MessageRouter) Route(msg *Message, sessionID SessionID) MessageRejectError {
 	beginString, err := msg.Header.GetBytes(tagBeginString)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	msgType, err := msg.Header.GetBytes(tagMsgType)
