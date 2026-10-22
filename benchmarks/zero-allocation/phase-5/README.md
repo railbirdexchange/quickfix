@@ -110,9 +110,15 @@ eviction, parsing growth, pool, reference count or added hot-path mutex.
 
 Framing checks positive, overflow-safe BodyLength arithmetic and requires the
 three-digit checksum field at the declared boundary. Fragmented and coalesced
-frames, including exact-capacity frames, fit without growth. This is stricter than
-the allocating legacy parser's search for a later checksum. The legacy
-`parser.ReadMessage` convenience API remains available and allocating.
+frames, including exact-capacity frames, fit without growth. The session reader
+recovers malformed frame boundaries using the legacy search for a later checksum,
+within the same fixed capacity. It transfers that frame with its framing error
+so the session logs and discards it without parsing, callbacks or sequence/store
+advancement. Capacity exhaustion and incomplete input remain terminal. The
+strict `ReadMessageInto` API and its error contract remain unchanged; the legacy
+`parser.ReadMessage` convenience API remains available and allocating. The
+[recovery qualification](../phase-7/main-observer-integration/README.md)
+records the acceptance regression and correction.
 
 Acceptor session discovery occurs before session limits are selected and remains
 setup work. Its first frame is checked and copied into a raw slot; read-ahead bytes

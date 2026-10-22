@@ -192,13 +192,13 @@ func TestSessionHeaderStringsRebindCallerMessageAcrossSessions(t *testing.T) {
 	}
 	send(first)
 	retained := readSessionHeaderStrings(t, &message.Header.FieldMap)
-	copy := NewMessage()
-	message.CopyInto(copy)
+	owned := NewMessage()
+	message.CopyInto(owned)
 	send(second)
 	if got := readSessionHeaderStrings(t, &message.Header.FieldMap); got != sessionHeaderStringValues(secondID, false) {
 		t.Fatalf("second session returned stale header strings: %q", got)
 	}
-	if retained != sessionHeaderStringValues(firstID, false) || readSessionHeaderStrings(t, &copy.Header.FieldMap) != retained {
+	if retained != sessionHeaderStringValues(firstID, false) || readSessionHeaderStrings(t, &owned.Header.FieldMap) != retained {
 		t.Fatal("cross-session rebind changed independently retained strings")
 	}
 	send(first)

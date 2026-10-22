@@ -100,14 +100,6 @@ type connect struct {
 	writer     *outboundWriter
 }
 
-func (s *session) connect(msgIn <-chan fixIn, msgOut chan<- []byte) error {
-	return s.connectWithReader(msgIn, msgOut, nil)
-}
-
-func (s *session) connectWithReader(msgIn <-chan fixIn, msgOut chan<- []byte, reader *boundedReadConnection) error {
-	return s.connectWithIO(msgIn, msgOut, reader, nil)
-}
-
 func (s *session) connectWithWriter(msgIn <-chan fixIn, reader *boundedReadConnection, writer *outboundWriter) error {
 	return s.connectWithIO(msgIn, nil, reader, writer)
 }
@@ -1138,7 +1130,9 @@ type fixIn struct {
 	bytes       *bytes.Buffer
 	receiveTime time.Time
 	slot        *inboundSlot
-	readError   error
+	// With a slot, readError marks a consumed malformed frame to log and drop.
+	// Without a slot, it is a terminal reader error.
+	readError error
 }
 
 func (s *session) onDisconnect() {

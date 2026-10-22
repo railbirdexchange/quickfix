@@ -233,13 +233,13 @@ func TestGroupValuesShallowCopyDetaches(t *testing.T) {
 	if err := message.Body.SetGroupValues(453, 2, partyGroupValues()); err != nil {
 		t.Fatal(err)
 	}
-	copy := *message
-	if err := copy.Body.SetGroupValues(453, 1, []GroupField{{Tag: 448, Text: "COPY"}}); err != nil {
+	shallow := *message
+	if err := shallow.Body.SetGroupValues(453, 1, []GroupField{{Tag: 448, Text: "COPY"}}); err != nil {
 		t.Fatal(err)
 	}
 	message.Body.Clear()
-	group, _ := copy.Body.lookup(453)
-	if string(group[1].value) != "COPY" || copy.Body.arena != nil {
+	group, _ := shallow.Body.lookup(453)
+	if string(group[1].value) != "COPY" || shallow.Body.arena != nil {
 		t.Fatal("shallow copy retained mutable original storage")
 	}
 	if message.Body.Has(453) {

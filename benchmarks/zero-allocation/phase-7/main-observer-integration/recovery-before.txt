@@ -1,0 +1,16 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+cpu: Apple M4 Pro
+BenchmarkScopedInboundSession/new_order_single/borrowed         	  974126	      1232 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedInboundSession/new_order_single/borrowed         	  954393	      1247 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedInboundSession/new_order_single/borrowed         	  977662	      1244 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedInboundSession/new_order_single/borrowed         	  969676	      1227 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedInboundSession/new_order_single/borrowed         	  996398	      1231 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedInboundSession/repeating_group/borrowed          	  626636	      1844 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedInboundSession/repeating_group/borrowed          	  652573	      1868 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedInboundSession/repeating_group/borrowed          	  633270	      1861 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedInboundSession/repeating_group/borrowed          	  638764	      1852 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedInboundSession/repeating_group/borrowed          	  666829	      1849 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/quickfixgo/quickfix	13.891s

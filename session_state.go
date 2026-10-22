@@ -106,16 +106,18 @@ func (sm *stateMachine) Incoming(session *session, m fixIn) {
 			}
 		}()
 	}
-	if m.readError != nil {
+	if m.readError != nil && m.slot == nil {
 		sm.setState(session, session.failBoundedInbound(m.readError))
 		return
 	}
-	var boundedParseError error
+	boundedParseError := m.readError
 	var parsedMessage *Message
 	if m.slot != nil && sm.IsConnected() {
 		m.slot.receiveTime = m.receiveTime
 		session.logIncomingFrame(m.slot.frame)
-		parsedMessage, boundedParseError = session.parseInboundSlot(m.slot)
+		if boundedParseError == nil {
+			parsedMessage, boundedParseError = session.parseInboundSlot(m.slot)
+		}
 		if isInboundCapacityError(boundedParseError) {
 			sm.setState(session, session.failBoundedInbound(boundedParseError))
 			return

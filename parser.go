@@ -210,6 +210,56 @@ func (p *parser) ReadMessageInto(dst []byte) ([]byte, error) {
 	return dst, nil
 }
 
+// recoverMalformedFrameInto is used only by the connection reader after a
+// strict framing error. It consumes the same boundary as legacy ReadMessage,
+// allowing the session to log and discard malformed input without disconnecting.
+// The returned bytes remain malformed and must retain their original framing
+// error at delivery. Invalid lengths, capacity exhaustion and read errors remain
+// terminal. Like ReadMessageInto, a short destination leaves the frame pending
+// and its destination bytes unchanged; neither fixed buffer can grow.
+func (p *parser) recoverMalformedFrameInto(dst []byte) ([]byte, error) {
+	dst = dst[:0]
+	if p.maxFrameBytes <= 0 {
+		return dst, errParserNotBounded
+	}
+	lengthIndex, err := p.findIndex([]byte{'\x01', '9', '='})
+	if err != nil {
+		return dst, p.boundedReadError(err)
+	}
+	lengthStart := lengthIndex + 3
+	lengthEnd, err := p.findIndexAfterOffset(lengthStart, []byte{'\x01'})
+	if err != nil {
+		return dst, p.boundedReadError(err)
+	}
+	// The legacy search starts at the SOH preceding CheckSum. Even an empty
+	// checksum needs the four-byte marker and its closing SOH. Bound the
+	// length before addition, including when tag 9 is out of header order.
+	if lengthEnd > p.maxFrameBytes-5 {
+		return dst, ErrFrameCapacity
+	}
+	bodyLength, err := boundedUnsigned(p.buffer[lengthStart:lengthEnd], p.maxFrameBytes-lengthEnd-5, ErrFrameCapacity)
+	if err != nil {
+		if err == ErrFrameCapacity {
+			return dst, err
+		}
+		return dst, errInvalidFrameLength
+	}
+	if bodyLength == 0 {
+		return dst, errInvalidFrameLength
+	}
+	frameLength, err := p.findEndAfterOffset(lengthEnd + bodyLength)
+	if err != nil {
+		return dst, p.boundedReadError(err)
+	}
+	if frameLength > cap(dst) {
+		return dst, ErrFrameCapacity
+	}
+	dst = dst[:frameLength]
+	copy(dst, p.buffer[:frameLength])
+	p.buffer = p.buffer[frameLength:]
+	return dst, nil
+}
+
 func (p *parser) findIndex(delim []byte) (int, error) {
 	return p.findIndexAfterOffset(0, delim)
 }

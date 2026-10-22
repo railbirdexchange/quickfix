@@ -116,8 +116,6 @@ type boundedFullSession struct {
 	peerValidator                 *BoundedValidator
 	peerParser                    *parser
 	frame, encoded, savedBody     []byte
-	savedTime                     [64]byte
-	savedTimeLength               int
 	savedReports                  [40]boundedFullSavedReport
 	sendSequence, receiveSequence int
 	bytes                         int64

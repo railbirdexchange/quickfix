@@ -87,11 +87,6 @@ func (*scopedInboundBenchmarkConnection) SetDeadline(time.Time) error      { ret
 func (*scopedInboundBenchmarkConnection) SetReadDeadline(time.Time) error  { return nil }
 func (*scopedInboundBenchmarkConnection) SetWriteDeadline(time.Time) error { return nil }
 
-func scopedInboundBenchmarkSetup(test testing.TB, groups bool, frames int) (*session, *scopedInboundBenchmarkApplication, <-chan fixIn, func()) {
-	test.Helper()
-	return scopedInboundBenchmarkSetupDelivery(test, groups, frames, true)
-}
-
 func scopedInboundBenchmarkSetupDelivery(test testing.TB, groups bool, frames int, borrowed bool) (*session, *scopedInboundBenchmarkApplication, <-chan fixIn, func()) {
 	test.Helper()
 	wire, dictionary := boundedOwnershipFixture(test, groups)

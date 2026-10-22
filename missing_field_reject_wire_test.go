@@ -42,6 +42,9 @@ func TestMissingFieldRejectCompletedWireAndLogLifetime(t *testing.T) {
 				t.Fatalf("reference tag = (%d, %v), want (%d, true)", reference, present, originalTag)
 			}
 			reference = 10000
+			if tag, present := reject.RefTagID(); !present || tag != originalTag {
+				t.Fatalf("setting returned reference to %d changed the reject's reference", reference)
+			}
 			reason := fmt.Sprintf("Conditionally Required Field Missing (%d)", originalTag)
 			if reject.Error() != reason || reject.RejectReason() != 8 || !reject.IsBusinessReject() || reject.BusinessRejectRefID() != "" {
 				t.Fatalf("missing-field reject changed its original text or classification: %v", reject)

@@ -51,8 +51,8 @@ func TestScopedControlAcquisitionAndCopies(t *testing.T) {
 		t.Fatal(err)
 	}
 	message.Body.SetString(tagTestReqID, "retained")
-	copy := NewMessage()
-	message.CopyInto(copy)
+	owned := NewMessage()
+	message.CopyInto(owned)
 	if next, err := current.acquireControl("1"); err != ErrOutboundCapacity || next != nil {
 		t.Fatalf("nested acquisition: message=%p error=%v", next, err)
 	}
@@ -68,7 +68,7 @@ func TestScopedControlAcquisitionAndCopies(t *testing.T) {
 		t.Fatalf("reuse did not clear the previous control: same=%v error=%v", next == message, err)
 	}
 	next.Body.SetString(tagTestReqID, "replacement")
-	if value, _ := copy.Body.GetString(tagTestReqID); value != "retained" {
+	if value, _ := owned.Body.GetString(tagTestReqID); value != "retained" {
 		t.Fatal("owned copy borrowed reusable control storage")
 	}
 	current.releaseControl()

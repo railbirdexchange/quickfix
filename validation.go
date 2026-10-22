@@ -172,10 +172,6 @@ func validateMsgType(d *datadictionary.DataDictionary, msgType string, _ *Messag
 	return nil
 }
 
-func validateWalk(transportDD *datadictionary.DataDictionary, appDD *datadictionary.DataDictionary, settings ValidatorSettings, msgType string, msg *Message) MessageRejectError {
-	return validateWalkWithScratch(transportDD, appDD, settings, msgType, msg, nil, nil)
-}
-
 const validationInlineTagCapacity = 512
 
 // validationTagSet has one owner. Public validators use a call-local table;

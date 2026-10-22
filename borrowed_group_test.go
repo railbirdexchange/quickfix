@@ -237,21 +237,22 @@ func TestBorrowedGroupReusesInputAndFieldStorage(t *testing.T) {
 	if _, err := extractField(&values[1], remaining); err != nil {
 		t.Fatal(err)
 	}
-	group, err := newBorrowedGroup(values[:], definition)
-	if err != nil {
-		t.Fatal(err)
-	}
-	iterator := group.Iter()
-	entry, ok := iterator.Next()
-	if !ok {
-		t.Fatal("missing entry")
-	}
-	value, ok := entry.GetBytes(1001)
-	if !ok || &value[0] != &storage[len("1000=1\x011001=")] {
-		t.Fatal("entry did not borrow its input value")
+	{
+		group, err := newBorrowedGroup(values[:], definition)
+		if err != nil {
+			t.Fatal(err)
+		}
+		iterator := group.Iter()
+		entry, ok := iterator.Next()
+		if !ok {
+			t.Fatal("missing entry")
+		}
+		value, ok := entry.GetBytes(1001)
+		if !ok || &value[0] != &storage[len("1000=1\x011001=")] {
+			t.Fatal("entry did not borrow its input value")
+		}
 	}
 	// End the first borrow before reusing the slot's input and field slab.
-	group, iterator, entry, value = BorrowedGroup{}, BorrowedGroupIterator{}, BorrowedGroupEntry{}, nil
 	copy(storage, "1000=1\x011001=other\x01")
 	remaining, err = extractField(&values[0], storage)
 	if err != nil {
@@ -260,16 +261,16 @@ func TestBorrowedGroupReusesInputAndFieldStorage(t *testing.T) {
 	if _, err := extractField(&values[1], remaining); err != nil {
 		t.Fatal(err)
 	}
-	group, err = newBorrowedGroup(values[:], definition)
+	group, err := newBorrowedGroup(values[:], definition)
 	if err != nil {
 		t.Fatal(err)
 	}
-	iterator = group.Iter()
-	entry, ok = iterator.Next()
+	iterator := group.Iter()
+	entry, ok := iterator.Next()
 	if !ok {
 		t.Fatal("missing reused entry")
 	}
-	value, ok = entry.GetBytes(1001)
+	value, ok := entry.GetBytes(1001)
 	if !ok || string(value) != "other" {
 		t.Fatalf("reused value = %q, %v; want other, true", value, ok)
 	}

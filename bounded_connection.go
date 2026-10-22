@@ -53,12 +53,17 @@ func (reader *boundedReadConnection) read(first []byte, received time.Time) {
 			return
 		case slot = <-reader.ring.vacant:
 		}
+		var framingError error
 		if first != nil {
 			slot.frame = slot.frame[:len(first)]
 			copy(slot.frame, first)
 			first = nil
 		} else {
 			frame, err := reader.parser.ReadMessageInto(slot.frame)
+			if err == errInvalidFrameLength || err == errInvalidFrameChecksum {
+				framingError = err
+				frame, err = reader.parser.recoverMalformedFrameInto(slot.frame)
+			}
 			if err != nil {
 				slot.release()
 				select {
@@ -71,7 +76,7 @@ func (reader *boundedReadConnection) read(first []byte, received time.Time) {
 			received = reader.parser.lastRead
 		}
 		select {
-		case reader.messageIn <- fixIn{slot: slot, receiveTime: received}:
+		case reader.messageIn <- fixIn{slot: slot, receiveTime: received, readError: framingError}:
 		case <-reader.stop:
 			slot.release()
 			return

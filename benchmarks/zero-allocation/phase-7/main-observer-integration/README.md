@@ -43,8 +43,10 @@ empty, as in PR #14; existing preparation and writer event types are preserved.
 
 Go 1.27.2, Apple M4 Pro, darwin/arm64, one CPU, five one-second samples.
 Setup/warm-up are outside measurement. No task-owned build, test or profile ran
-alongside either benchmark. The before source is `f0570a11`; the after runtime
-and new ownership tests are pinned by [source.sha256](source.sha256).
+alongside either benchmark. The before source is `f0570a11`; the after observer
+runtime is `054bb978`, with its ownership tests pinned by
+[source.sha256](source.sha256). The later framing-recovery qualification below
+records its own source and measurements.
 
 | Existing harness operation | Before median ns/op | After median ns/op | B/op before → after | Allocs/op before → after |
 |---|---:|---:|---:|---:|
@@ -117,10 +119,11 @@ The original failed suite receipts remain in [core-tests.txt](core-tests.txt),
 Their observer assertion failures were separately corrected to check the new
 lock events and their empty message types explicitly.
 
-Mongo integration remains a separate environment limitation. The known
-`TestMongoLogTestSuite` teardown fixture is excluded explicitly; no Mongo-backed
-end-to-end claim is made. No cluster deployment or load test was performed for
-this integration.
+The local `TestMongoLogTestSuite` teardown fixture is excluded explicitly;
+these local tests make no Mongo-backed end-to-end claim. The CI acceptance
+failures described below are a framing regression shared by all stores, not
+that local Mongo environment limitation. No cluster deployment or load test
+was performed for this integration.
 
 The merged opt-in outbound-flood reproduction remains a failing latency case:
 four sending goroutines with a deliberately busy 1 ms `ToApp` delivered all
@@ -137,4 +140,69 @@ GOTOOLCHAIN=auto rtk proxy go test -race . -count=1 -timeout=5m
 GOTOOLCHAIN=auto rtk proxy go vet ./...
 QUICKFIX_STARVATION_TEST=1 GOTOOLCHAIN=auto rtk proxy go test . \
   -run '^TestInboundIsNotStarvedByOutboundFlood$' -count=1 -timeout=45s -v
+```
+
+## Bounded malformed-frame recovery
+
+The first complete CI run exposed five malformed-input acceptance failures
+shared by MemoryStore, FileStore and MongoStore. The bounded reader introduced
+by `97d6e7d5` treated every framing mismatch as a terminal connection error;
+this predates Brandon's merged observer change. The existing FIX41 fixtures
+expect malformed frames to be discarded and subsequent valid traffic to
+continue. A local run reproduced all five failures
+([receipt](acceptance-before.txt)).
+
+The session reader now recovers the legacy frame boundary within its existing
+fixed scratch buffer, using checked BodyLength arithmetic. It transfers the
+same owned slot with the original framing error. Session processing logs and
+discards that frame without parsing it, invoking application callbacks or
+advancing sequence/store state, then returns the slot. Overlong declarations
+retain the legacy behavior of consuming through a later checksum. Capacity
+exhaustion, invalid lengths and incomplete input remain terminal. The strict
+`ReadMessageInto` method, its destination-retention tests and its fuzz contract
+are unchanged. No validation is disabled and no channel payload grows.
+
+All five previously failing FIX41 fixtures now pass locally
+([receipt](acceptance-after.txt)). Focused recovery, strict-parser, connection,
+capacity/state-preservation and framing-allocation tests pass in 0.787 seconds
+([receipt](recovery-tests.txt)). The recovery fixtures cover fragmented and
+coalesced input, overlong consumption, short destinations, overflow, EOF,
+logging/timer handling, callback suppression and repeated slot return.
+The accompanying lint cleanup removes unused private helpers and test fields;
+its earlier [focused suite](lint-cleanup-tests.txt) passed in 15.943 seconds.
+
+Paired valid-traffic measurements use the same borrowed session fixture on
+Go 1.27.2, Apple M4 Pro, CPU 1, five one-second samples with no concurrent
+task-owned Go work. Before is `f7ba5870` plus the non-runtime lint cleanup;
+the changed runtime and regression tests are pinned by
+[recovery-source.sha256](recovery-source.sha256).
+
+| Inbound framing, transfer, parse, validation and borrowed callback | Before median ns/op | After median ns/op | B/op before → after | Allocs/op before → after |
+|---|---:|---:|---:|---:|
+| NewOrderSingle | 1232 | 1245 | 0 → 0 | 0 → 0 |
+| Repeating group | 1852 | 1873 | 0 → 0 | 0 → 0 |
+
+Raw samples: [before](recovery-before.txt), [after](recovery-after.txt).
+The medians are about 1.1% higher; this correctness fix makes no latency-win
+claim. Setup and warm-up are outside measurement. These are inbound component
+measurements, not completed request/response latency.
+
+The final [allocation baseline](allocation-recovery.txt) preserves every B/op
+and allocs/op row from the earlier observer qualification. The final
+[package suite](packages-recovery.txt) passes, with core tests in 38.258 seconds
+and only `TestMongoLogTestSuite` excluded. The final complete core race suite
+passes in 52.069 seconds ([receipt](core-race-recovery.txt)). Final
+`go vet ./...` also passes ([receipt](vet-recovery.txt)).
+The final [exact TCP run](exact-recovery.txt) passes in 9.875 seconds: all seven
+scenarios complete 100 warmed cycles each with zero new heap objects and bytes.
+
+```sh
+GOTOOLCHAIN=auto rtk proxy go test . -run '^$' \
+  -bench '^BenchmarkScopedInboundSession$/^(new_order_single|repeating_group)$/borrowed$' \
+  -benchmem -benchtime=1s -count=5 -cpu=1
+GOTOOLCHAIN=auto rtk proxy go test . \
+  -run '^(TestBoundedFrameRecovery|TestBoundedParser|TestBoundedConnection|TestBoundedFramingNoAllocations|TestBoundedInboundSessionCapacityPreservesStore)' \
+  -count=1 -cpu=1 -timeout=2m -v
+GOTOOLCHAIN=auto rtk proxy go test . \
+  -run '^TestBoundedFullSessionExactAllocations$' -count=1 -cpu=1 -timeout=2m -v
 ```

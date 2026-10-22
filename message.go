@@ -596,10 +596,6 @@ func (m *Message) MsgType() (string, MessageRejectError) {
 	return m.Header.GetString(tagMsgType)
 }
 
-func (m *Message) msgTypeNoLock() (string, MessageRejectError) {
-	return m.Header.getStringNoLock(tagMsgType)
-}
-
 // IsMsgTypeOf returns true if the Header contains MsgType (tag 35) field and its value is the specified one.
 func (m *Message) IsMsgTypeOf(msgType string) bool {
 	if v, err := m.MsgType(); err == nil {
