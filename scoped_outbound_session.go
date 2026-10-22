@@ -291,6 +291,7 @@ func (s *session) prepareOutbound(message, inReplyTo *Message, replacement bool)
 		s.sentReset = sentResetRequested
 	}
 	message.outboundOwner = message
+	s.notifyMessageBuilt(message, slot.wire)
 	return slot, nil
 }
 
@@ -483,7 +484,9 @@ func (s *session) reserveResendOutput() (*outboundSlot, error) {
 
 func (s *session) enqueueReplay(message *Message, body []byte) error {
 	if s.outbound == nil {
-		return s.EnqueueBytesAndSend(message.buildWithBodyBytes(body))
+		wire := message.buildWithBodyBytes(body)
+		s.notifyMessageBuilt(message, wire)
+		return s.EnqueueBytesAndSend(wire)
 	}
 	s.sendMutex.Lock()
 	defer s.sendMutex.Unlock()
@@ -497,6 +500,7 @@ func (s *session) enqueueReplay(message *Message, body []byte) error {
 		return err
 	}
 	message.retainOutboundFraming(slot.wire)
+	s.notifyMessageBuilt(message, slot.wire)
 	s.outbound.enqueue(slot)
 	return s.flushOutbound(true)
 }

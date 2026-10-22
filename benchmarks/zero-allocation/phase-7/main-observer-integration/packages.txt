@@ -1,0 +1,21 @@
+--- FAIL: TestHeartbeatObservedStringReadsExactAllocations (0.00s)
+    heartbeat_string_allocations_test.go:53: completed_writes=100 total_mallocs_delta=1 total_alloc_bytes_delta=144
+    heartbeat_string_allocations_test.go:62: 100 completed observed heartbeats allocated 1 objects / 144 bytes
+FAIL
+FAIL	github.com/quickfixgo/quickfix	38.580s
+?   	github.com/quickfixgo/quickfix/cmd/generate-fix	[no test files]
+?   	github.com/quickfixgo/quickfix/cmd/generate-fix/internal	[no test files]
+?   	github.com/quickfixgo/quickfix/config	[no test files]
+ok  	github.com/quickfixgo/quickfix/datadictionary	1.921s
+ok  	github.com/quickfixgo/quickfix/internal	0.517s
+?   	github.com/quickfixgo/quickfix/internal/testsuite	[no test files]
+ok  	github.com/quickfixgo/quickfix/log/composite	1.331s
+ok  	github.com/quickfixgo/quickfix/log/file	1.484s
+ok  	github.com/quickfixgo/quickfix/log/mongo	1.918s [no tests to run]
+?   	github.com/quickfixgo/quickfix/log/screen	[no test files]
+ok  	github.com/quickfixgo/quickfix/log/sql	1.267s
+ok  	github.com/quickfixgo/quickfix/store/file	1.361s
+ok  	github.com/quickfixgo/quickfix/store/memory	2.316s
+ok  	github.com/quickfixgo/quickfix/store/mongo	2.323s
+ok  	github.com/quickfixgo/quickfix/store/sql	1.541s
+FAIL

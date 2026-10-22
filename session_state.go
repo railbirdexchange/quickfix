@@ -163,8 +163,11 @@ func (sm *stateMachine) fixMsgIn(session *session, m *Message) {
 func (sm *stateMachine) SendAppMessages(session *session) {
 	sm.CheckSessionTime(session, time.Now())
 
+	lockStartedAt := startSendStage()
 	session.sendMutex.Lock()
 	defer session.sendMutex.Unlock()
+	session.finishSendStage("loop_send_lock_wait", nil, lockStartedAt, true)
+	session.observeQueueDepth()
 
 	if session.IsLoggedOn() {
 		session.sendQueued(false)

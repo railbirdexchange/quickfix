@@ -64,6 +64,8 @@ type Application interface {
 // on subsequent mutation or send. Do not retain those views across operations.
 // CopyInto and GetGroup inside outgoing callbacks own their snapshots even on
 // the first send, before reusable construction storage is attached.
+// If application implements BuiltMessageObserver, its hook is forwarded with
+// the same scoped message contract and read-only raw bytes that expire on return.
 // Ordinary Application delivery retains the legacy lifetimes.
 func BorrowApplication(application Application) Application {
 	if applicationBorrowsMessages(application) {

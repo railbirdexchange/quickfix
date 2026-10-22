@@ -46,9 +46,11 @@ type session struct {
 	// Must be locked before sendMutex to prevent a potential deadlock
 	resendMutex sync.RWMutex
 
-	sessionEvent chan internal.Event
-	messageEvent chan bool
-	application  Application
+	sessionEvent          chan internal.Event
+	messageEvent          chan bool
+	application           Application
+	builtMessageObserver  BuiltMessageObserver
+	builtMessagesBorrowed bool
 	Validator
 	stateMachine
 	stateTimer                            *internal.EventTimer
@@ -353,8 +355,25 @@ func (s *session) queueForSend(msg *Message) error {
 	s.resendMutex.RLock()
 	defer s.resendMutex.RUnlock()
 
+	lockStartedAt := startSendStage()
 	s.sendMutex.Lock()
-	defer s.sendMutex.Unlock()
+	var lockedAt time.Time
+	if !lockStartedAt.IsZero() {
+		lockedAt = time.Now()
+	}
+	defer func() {
+		var held time.Duration
+		if !lockedAt.IsZero() {
+			held = time.Since(lockedAt)
+		}
+		s.sendMutex.Unlock()
+		if !lockedAt.IsZero() {
+			s.observeSendStage("queue_send_lock_hold", "", held, true)
+		}
+	}()
+	if !lockedAt.IsZero() {
+		s.observeSendStage("queue_send_lock_wait", "", lockedAt.Sub(lockStartedAt), true)
+	}
 	if s.retired {
 		return errUnknownSession
 	}
@@ -556,8 +575,40 @@ func (s *session) prepMessageForSend(msg *Message, inReplyTo *Message) (msgBytes
 	persistStartedAt := time.Now()
 	err = s.persist(seqNum, msgBytes)
 	s.observeSendStage("persist", string(msgType), time.Since(persistStartedAt), err == nil)
+	if err == nil {
+		s.notifyMessageBuilt(msg, msgBytes)
+	}
 
 	return
+}
+
+// Resolve the optional hook during setup. Repeating an interface assertion on
+// the send path can allocate Go's probabilistically rebuilt type-assert cache,
+// including when the application does not implement the observer.
+func (s *session) setApplication(application Application) {
+	s.application = application
+	borrowed, scoped := application.(borrowedApplication)
+	if scoped {
+		application = borrowed.Application
+	}
+	s.builtMessageObserver, _ = application.(BuiltMessageObserver)
+	s.builtMessagesBorrowed = scoped
+}
+
+func (s *session) notifyMessageBuilt(msg *Message, msgBytes []byte) {
+	observer := s.builtMessageObserver
+	if observer == nil {
+		return
+	}
+	if s.builtMessagesBorrowed {
+		scope := beginBorrowedOutboundCopy(msg)
+		defer scope.release()
+	} else if s.outbound != nil {
+		// The writer reuses bounded wire slots after completion. An ordinary
+		// observer retains independent bytes, matching the pre-slot API.
+		msgBytes = bytes.Clone(msgBytes)
+	}
+	observer.OnMessageBuilt(s.sessionID, msg, msgBytes[:len(msgBytes):len(msgBytes)])
 }
 
 func (s *session) persist(seqNum int, msgBytes []byte) error {
@@ -640,6 +691,21 @@ func (s *session) sendBytes(msg []byte, blockUntilSent bool) bool {
 		s.observeSendStage("outbound_channel_wait", fixMsgTypeFromRaw(msg), time.Since(channelStartedAt), false)
 		return false
 	}
+}
+
+func (s *session) observeQueueDepth() {
+	if queueDepthObserverState.Load() == nil {
+		return
+	}
+	pending := len(s.toSend)
+	if s.outbound != nil {
+		pending = s.outbound.count
+	}
+	observeQueueDepth(QueueDepthEvent{
+		SessionID: s.sessionID,
+		ToSend:    pending,
+		MessageIn: len(s.messageIn),
+	})
 }
 
 func (s *session) observeSendStage(stage, msgType string, duration time.Duration, success bool) {

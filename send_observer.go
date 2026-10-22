@@ -68,6 +68,49 @@ func (s *session) sendStageMessageType(value []byte) string {
 	return string(value)
 }
 
+// BuiltMessageObserver receives the final encoded bytes synchronously after a
+// normal message's store update succeeds, or after a replay is rebuilt, before
+// enqueueing. Persistence follows the configured DisableMessagePersist policy.
+// It does not report completed socket writes. The callback must return promptly
+// and must not send on the same session or mutate msg/raw. The raw argument is
+// authoritative for replay, whose original serialized body is preserved.
+//
+// Ordinary applications may retain msg and raw under the existing outgoing
+// message ownership rules. BorrowApplication instead makes engine-owned messages
+// and raw callback-scoped; copy anything retained before the callback returns.
+type BuiltMessageObserver interface {
+	OnMessageBuilt(sessionID SessionID, msg *Message, raw []byte)
+}
+
+// QueueDepthEvent reports pending outbound messages and queued inbound messages.
+// ToSend excludes frames already transferred to the socket writer.
+type QueueDepthEvent struct {
+	SessionID SessionID
+	ToSend    int
+	MessageIn int
+}
+
+// QueueDepthObserver runs synchronously during session flushing. It must return
+// promptly and must not send on the same session. Event values may be retained.
+type QueueDepthObserver func(QueueDepthEvent)
+
+var queueDepthObserverState atomic.Pointer[QueueDepthObserver]
+
+// SetQueueDepthObserver installs a process-wide observer; nil disables it.
+func SetQueueDepthObserver(observer QueueDepthObserver) {
+	if observer == nil {
+		queueDepthObserverState.Store(nil)
+		return
+	}
+	queueDepthObserverState.Store(&observer)
+}
+
+func observeQueueDepth(event QueueDepthEvent) {
+	if observer := queueDepthObserverState.Load(); observer != nil {
+		(*observer)(event)
+	}
+}
+
 func fixMsgTypeFromRaw(msg []byte) string {
 	return string(fixMsgTypeBytesFromRaw(msg))
 }

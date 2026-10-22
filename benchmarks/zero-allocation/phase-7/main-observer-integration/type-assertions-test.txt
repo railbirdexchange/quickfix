@@ -1,0 +1,11 @@
+--- FAIL: TestBoundedFullSessionExactAllocations (0.58s)
+    --- FAIL: TestBoundedFullSessionExactAllocations/ordinary (0.58s)
+        bounded_full_session_allocations_test.go:45: completed_cycles=100 total_mallocs_delta=1 total_alloc_bytes_delta=48
+        bounded_full_session_allocations_test.go:48: 
+            	Error Trace:	/Users/a.alamer/factory/worktrees/quickfix-generic-session-registry/bounded_full_session_allocations_test.go:48
+            	Error:      	Should be zero, but was 1
+            	Test:       	TestBoundedFullSessionExactAllocations/ordinary
+            	Messages:   	the full warmed interval must have no heap allocation
+FAIL
+FAIL	github.com/quickfixgo/quickfix	1.368s
+FAIL

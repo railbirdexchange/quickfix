@@ -80,17 +80,20 @@ func TestHeartbeatObserverRetainsOriginalTypeAcrossCallbackAndReuse(t *testing.T
 		value[index] = '?'
 	}
 	events := heartbeatLegacyStageEvents(recorded)
-	want := []string{"to_app", "build_message", "persist", "outbound_channel_wait"}
+	want := []string{"queue_send_lock_wait", "to_app", "build_message", "persist", "queue_send_lock_hold", "outbound_channel_wait"}
 	if len(events) != 2*len(want) {
 		t.Fatalf("unexpected observed stages: %+v", events)
 	}
 	for index, event := range events {
 		send, stage := index/len(want), index%len(want)
 		messageType := inputs[send]
-		if want[stage] == "outbound_channel_wait" {
+		switch want[stage] {
+		case "queue_send_lock_wait", "queue_send_lock_hold":
+			messageType = ""
+		case "outbound_channel_wait":
 			messageType = wires[send]
 		}
-		if event.Stage != want[stage] || event.MsgType != messageType || !event.Success || event.SessionID != fixture.session.sessionID {
+		if event.Stage != want[stage] || event.MsgType != messageType || !event.Success || event.Duration < 0 || event.SessionID != fixture.session.sessionID {
 			t.Fatalf("retained event %d changed after callback/arena reuse: %+v, want type %q", index, event, messageType)
 		}
 	}
@@ -118,9 +121,11 @@ func TestHeartbeatObserverEnableTransitions(t *testing.T) {
 			defer SetSendStageObserver(nil)
 			application := &scopedOutboundHookApplication{scopedOutboundBenchmarkApplication: fixture.application}
 			fixture.session.application = application
+			originalWant := []string{"queue_send_lock_wait"}
 			want := []string{"outbound_channel_wait"}
 			switch mode {
 			case "enable_in_callback":
+				originalWant = nil
 				SetSendStageObserver(nil)
 				application.toApp = func(*Message) error {
 					SetSendStageObserver(replacementObserver)
@@ -133,12 +138,13 @@ func TestHeartbeatObserverEnableTransitions(t *testing.T) {
 					return nil
 				}
 			case "replace_in_callback":
-				want = []string{"to_app", "build_message", "persist", "outbound_channel_wait"}
+				want = []string{"to_app", "build_message", "persist", "queue_send_lock_hold", "outbound_channel_wait"}
 				application.toApp = func(*Message) error {
 					SetSendStageObserver(replacementObserver)
 					return nil
 				}
 			case "enable_during_untimed_persist":
+				want = []string{"queue_send_lock_hold", "outbound_channel_wait"}
 				application.toApp = func(*Message) error {
 					SetSendStageObserver(nil)
 					return nil
@@ -158,11 +164,23 @@ func TestHeartbeatObserverEnableTransitions(t *testing.T) {
 			}
 			originalEvents := heartbeatLegacyStageEvents(originalRecorded)
 			replacementEvents := heartbeatLegacyStageEvents(replacementRecorded)
-			if len(originalEvents) != 0 || len(replacementEvents) != len(want) {
-				t.Fatalf("observer transition changed event delivery: original=%+v replacement=%+v want=%v", originalEvents, replacementEvents, want)
+			if len(originalEvents) != len(originalWant) || len(replacementEvents) != len(want) {
+				t.Fatalf("observer transition changed event delivery: original=%+v want_original=%v replacement=%+v want_replacement=%v", originalEvents, originalWant, replacementEvents, want)
+			}
+			// The wait event is emitted before ToApp changes the observer.
+			// A replacement may receive the hold event only if lock timing
+			// started before that change; enabling late cannot invent it.
+			for index, event := range originalEvents {
+				if event.Stage != originalWant[index] || event.MsgType != "" || !event.Success || event.Duration < 0 || event.SessionID != fixture.session.sessionID {
+					t.Fatalf("original observer event %d changed: %+v", index, event)
+				}
 			}
 			for index, event := range replacementEvents {
-				if event.Stage != want[index] || event.MsgType != "CUSTOM.TYPE" || !event.Success || event.SessionID != fixture.session.sessionID {
+				messageType := "CUSTOM.TYPE"
+				if want[index] == "queue_send_lock_hold" {
+					messageType = ""
+				}
+				if event.Stage != want[index] || event.MsgType != messageType || !event.Success || event.Duration < 0 || event.SessionID != fixture.session.sessionID {
 					t.Fatalf("transition event %d changed: %+v", index, event)
 				}
 			}
@@ -170,7 +188,7 @@ func TestHeartbeatObserverEnableTransitions(t *testing.T) {
 	}
 }
 
-// These fixtures preserve the original prepared/handoff event semantics.
+// These fixtures check queue-lock, prepared and handoff event semantics.
 // Writer lifecycle events are checked separately and may overlap the handoff
 // callback, so collection uses a bounded channel rather than a shared slice.
 func heartbeatLegacyStageEvents(recorded <-chan SendStageEvent) []SendStageEvent {

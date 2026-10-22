@@ -299,12 +299,16 @@ func TestOrdinaryOutboundObserverPreservesStagesAndOwnedType(t *testing.T) {
 		value[index] = '?'
 	}
 	events := heartbeatLegacyStageEvents(recorded)
-	want := []string{"to_app", "build_message", "persist", "outbound_channel_wait"}
+	want := []string{"queue_send_lock_wait", "to_app", "build_message", "persist", "queue_send_lock_hold", "outbound_channel_wait"}
 	if len(events) != len(want) {
 		t.Fatalf("observer stages: %+v", events)
 	}
 	for index, event := range events {
-		if event.Stage != want[index] || event.MsgType != messageType || !event.Success || event.SessionID != fixture.session.sessionID {
+		wantType := messageType
+		if want[index] == "queue_send_lock_wait" || want[index] == "queue_send_lock_hold" {
+			wantType = ""
+		}
+		if event.Stage != want[index] || event.MsgType != wantType || !event.Success || event.Duration < 0 || event.SessionID != fixture.session.sessionID {
 			t.Fatalf("observer event %d lost its stage/value semantics: %+v", index, event)
 		}
 	}

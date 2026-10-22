@@ -358,6 +358,26 @@ and arguments; their allocation remains visible. No validation, logging,
 persistence or resend callback is disabled for the measurement. Registered send
 observers and their owned snapshots are outside the measured profile.
 
+`BuiltMessageObserver`, introduced by merged PR #14, receives the final wire
+bytes after successful store handling and before enqueue, including rebuilt
+application replays. This is not a completed-write notification. Replay bytes
+preserve the original serialized body/group order even when `ToApp` edits the
+message. The hook runs synchronously: it must return promptly, treat message/raw
+as read-only, and must not send recursively on the same session.
+
+An ordinary observer receives independent raw bytes that it may retain. Engine
+control/replay messages retain ordinary owned callback lifetimes. Through
+`BorrowApplication`, the same hook receives scoped engine messages and raw bytes;
+anything retained must be copied before return. `CopyInto` and `GetGroup` still
+produce owned snapshots inside that scope. A completed-send component test
+qualifies a non-allocating borrowed built observer at zero allocations; this does
+not qualify arbitrary observer code. See the
+[main-observer integration evidence](benchmarks/zero-allocation/phase-7/main-observer-integration/README.md).
+
+`QueueDepthObserver.ToSend` counts pending output slots, excluding frames already
+handed to the writer. Queue and send-stage observers retain their public event
+APIs. Observer replacement is atomic; disabled lock timing avoids clock reads.
+
 ## Qualification boundaries
 
 Warm-up visits all journal entries and input/output slots, attaches caller
