@@ -1,1 +1,1 @@
-ok  	github.com/quickfixgo/quickfix	52.825s
+ok  	github.com/quickfixgo/quickfix	53.836s

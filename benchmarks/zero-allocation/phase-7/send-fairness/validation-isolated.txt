@@ -1,0 +1,582 @@
+=== RUN   TestConfiguredValidationRejectExactAllocations
+=== RUN   TestConfiguredValidationRejectExactAllocations/valid
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/format
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/enum
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/empty
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/duplicate
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/group_count
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/order
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/not_defined
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/required_group
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+--- PASS: TestConfiguredValidationRejectExactAllocations (0.09s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/valid (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/format (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/enum (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/empty (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/duplicate (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/group_count (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/order (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/not_defined (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/required_group (0.00s)
+=== RUN   TestConfiguredValidationRejectExactAllocations
+=== RUN   TestConfiguredValidationRejectExactAllocations/valid
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/format
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/enum
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/empty
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/duplicate
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/group_count
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/order
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/not_defined
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/required_group
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+--- PASS: TestConfiguredValidationRejectExactAllocations (0.08s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/valid (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/format (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/enum (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/empty (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/duplicate (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/group_count (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/order (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/not_defined (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/required_group (0.00s)
+=== RUN   TestConfiguredValidationRejectExactAllocations
+=== RUN   TestConfiguredValidationRejectExactAllocations/valid
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/format
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/enum
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/empty
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/duplicate
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/group_count
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/order
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/not_defined
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/required_group
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+--- PASS: TestConfiguredValidationRejectExactAllocations (0.08s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/valid (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/format (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/enum (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/empty (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/duplicate (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/group_count (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/order (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/not_defined (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/required_group (0.00s)
+=== RUN   TestConfiguredValidationRejectExactAllocations
+=== RUN   TestConfiguredValidationRejectExactAllocations/valid
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/format
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/enum
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/empty
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/duplicate
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/group_count
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/order
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/not_defined
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/required_group
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+--- PASS: TestConfiguredValidationRejectExactAllocations (0.08s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/valid (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/format (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/enum (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/empty (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/duplicate (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/group_count (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/order (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/not_defined (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/required_group (0.00s)
+=== RUN   TestConfiguredValidationRejectExactAllocations
+=== RUN   TestConfiguredValidationRejectExactAllocations/valid
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/format
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/enum
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/empty
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/duplicate
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/group_count
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/order
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/not_defined
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/required_group
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+--- PASS: TestConfiguredValidationRejectExactAllocations (0.08s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/valid (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/format (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/enum (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/empty (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/duplicate (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/group_count (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/order (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/not_defined (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/required_group (0.00s)
+=== RUN   TestConfiguredValidationRejectExactAllocations
+=== RUN   TestConfiguredValidationRejectExactAllocations/valid
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/format
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/enum
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/empty
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/duplicate
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/group_count
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/order
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/not_defined
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/required_group
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+--- PASS: TestConfiguredValidationRejectExactAllocations (0.08s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/valid (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/format (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/enum (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/empty (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/duplicate (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/group_count (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/order (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/not_defined (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/required_group (0.00s)
+=== RUN   TestConfiguredValidationRejectExactAllocations
+=== RUN   TestConfiguredValidationRejectExactAllocations/valid
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/format
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/enum
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/empty
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/duplicate
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/group_count
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/order
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/not_defined
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/required_group
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+--- PASS: TestConfiguredValidationRejectExactAllocations (0.08s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/valid (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/format (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/enum (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/empty (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/duplicate (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/group_count (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/order (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/not_defined (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/required_group (0.00s)
+=== RUN   TestConfiguredValidationRejectExactAllocations
+=== RUN   TestConfiguredValidationRejectExactAllocations/valid
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/format
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/enum
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/empty
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/duplicate
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/group_count
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/order
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/not_defined
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/required_group
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+--- PASS: TestConfiguredValidationRejectExactAllocations (0.08s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/valid (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/format (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/enum (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/empty (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/duplicate (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/group_count (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/order (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/not_defined (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/required_group (0.00s)
+=== RUN   TestConfiguredValidationRejectExactAllocations
+=== RUN   TestConfiguredValidationRejectExactAllocations/valid
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/format
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/enum
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/empty
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/duplicate
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/group_count
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/order
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/not_defined
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/required_group
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+--- PASS: TestConfiguredValidationRejectExactAllocations (0.08s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/valid (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/format (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/enum (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/empty (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/duplicate (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/group_count (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/order (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/not_defined (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/required_group (0.00s)
+=== RUN   TestConfiguredValidationRejectExactAllocations
+=== RUN   TestConfiguredValidationRejectExactAllocations/valid
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/format
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/enum
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/empty
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/duplicate
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/group_count
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/order
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/not_defined
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/required_group
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+--- PASS: TestConfiguredValidationRejectExactAllocations (0.08s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/valid (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/format (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/enum (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/empty (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/duplicate (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/group_count (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/order (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/not_defined (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/required_group (0.00s)
+=== RUN   TestConfiguredValidationRejectExactAllocations
+=== RUN   TestConfiguredValidationRejectExactAllocations/valid
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/format
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/enum
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/empty
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/duplicate
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/group_count
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/order
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/not_defined
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/required_group
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+--- PASS: TestConfiguredValidationRejectExactAllocations (0.08s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/valid (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/format (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/enum (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/empty (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/duplicate (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/group_count (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/order (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/not_defined (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/required_group (0.00s)
+=== RUN   TestConfiguredValidationRejectExactAllocations
+=== RUN   TestConfiguredValidationRejectExactAllocations/valid
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/format
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/enum
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/empty
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/duplicate
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/group_count
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/order
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/not_defined
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/required_group
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+--- PASS: TestConfiguredValidationRejectExactAllocations (0.08s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/valid (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/format (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/enum (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/empty (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/duplicate (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/group_count (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/order (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/not_defined (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/required_group (0.00s)
+=== RUN   TestConfiguredValidationRejectExactAllocations
+=== RUN   TestConfiguredValidationRejectExactAllocations/valid
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/format
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/enum
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/empty
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/duplicate
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/group_count
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/order
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/not_defined
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/required_group
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+--- PASS: TestConfiguredValidationRejectExactAllocations (0.08s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/valid (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/format (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/enum (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/empty (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/duplicate (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/group_count (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/order (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/not_defined (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/required_group (0.00s)
+=== RUN   TestConfiguredValidationRejectExactAllocations
+=== RUN   TestConfiguredValidationRejectExactAllocations/valid
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/format
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/enum
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/empty
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/duplicate
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/group_count
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/order
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/not_defined
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/required_group
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+--- PASS: TestConfiguredValidationRejectExactAllocations (0.08s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/valid (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/format (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/enum (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/empty (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/duplicate (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/group_count (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/order (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/not_defined (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/required_group (0.00s)
+=== RUN   TestConfiguredValidationRejectExactAllocations
+=== RUN   TestConfiguredValidationRejectExactAllocations/valid
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/format
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/enum
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/empty
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/duplicate
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/group_count
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/order
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/not_defined
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/required_group
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+--- PASS: TestConfiguredValidationRejectExactAllocations (0.08s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/valid (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/format (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/enum (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/empty (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/duplicate (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/group_count (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/order (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/not_defined (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/required_group (0.00s)
+=== RUN   TestConfiguredValidationRejectExactAllocations
+=== RUN   TestConfiguredValidationRejectExactAllocations/valid
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/format
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/enum
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/empty
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/duplicate
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/group_count
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/order
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/not_defined
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/required_group
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+--- PASS: TestConfiguredValidationRejectExactAllocations (0.08s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/valid (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/format (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/enum (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/empty (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/duplicate (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/group_count (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/order (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/not_defined (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/required_group (0.00s)
+=== RUN   TestConfiguredValidationRejectExactAllocations
+=== RUN   TestConfiguredValidationRejectExactAllocations/valid
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/format
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/enum
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/empty
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/duplicate
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/group_count
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/order
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/not_defined
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/required_group
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+--- PASS: TestConfiguredValidationRejectExactAllocations (0.08s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/valid (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/format (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/enum (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/empty (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/duplicate (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/group_count (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/order (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/not_defined (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/required_group (0.00s)
+=== RUN   TestConfiguredValidationRejectExactAllocations
+=== RUN   TestConfiguredValidationRejectExactAllocations/valid
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/format
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/enum
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/empty
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/duplicate
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/group_count
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/order
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/not_defined
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/required_group
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+--- PASS: TestConfiguredValidationRejectExactAllocations (0.08s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/valid (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/format (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/enum (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/empty (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/duplicate (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/group_count (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/order (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/not_defined (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/required_group (0.00s)
+=== RUN   TestConfiguredValidationRejectExactAllocations
+=== RUN   TestConfiguredValidationRejectExactAllocations/valid
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/format
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/enum
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/empty
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/duplicate
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/group_count
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/order
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/not_defined
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/required_group
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+--- PASS: TestConfiguredValidationRejectExactAllocations (0.08s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/valid (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/format (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/enum (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/empty (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/duplicate (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/group_count (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/order (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/not_defined (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/required_group (0.00s)
+=== RUN   TestConfiguredValidationRejectExactAllocations
+=== RUN   TestConfiguredValidationRejectExactAllocations/valid
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/format
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/enum
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/empty
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/duplicate
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/group_count
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/order
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/not_defined
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+=== RUN   TestConfiguredValidationRejectExactAllocations/required_group
+    configured_validation_allocations_test.go:32: validations=1000 mallocs=0 bytes=0
+--- PASS: TestConfiguredValidationRejectExactAllocations (0.08s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/valid (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/format (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/enum (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/empty (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/duplicate (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/group_count (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/order (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/not_defined (0.01s)
+    --- PASS: TestConfiguredValidationRejectExactAllocations/required_group (0.00s)
+PASS
+ok  	github.com/quickfixgo/quickfix	2.024s
