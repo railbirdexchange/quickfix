@@ -1,0 +1,7 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+cpu: Apple M4 Pro
+BenchmarkOutboundObservation/AJ/enabled         	  100000	      3613 ns/op	         4.000 events/op	       4 B/op	       2 allocs/op
+PASS
+ok  	github.com/quickfixgo/quickfix	3.373s

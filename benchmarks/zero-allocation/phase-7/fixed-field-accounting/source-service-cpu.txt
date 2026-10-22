@@ -1,0 +1,49 @@
+File: fix-server
+Build ID: e2e48cc9158cabf61cb55279c89b86eeec018546
+Type: cpu
+Time: 2026-10-19 23:21:42 EDT
+Duration: 20s, Total samples = 117.82s (589.09%)
+Showing nodes accounting for 58.10s, 49.31% of 117.82s total
+Dropped 1978 nodes (cum <= 0.59s)
+Showing top 40 nodes out of 391
+      flat  flat%   sum%        cum   cum%
+    15.89s 13.49% 13.49%     15.89s 13.49%  runtime.(*lfstack).pop
+    12.43s 10.55% 24.04%     12.43s 10.55%  internal/runtime/syscall/linux.Syscall6
+     2.39s  2.03% 26.07%      2.39s  2.03%  runtime.memmove
+     1.81s  1.54% 27.60%      1.81s  1.54%  github.com/quickfixgo/quickfix.(*fixedFieldMap).length
+     1.66s  1.41% 29.01%      1.66s  1.41%  runtime.futex
+     1.39s  1.18% 30.19%      1.39s  1.18%  runtime.(*lfstack).push
+     1.25s  1.06% 31.25%      1.82s  1.54%  runtime.lock2
+     1.24s  1.05% 32.30%      3.25s  2.76%  runtime.selectgo
+     1.23s  1.04% 33.35%      1.23s  1.04%  runtime.usleep
+     1.18s  1.00% 34.35%      1.18s  1.00%  runtime.memclrNoHeapPointers
+     1.09s  0.93% 35.27%      1.27s  1.08%  runtime.step
+     1.04s  0.88% 36.16%      1.04s  0.88%  runtime.nextFreeFast (inline)
+     1.03s  0.87% 37.03%      2.32s  1.97%  runtime.runqgrab
+     0.95s  0.81% 37.84%      5.56s  4.72%  runtime.stealWork
+     0.81s  0.69% 38.52%      1.04s  0.88%  internal/sync.(*Mutex).Lock
+     0.78s  0.66% 39.19%      0.78s  0.66%  runtime.spanClass.sizeclass (inline)
+     0.77s  0.65% 39.84%      0.79s  0.67%  runtime.(*mspan).writeHeapBitsSmall
+     0.69s  0.59% 40.43%      0.69s  0.59%  time.runtimeNow
+     0.68s  0.58% 41.00%      0.75s  0.64%  github.com/quickfixgo/quickfix.(*fixedFieldMap).total
+     0.62s  0.53% 41.53%      1.04s  0.88%  runtime.unlock2
+     0.60s  0.51% 42.04%      0.60s  0.51%  runtime.(*waitq).dequeue
+     0.58s  0.49% 42.53%      0.61s  0.52%  runtime.findfunc
+     0.57s  0.48% 43.01%     17.41s 14.78%  runtime.gcDrain
+     0.54s  0.46% 43.47%      0.62s  0.53%  internal/sync.(*Mutex).Unlock
+     0.51s  0.43% 43.91%     12.47s 10.58%  runtime.mallocgc
+     0.50s  0.42% 44.33%      0.78s  0.66%  runtime.casgstatus
+     0.49s  0.42% 44.75%     11.50s  9.76%  runtime.findRunnable
+     0.48s  0.41% 45.15%      1.45s  1.23%  runtime.(*unwinder).resolveInternal
+     0.46s  0.39% 45.54%      1.12s  0.95%  go.opentelemetry.io/otel/exporters/otlp/otlptrace/internal/tracetransform.KeyValues
+     0.46s  0.39% 45.93%      0.96s  0.81%  internal/sync.(*HashTrieMap[go.shape.interface {},go.shape.interface {}]).Load
+     0.45s  0.38% 46.32%      1.20s  1.02%  runtime.mallocgcSmallScanNoHeaderSC6
+     0.43s  0.36% 46.68%      1.39s  1.18%  runtime.tryDeferToSpanScan
+     0.42s  0.36% 47.04%      0.63s  0.53%  runtime.(*spanSet).push
+     0.41s  0.35% 47.39%      1.18s  1.00%  google.golang.org/protobuf/internal/impl.(*MessageInfo).sizePointerSlow
+     0.40s  0.34% 47.73%      1.14s  0.97%  runtime.(*stkframe).getStackMap
+     0.38s  0.32% 48.05%      0.75s  0.64%  runtime.mallocgcSmallScanNoHeaderSC2
+     0.38s  0.32% 48.37%      0.68s  0.58%  runtime.scanObject
+     0.38s  0.32% 48.69%      0.79s  0.67%  runtime.sellock
+     0.37s  0.31% 49.01%      1.04s  0.88%  runtime.mapaccess2_faststr
+     0.36s  0.31% 49.31%      1.74s  1.48%  runtime.pcvalue

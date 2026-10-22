@@ -1,0 +1,160 @@
+=== RUN   TestMessageRouterZeroAllocations
+=== RUN   TestMessageRouterZeroAllocations/fix44
+=== RUN   TestMessageRouterZeroAllocations/fixt_explicit
+=== RUN   TestMessageRouterZeroAllocations/fixt_default
+=== RUN   TestMessageRouterZeroAllocations/fix44_multibyte_type
+=== RUN   TestMessageRouterZeroAllocations/fixt_custom_long_keys
+=== RUN   TestMessageRouterZeroAllocations/fixt_default_custom
+--- PASS: TestMessageRouterZeroAllocations (0.00s)
+    --- PASS: TestMessageRouterZeroAllocations/fix44 (0.00s)
+    --- PASS: TestMessageRouterZeroAllocations/fixt_explicit (0.00s)
+    --- PASS: TestMessageRouterZeroAllocations/fixt_default (0.00s)
+    --- PASS: TestMessageRouterZeroAllocations/fix44_multibyte_type (0.00s)
+    --- PASS: TestMessageRouterZeroAllocations/fixt_custom_long_keys (0.00s)
+    --- PASS: TestMessageRouterZeroAllocations/fixt_default_custom (0.00s)
+=== RUN   TestMessageRouterMissingRequiredHeaders
+=== RUN   TestMessageRouterMissingRequiredHeaders/application_without_begin_string
+=== RUN   TestMessageRouterMissingRequiredHeaders/admin_without_begin_string
+=== RUN   TestMessageRouterMissingRequiredHeaders/business_reject_without_begin_string
+=== RUN   TestMessageRouterMissingRequiredHeaders/both_headers_missing
+=== RUN   TestMessageRouterMissingRequiredHeaders/message_type_missing
+--- PASS: TestMessageRouterMissingRequiredHeaders (0.00s)
+    --- PASS: TestMessageRouterMissingRequiredHeaders/application_without_begin_string (0.00s)
+    --- PASS: TestMessageRouterMissingRequiredHeaders/admin_without_begin_string (0.00s)
+    --- PASS: TestMessageRouterMissingRequiredHeaders/business_reject_without_begin_string (0.00s)
+    --- PASS: TestMessageRouterMissingRequiredHeaders/both_headers_missing (0.00s)
+    --- PASS: TestMessageRouterMissingRequiredHeaders/message_type_missing (0.00s)
+=== RUN   TestMessageRouterReturnsPreparedHeaderReject
+--- PASS: TestMessageRouterReturnsPreparedHeaderReject (0.00s)
+=== RUN   TestMessageRouterVersionMappings
+=== RUN   TestMessageRouterVersionMappings/0/explicit
+=== RUN   TestMessageRouterVersionMappings/0/default
+=== RUN   TestMessageRouterVersionMappings/1/explicit
+=== RUN   TestMessageRouterVersionMappings/1/default
+=== RUN   TestMessageRouterVersionMappings/2/explicit
+=== RUN   TestMessageRouterVersionMappings/2/default
+=== RUN   TestMessageRouterVersionMappings/3/explicit
+=== RUN   TestMessageRouterVersionMappings/3/default
+=== RUN   TestMessageRouterVersionMappings/4/explicit
+=== RUN   TestMessageRouterVersionMappings/4/default
+=== RUN   TestMessageRouterVersionMappings/5/explicit
+=== RUN   TestMessageRouterVersionMappings/5/default
+=== RUN   TestMessageRouterVersionMappings/6/explicit
+=== RUN   TestMessageRouterVersionMappings/6/default
+=== RUN   TestMessageRouterVersionMappings/7/explicit
+=== RUN   TestMessageRouterVersionMappings/7/default
+=== RUN   TestMessageRouterVersionMappings/8/explicit
+=== RUN   TestMessageRouterVersionMappings/8/default
+=== RUN   TestMessageRouterVersionMappings/9/explicit
+=== RUN   TestMessageRouterVersionMappings/9/default
+=== RUN   TestMessageRouterVersionMappings//explicit
+=== RUN   TestMessageRouterVersionMappings//default
+=== RUN   TestMessageRouterVersionMappings/CUSTOM_APPLICATION_VERSION_LONGER_THAN_32_BYTES/explicit
+=== RUN   TestMessageRouterVersionMappings/CUSTOM_APPLICATION_VERSION_LONGER_THAN_32_BYTES/default
+--- PASS: TestMessageRouterVersionMappings (0.00s)
+    --- PASS: TestMessageRouterVersionMappings/0/explicit (0.00s)
+    --- PASS: TestMessageRouterVersionMappings/0/default (0.00s)
+    --- PASS: TestMessageRouterVersionMappings/1/explicit (0.00s)
+    --- PASS: TestMessageRouterVersionMappings/1/default (0.00s)
+    --- PASS: TestMessageRouterVersionMappings/2/explicit (0.00s)
+    --- PASS: TestMessageRouterVersionMappings/2/default (0.00s)
+    --- PASS: TestMessageRouterVersionMappings/3/explicit (0.00s)
+    --- PASS: TestMessageRouterVersionMappings/3/default (0.00s)
+    --- PASS: TestMessageRouterVersionMappings/4/explicit (0.00s)
+    --- PASS: TestMessageRouterVersionMappings/4/default (0.00s)
+    --- PASS: TestMessageRouterVersionMappings/5/explicit (0.00s)
+    --- PASS: TestMessageRouterVersionMappings/5/default (0.00s)
+    --- PASS: TestMessageRouterVersionMappings/6/explicit (0.00s)
+    --- PASS: TestMessageRouterVersionMappings/6/default (0.00s)
+    --- PASS: TestMessageRouterVersionMappings/7/explicit (0.00s)
+    --- PASS: TestMessageRouterVersionMappings/7/default (0.00s)
+    --- PASS: TestMessageRouterVersionMappings/8/explicit (0.00s)
+    --- PASS: TestMessageRouterVersionMappings/8/default (0.00s)
+    --- PASS: TestMessageRouterVersionMappings/9/explicit (0.00s)
+    --- PASS: TestMessageRouterVersionMappings/9/default (0.00s)
+    --- PASS: TestMessageRouterVersionMappings//explicit (0.00s)
+    --- PASS: TestMessageRouterVersionMappings//default (0.00s)
+    --- PASS: TestMessageRouterVersionMappings/CUSTOM_APPLICATION_VERSION_LONGER_THAN_32_BYTES/explicit (0.00s)
+    --- PASS: TestMessageRouterVersionMappings/CUSTOM_APPLICATION_VERSION_LONGER_THAN_32_BYTES/default (0.00s)
+=== RUN   TestMessageRouterMissingAndUnmatchedFields
+=== RUN   TestMessageRouterMissingAndUnmatchedFields/no_begin_or_type
+=== RUN   TestMessageRouterMissingAndUnmatchedFields/no_begin
+=== RUN   TestMessageRouterMissingAndUnmatchedFields/no_type
+=== RUN   TestMessageRouterMissingAndUnmatchedFields/unsupported
+=== RUN   TestMessageRouterMissingAndUnmatchedFields/empty_type
+=== RUN   TestMessageRouterMissingAndUnmatchedFields/unknown_default_session
+=== RUN   TestMessageRouterMissingAndUnmatchedFields/explicit_empty_without_session
+=== RUN   TestMessageRouterMissingAndUnmatchedFields/fixt_j_still_needs_default_session
+=== RUN   TestMessageRouterMissingAndUnmatchedFields/fixt_j_explicit
+--- PASS: TestMessageRouterMissingAndUnmatchedFields (0.00s)
+    --- PASS: TestMessageRouterMissingAndUnmatchedFields/no_begin_or_type (0.00s)
+    --- PASS: TestMessageRouterMissingAndUnmatchedFields/no_begin (0.00s)
+    --- PASS: TestMessageRouterMissingAndUnmatchedFields/no_type (0.00s)
+    --- PASS: TestMessageRouterMissingAndUnmatchedFields/unsupported (0.00s)
+    --- PASS: TestMessageRouterMissingAndUnmatchedFields/empty_type (0.00s)
+    --- PASS: TestMessageRouterMissingAndUnmatchedFields/unknown_default_session (0.00s)
+    --- PASS: TestMessageRouterMissingAndUnmatchedFields/explicit_empty_without_session (0.00s)
+    --- PASS: TestMessageRouterMissingAndUnmatchedFields/fixt_j_still_needs_default_session (0.00s)
+    --- PASS: TestMessageRouterMissingAndUnmatchedFields/fixt_j_explicit (0.00s)
+=== RUN   TestMessageRouterAdminAndBusinessReject
+=== RUN   TestMessageRouterAdminAndBusinessReject/FIX.4.4/0
+=== RUN   TestMessageRouterAdminAndBusinessReject/FIXT.1.1/0
+=== RUN   TestMessageRouterAdminAndBusinessReject/FIX.4.4/A
+=== RUN   TestMessageRouterAdminAndBusinessReject/FIXT.1.1/A
+=== RUN   TestMessageRouterAdminAndBusinessReject/FIX.4.4/1
+=== RUN   TestMessageRouterAdminAndBusinessReject/FIXT.1.1/1
+=== RUN   TestMessageRouterAdminAndBusinessReject/FIX.4.4/2
+=== RUN   TestMessageRouterAdminAndBusinessReject/FIXT.1.1/2
+=== RUN   TestMessageRouterAdminAndBusinessReject/FIX.4.4/3
+=== RUN   TestMessageRouterAdminAndBusinessReject/FIXT.1.1/3
+=== RUN   TestMessageRouterAdminAndBusinessReject/FIX.4.4/4
+=== RUN   TestMessageRouterAdminAndBusinessReject/FIXT.1.1/4
+=== RUN   TestMessageRouterAdminAndBusinessReject/FIX.4.4/5
+=== RUN   TestMessageRouterAdminAndBusinessReject/FIXT.1.1/5
+=== RUN   TestMessageRouterAdminAndBusinessReject/FIX.4.4/j
+=== RUN   TestMessageRouterAdminAndBusinessReject/FIXT.1.1/j
+--- PASS: TestMessageRouterAdminAndBusinessReject (0.00s)
+    --- PASS: TestMessageRouterAdminAndBusinessReject/FIX.4.4/0 (0.00s)
+    --- PASS: TestMessageRouterAdminAndBusinessReject/FIXT.1.1/0 (0.00s)
+    --- PASS: TestMessageRouterAdminAndBusinessReject/FIX.4.4/A (0.00s)
+    --- PASS: TestMessageRouterAdminAndBusinessReject/FIXT.1.1/A (0.00s)
+    --- PASS: TestMessageRouterAdminAndBusinessReject/FIX.4.4/1 (0.00s)
+    --- PASS: TestMessageRouterAdminAndBusinessReject/FIXT.1.1/1 (0.00s)
+    --- PASS: TestMessageRouterAdminAndBusinessReject/FIX.4.4/2 (0.00s)
+    --- PASS: TestMessageRouterAdminAndBusinessReject/FIXT.1.1/2 (0.00s)
+    --- PASS: TestMessageRouterAdminAndBusinessReject/FIX.4.4/3 (0.00s)
+    --- PASS: TestMessageRouterAdminAndBusinessReject/FIXT.1.1/3 (0.00s)
+    --- PASS: TestMessageRouterAdminAndBusinessReject/FIX.4.4/4 (0.00s)
+    --- PASS: TestMessageRouterAdminAndBusinessReject/FIXT.1.1/4 (0.00s)
+    --- PASS: TestMessageRouterAdminAndBusinessReject/FIX.4.4/5 (0.00s)
+    --- PASS: TestMessageRouterAdminAndBusinessReject/FIXT.1.1/5 (0.00s)
+    --- PASS: TestMessageRouterAdminAndBusinessReject/FIX.4.4/j (0.00s)
+    --- PASS: TestMessageRouterAdminAndBusinessReject/FIXT.1.1/j (0.00s)
+=== RUN   TestMessageRouterExplicitEmptyOverridesDefault
+--- PASS: TestMessageRouterExplicitEmptyOverridesDefault (0.00s)
+=== RUN   TestMessageRouterOverrideAndRetention
+--- PASS: TestMessageRouterOverrideAndRetention (0.00s)
+=== RUN   TestMessageRouterSharedImmutableMessages
+--- PASS: TestMessageRouterSharedImmutableMessages (0.00s)
+=== RUN   TestMessageRouterTestSuite
+=== RUN   TestMessageRouterTestSuite/TestNoRoute
+=== RUN   TestMessageRouterTestSuite/TestNoRouteWhitelistedMessageTypes
+=== RUN   TestMessageRouterTestSuite/TestRouteFIXT50AppWithApplVerID
+=== RUN   TestMessageRouterTestSuite/TestRouteFIXTAdminMessage
+=== RUN   TestMessageRouterTestSuite/TestRouteFIXTAppWithApplVerID
+=== RUN   TestMessageRouterTestSuite/TestRouteFIXTAppWithDefaultApplVerID
+=== RUN   TestMessageRouterTestSuite/TestRouteFIXTAppWithoutRegisteredSession
+=== RUN   TestMessageRouterTestSuite/TestSimpleRoute
+=== RUN   TestMessageRouterTestSuite/TestSimpleRouteWithReject
+--- PASS: TestMessageRouterTestSuite (0.00s)
+    --- PASS: TestMessageRouterTestSuite/TestNoRoute (0.00s)
+    --- PASS: TestMessageRouterTestSuite/TestNoRouteWhitelistedMessageTypes (0.00s)
+    --- PASS: TestMessageRouterTestSuite/TestRouteFIXT50AppWithApplVerID (0.00s)
+    --- PASS: TestMessageRouterTestSuite/TestRouteFIXTAdminMessage (0.00s)
+    --- PASS: TestMessageRouterTestSuite/TestRouteFIXTAppWithApplVerID (0.00s)
+    --- PASS: TestMessageRouterTestSuite/TestRouteFIXTAppWithDefaultApplVerID (0.00s)
+    --- PASS: TestMessageRouterTestSuite/TestRouteFIXTAppWithoutRegisteredSession (0.00s)
+    --- PASS: TestMessageRouterTestSuite/TestSimpleRoute (0.00s)
+    --- PASS: TestMessageRouterTestSuite/TestSimpleRouteWithReject (0.00s)
+PASS
+ok  	github.com/quickfixgo/quickfix	0.834s

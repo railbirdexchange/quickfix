@@ -1,0 +1,48 @@
+=== RUN   TestStaticRejectEventTextAndRetainedLifetime
+=== RUN   TestStaticRejectEventTextAndRetainedLifetime/Required_tag_missing
+=== RUN   TestStaticRejectEventTextAndRetainedLifetime/Incorrect_data_format_for_value
+=== RUN   TestStaticRejectEventTextAndRetainedLifetime/Value_is_incorrect_(out_of_range)_for_this_tag
+=== RUN   TestStaticRejectEventTextAndRetainedLifetime/Tag_not_defined_for_this_message_type
+=== RUN   TestStaticRejectEventTextAndRetainedLifetime/Tag_appears_more_than_once
+=== RUN   TestStaticRejectEventTextAndRetainedLifetime/Incorrect_NumInGroup_count_for_repeating_group
+=== RUN   TestStaticRejectEventTextAndRetainedLifetime/Tag_specified_out_of_required_order
+=== RUN   TestStaticRejectEventTextAndRetainedLifetime/Tag_specified_without_a_value
+=== RUN   TestStaticRejectEventTextAndRetainedLifetime/Invalid_MsgType
+=== RUN   TestStaticRejectEventTextAndRetainedLifetime/Unsupported_Message_Type
+=== RUN   TestStaticRejectEventTextAndRetainedLifetime/Invalid_tag_number
+=== RUN   TestStaticRejectEventTextAndRetainedLifetime/CompID_problem
+=== RUN   TestStaticRejectEventTextAndRetainedLifetime/SendingTime_accuracy_problem
+=== RUN   TestStaticRejectEventTextAndRetainedLifetime/Repeating_group_fields_out_of_order
+=== RUN   TestStaticRejectEventTextAndRetainedLifetime/#00
+=== RUN   TestStaticRejectEventTextAndRetainedLifetime/custom_client_A-123_rejected
+=== RUN   TestStaticRejectEventTextAndRetainedLifetime/quotes"_slash\_newline__SOH\x01_café_世界
+=== RUN   TestStaticRejectEventTextAndRetainedLifetime/invalid�utf8
+--- PASS: TestStaticRejectEventTextAndRetainedLifetime (0.00s)
+    --- PASS: TestStaticRejectEventTextAndRetainedLifetime/Required_tag_missing (0.00s)
+    --- PASS: TestStaticRejectEventTextAndRetainedLifetime/Incorrect_data_format_for_value (0.00s)
+    --- PASS: TestStaticRejectEventTextAndRetainedLifetime/Value_is_incorrect_(out_of_range)_for_this_tag (0.00s)
+    --- PASS: TestStaticRejectEventTextAndRetainedLifetime/Tag_not_defined_for_this_message_type (0.00s)
+    --- PASS: TestStaticRejectEventTextAndRetainedLifetime/Tag_appears_more_than_once (0.00s)
+    --- PASS: TestStaticRejectEventTextAndRetainedLifetime/Incorrect_NumInGroup_count_for_repeating_group (0.00s)
+    --- PASS: TestStaticRejectEventTextAndRetainedLifetime/Tag_specified_out_of_required_order (0.00s)
+    --- PASS: TestStaticRejectEventTextAndRetainedLifetime/Tag_specified_without_a_value (0.00s)
+    --- PASS: TestStaticRejectEventTextAndRetainedLifetime/Invalid_MsgType (0.00s)
+    --- PASS: TestStaticRejectEventTextAndRetainedLifetime/Unsupported_Message_Type (0.00s)
+    --- PASS: TestStaticRejectEventTextAndRetainedLifetime/Invalid_tag_number (0.00s)
+    --- PASS: TestStaticRejectEventTextAndRetainedLifetime/CompID_problem (0.00s)
+    --- PASS: TestStaticRejectEventTextAndRetainedLifetime/SendingTime_accuracy_problem (0.00s)
+    --- PASS: TestStaticRejectEventTextAndRetainedLifetime/Repeating_group_fields_out_of_order (0.00s)
+    --- PASS: TestStaticRejectEventTextAndRetainedLifetime/#00 (0.00s)
+    --- PASS: TestStaticRejectEventTextAndRetainedLifetime/custom_client_A-123_rejected (0.00s)
+    --- PASS: TestStaticRejectEventTextAndRetainedLifetime/quotes"_slash\_newline__SOH\x01_café_世界 (0.00s)
+    --- PASS: TestStaticRejectEventTextAndRetainedLifetime/invalid�utf8 (0.00s)
+=== RUN   TestStaticRejectEventDynamicDispatch
+--- PASS: TestStaticRejectEventDynamicDispatch (0.00s)
+=== RUN   TestStaticRejectEventCapacityAndLegacyLifetime
+--- PASS: TestStaticRejectEventCapacityAndLegacyLifetime (0.00s)
+=== RUN   TestStaticRejectEventCapabilityNeedsBoundedSession
+--- PASS: TestStaticRejectEventCapabilityNeedsBoundedSession (0.00s)
+=== RUN   TestStaticRejectEventFilteredHook
+--- PASS: TestStaticRejectEventFilteredHook (0.00s)
+PASS
+ok  	github.com/quickfixgo/quickfix	0.814s

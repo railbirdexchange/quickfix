@@ -1,0 +1,10 @@
+starting test server
+<at>
+<test name='definitions/server/fix41/2d_GarbledMessage.def' result='success'/>
+<test name='definitions/server/fix41/2m_BodyLengthValueNotCorrect.def' result='success'/>
+<test name='definitions/server/fix41/2t_FirstThreeFieldsOutOfOrder.def' result='success'/>
+<test name='definitions/server/fix41/3b_InvalidChecksum.def' result='success'/>
+<test name='definitions/server/fix41/3c_GarbledMessage.def' result='success'/>
+
+<results total='5' failures='0'/>
+</at>

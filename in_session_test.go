@@ -340,7 +340,7 @@ func builtAppMessages(built [][]byte) [][]byte {
 
 func (s *InSessionTestSuite) TestFIXMsgInResendRequestReportsReplayedAppBytesToBuiltMessageObserver() {
 	app := &builtObservingApp{MockApp: &s.MockApp}
-	s.session.application = app
+	s.session.setApplication(app)
 
 	s.MockApp.On("ToAdmin")
 	s.session.Timeout(s.session, internal.NeedHeartbeat)
@@ -380,7 +380,7 @@ func (s *InSessionTestSuite) TestFIXMsgInResendRequestReportsReplayedAppBytesToB
 
 func (s *InSessionTestSuite) TestFIXMsgInResendRequestDoesNotReportSkippedAppMessagesToBuiltMessageObserver() {
 	app := &builtObservingApp{MockApp: &s.MockApp}
-	s.session.application = app
+	s.session.setApplication(app)
 
 	s.MockApp.On("ToApp").Return(nil).Once()
 	s.Require().Nil(s.session.send(s.NewOrderSingle()))

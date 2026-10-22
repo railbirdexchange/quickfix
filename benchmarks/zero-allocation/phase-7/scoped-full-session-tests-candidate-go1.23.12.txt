@@ -1,0 +1,16 @@
+?   	github.com/quickfixgo/quickfix/cmd/generate-fix	[no test files]
+?   	github.com/quickfixgo/quickfix/cmd/generate-fix/internal	[no test files]
+?   	github.com/quickfixgo/quickfix/config	[no test files]
+?   	github.com/quickfixgo/quickfix/internal/testsuite	[no test files]
+?   	github.com/quickfixgo/quickfix/log/screen	[no test files]
+ok  	github.com/quickfixgo/quickfix	23.132s
+ok  	github.com/quickfixgo/quickfix/datadictionary	1.811s
+ok  	github.com/quickfixgo/quickfix/internal	1.609s
+ok  	github.com/quickfixgo/quickfix/log/composite	1.475s
+ok  	github.com/quickfixgo/quickfix/log/file	2.141s
+ok  	github.com/quickfixgo/quickfix/log/mongo	1.069s [no tests to run]
+ok  	github.com/quickfixgo/quickfix/log/sql	2.004s
+ok  	github.com/quickfixgo/quickfix/store/file	1.342s
+ok  	github.com/quickfixgo/quickfix/store/memory	1.240s
+ok  	github.com/quickfixgo/quickfix/store/mongo	2.141s
+ok  	github.com/quickfixgo/quickfix/store/sql	2.102s

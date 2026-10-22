@@ -18,6 +18,12 @@ package quickfix
 import "io"
 
 func writeLoop(connection io.Writer, messageOut chan []byte, log Log) {
+	writeLoopWithCompletion(connection, messageOut, log, nil)
+}
+
+// The completion notification is used by ownership benchmarks to observe the
+// completed legacy write, not just an accepted channel send or entered Write.
+func writeLoopWithCompletion(connection io.Writer, messageOut chan []byte, log Log, completed chan bool) {
 	for {
 		msg, ok := <-messageOut
 		if !ok {
@@ -26,6 +32,9 @@ func writeLoop(connection io.Writer, messageOut chan []byte, log Log) {
 
 		if _, err := connection.Write(msg); err != nil {
 			log.OnEvent(err.Error())
+		}
+		if completed != nil {
+			completed <- true
 		}
 	}
 }
@@ -39,6 +48,6 @@ func readLoop(parser *parser, msgIn chan fixIn, log Log) {
 			log.OnEvent(err.Error())
 			return
 		}
-		msgIn <- fixIn{msg, parser.lastRead}
+		msgIn <- fixIn{bytes: msg, receiveTime: parser.lastRead}
 	}
 }

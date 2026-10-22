@@ -1,0 +1,7 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+cpu: Apple M4 Pro
+BenchmarkOrdinaryFullSessionRoundTrip/ordinary         	  252516	     46941 ns/op	     65536 latency-samples	   1040125 max-ns	     45042 p50-ns	     60708 p95-ns	     72958 p99-ns	     21303 requests/s	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/quickfixgo/quickfix	15.844s

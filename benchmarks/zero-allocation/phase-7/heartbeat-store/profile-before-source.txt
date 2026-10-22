@@ -1,0 +1,173 @@
+Total: 164718
+ROUTINE ======================== github.com/quickfixgo/quickfix.(*session).prepareOutbound in /Users/a.alamer/factory/worktrees/quickfix-heartbeat-lifecycle/scoped_outbound_session.go
+         0     100133 (flat, cum) 60.79% of Total
+         .          .    103:func (s *session) prepareOutbound(message, inReplyTo *Message, replacement bool) (result *outboundSlot, err error) {
+         .          .    104:	if err := message.constructionError(); err != nil {
+         .          .    105:		return nil, err
+         .          .    106:	}
+         .          .    107:	borrowed := applicationBorrowsMessages(s.application)
+         .          .    108:	if !borrowed && message != s.controls.message {
+         .          .    109:		// A caller may move a message from a borrowed application to an owned
+         .          .    110:		// one. End its reusable construction lifetime before owned delivery.
+         .          .    111:		message.Header.detachArena()
+         .          .    112:		message.Body.detachArena()
+         .          .    113:		message.Trailer.detachArena()
+         .          .    114:		message.arena = nil
+         .          .    115:	}
+         .          .    116:	// Only an explicit borrowed application can establish a reusable caller
+         .          .    117:	// arena. Single-use builders keep small owned scalars; parsed input already
+         .          .    118:	// has its own storage and reset lifecycle.
+         .          .    119:	if borrowed && (message.arena != nil || message.parseSlot == nil && !message.Header.scoped && !message.Body.scoped && !message.Trailer.scoped &&
+         .          .    120:		message.outboundOwner == message) {
+         .          .    121:		if err := message.attachMessageArena(s.boundedIn.limits.MaxFrameBytes, s.boundedIn.limits.MaxFields); err != nil {
+         .          .    122:			return nil, err
+         .          .    123:		}
+         .          .    124:	}
+         .          .    125:	ring := s.outbound
+         .          .    126:	var slot *outboundSlot
+         .          .    127:	if replacement {
+         .          .    128:		// Replacement must not flush the pending bytes it intends to discard.
+         .          .    129:		slot, err = ring.reserve(true)
+         .          .    130:	} else {
+         .          .    131:		slot, err = s.reserveOrdinaryOutput(message)
+         .          .    132:	}
+         .          .    133:	if err != nil {
+         .          .    134:		return nil, err
+         .          .    135:	}
+         .          .    136:	defer func() {
+         .          .    137:		if result == nil {
+         .          .    138:			slot.release()
+         .          .    139:		}
+         .          .    140:	}()
+         .          .    141:	messageType, reject := message.Header.GetBytes(tagMsgType)
+         .          .    142:	if reject != nil {
+         .          .    143:		return nil, reject
+         .          .    144:	}
+         .          .    145:	logon := bytes.Equal(messageType, msgTypeLogon)
+         .          .    146:	admin := isAdminMessageType(messageType)
+         .          .    147:	// Header construction can move arena bytes. An enabled observer retains an
+         .          .    148:	// owned snapshot; disabled observation needs only the booleans above.
+         .          .    149:	if sendStageObserverState.enabled.Load() {
+         .          .    150:		messageType = bytes.Clone(messageType)
+         .          .    151:	} else {
+         .          .    152:		messageType = nil
+         .          .    153:	}
+         .          .    154:	pendingReset := ring.resetPending.Load()
+         .          .    155:	if pendingReset && !logon {
+         .          .    156:		return nil, ErrOutboundResetPending
+         .          .    157:	}
+         .          .    158:	sequence := s.store.NextSenderMsgSeqNum()
+         .          .    159:	if pendingReset {
+         .          .    160:		sequence = 1
+         .          .    161:	}
+         .          .    162:	resetStore := pendingReset
+         .          .    163:	sentResetRequested := false
+         .          .    164:	if logon && message.Body.Has(tagResetSeqNumFlag) {
+         .          .    165:		if reset, reject := message.Body.GetBool(tagResetSeqNumFlag); reject == nil && reset {
+         .          .    166:			resetStore = true
+         .          .    167:		}
+         .          .    168:	}
+         .          .    169:	journal := ring.journal
+         .          .    170:	reservation := -1
+         .          .    171:	reservedReset := resetStore
+         .          .    172:	if journal != nil && !s.DisableMessagePersist {
+         .          .    173:		if resetStore {
+         .          .    174:			reservation, err = journal.reserveReset()
+         .          .    175:		} else {
+         .          .    176:			reservation, err = journal.reserve(sequence)
+         .          .    177:		}
+         .          .    178:		if err != nil {
+         .          .    179:			return nil, err
+         .          .    180:		}
+         .          .    181:		defer func() { journal.abort(reservation) }()
+         .          .    182:	}
+         .          .    183:	s.fillOutboundHeader(message, inReplyTo)
+         .          .    184:	message.setOutboundInt(&message.Header.FieldMap, outboundSequence, tagMsgSeqNum, sequence)
+         .          .    185:	if admin {
+         .          .    186:		started := startSendStage()
+         .          .    187:		message, err = s.toAdmin(message)
+         .          .    188:		if err != nil {
+         .          .    189:			return nil, err
+         .          .    190:		}
+         .          .    191:		s.finishPreparedSendStage("to_admin", messageType, started, true)
+         .          .    192:		if logon {
+         .          .    193:			reset := false
+         .          .    194:			if message.Body.Has(tagResetSeqNumFlag) {
+         .          .    195:				reset, reject = message.Body.GetBool(tagResetSeqNumFlag)
+         .          .    196:				if reject != nil {
+         .          .    197:					return nil, reject
+         .          .    198:				}
+         .          .    199:			}
+         .          .    200:			resetStore = pendingReset || reset
+         .          .    201:			sentResetRequested = reset
+         .          .    202:			if resetStore {
+         .          .    203:				sequence = 1
+         .          .    204:			}
+         .          .    205:			if reset {
+         .          .    206:				message.setOutboundInt(&message.Header.FieldMap, outboundSequence, tagMsgSeqNum, sequence)
+         .          .    207:			}
+         .          .    208:		}
+         .          .    209:	} else {
+         .          .    210:		started := startSendStage()
+         .          .    211:		err = s.application.ToApp(message, s.sessionID)
+         .          .    212:		s.finishPreparedSendStage("to_app", messageType, started, err == nil)
+         .          .    213:		if err != nil {
+         .          .    214:			return nil, err
+         .          .    215:		}
+         .          .    216:	}
+         .          .    217:	if reservation >= 0 && resetStore != reservedReset {
+         .          .    218:		journal.abort(reservation)
+         .          .    219:		reservation = -1
+         .          .    220:		if resetStore {
+         .          .    221:			reservation, err = journal.reserveReset()
+         .          .    222:		} else {
+         .          .    223:			reservation, err = journal.reserve(sequence)
+         .          .    224:		}
+         .          .    225:		if err != nil {
+         .          .    226:			return nil, err
+         .          .    227:		}
+         .          .    228:	}
+         .          .    229:	started := startSendStage()
+         .          .    230:	slot.wire, err = message.AppendTo(slot.wire[:0])
+         .          .    231:	if err != nil {
+         .          .    232:		s.finishPreparedSendStage("build_message", messageType, started, false)
+         .          .    233:		return nil, err
+         .          .    234:	}
+         .          .    235:	message.retainOutboundFraming(slot.wire)
+         .          .    236:	if err := message.constructionError(); err != nil {
+         .          .    237:		return nil, err
+         .          .    238:	}
+         .          .    239:	if reservation >= 0 {
+         .          .    240:		// A valid retained frame must fit the configured replay metadata as
+         .          .    241:		// well as its byte slot. This is capacity admission, not new outgoing
+         .          .    242:		// dictionary validation: legacy semantic parse errors are unchanged.
+         .          .    243:		ring.replay.Reset()
+         .          .    244:		parseError := ring.replay.Parse(slot.wire)
+         .          .    245:		ring.replay.Reset()
+         .          .    246:		if isInboundCapacityError(parseError) {
+         .          .    247:			s.finishPreparedSendStage("build_message", messageType, started, false)
+         .          .    248:			return nil, parseError
+         .          .    249:		}
+         .          .    250:	}
+         .          .    251:	s.finishPreparedSendStage("build_message", messageType, started, true)
+         .          .    252:	started = startSendStage()
+         .          .    253:	if reservation >= 0 {
+         .          .    254:		if resetStore {
+         .          .    255:			err = journal.commitReset(reservation, slot.wire)
+         .          .    256:		} else {
+         .          .    257:			err = journal.commit(reservation, sequence, slot.wire, true)
+         .          .    258:		}
+         .          .    259:	} else {
+         .          .    260:		if resetStore {
+         .          .    261:			err = s.store.Reset()
+         .          .    262:		}
+         .          .    263:		if err == nil {
+         .          .    264:			if s.DisableMessagePersist {
+         .          .    265:				err = s.store.IncrNextSenderMsgSeqNum()
+         .          .    266:			} else {
+         .     100133    267:				err = s.store.SaveMessageAndIncrNextSenderMsgSeqNum(sequence, bytes.Clone(slot.wire))
+         .          .    268:			}
+         .          .    269:		}
+         .          .    270:	}
+         .          .    271:	s.finishPreparedSendStage("persist", messageType, started, err == nil)
+         .          .    272:	if err != nil {

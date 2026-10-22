@@ -1,0 +1,6 @@
+Warning: Permanently added '192.168.252.5' (ED25519) to the list of known hosts.
+goos: linux
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+BenchmarkOrdinaryFullSessionReadToWrite/ordinary         	  568086	     21867 ns/op	     65536 latency-samples	    325875 read-write-max-ns	      6958 read-write-p50-ns	      7875 read-write-p95-ns	     12958 read-write-p99-ns	     45731 requests/s	    841291 rtt-max-ns	     21333 rtt-p50-ns	     25791 rtt-p95-ns	     33709 rtt-p99-ns	       0 B/op	       0 allocs/op
+PASS

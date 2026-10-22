@@ -1,0 +1,8 @@
+cd _test; go build -v -o echo_server ./test-server/
+github.com/quickfixgo/quickfix
+github.com/quickfixgo/quickfix/gen/tag
+github.com/quickfixgo/quickfix/store/mongo
+github.com/quickfixgo/quickfix/store/file
+github.com/quickfixgo/quickfix/log/file
+github.com/quickfixgo/quickfix/gen/field
+github.com/quickfixgo/quickfix/_test/test-server

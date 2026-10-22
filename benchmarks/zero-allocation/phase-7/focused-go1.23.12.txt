@@ -1,0 +1,60 @@
+=== RUN   TestBoundedSequenceEventGoldenText
+=== RUN   TestBoundedSequenceEventGoldenText/MsgSeqNum_too_high,_expecting_12_but_received_34
+=== RUN   TestBoundedSequenceEventGoldenText/Sent_ResendRequest_FROM:_12_TO:_34
+=== RUN   TestBoundedSequenceEventGoldenText/Received_ResendRequest_FROM:_12_TO:_34
+=== RUN   TestBoundedSequenceEventGoldenText/Sent_SequenceReset_TO:_12
+=== RUN   TestBoundedSequenceEventGoldenText/Received_SequenceReset_FROM:_12_TO:_34
+=== RUN   TestBoundedSequenceEventGoldenText/Resending_Message:_12
+=== RUN   TestBoundedSequenceEventGoldenText/Draining_12_messages_from_inbound_channel...
+--- PASS: TestBoundedSequenceEventGoldenText (0.00s)
+    --- PASS: TestBoundedSequenceEventGoldenText/MsgSeqNum_too_high,_expecting_12_but_received_34 (0.00s)
+    --- PASS: TestBoundedSequenceEventGoldenText/Sent_ResendRequest_FROM:_12_TO:_34 (0.00s)
+    --- PASS: TestBoundedSequenceEventGoldenText/Received_ResendRequest_FROM:_12_TO:_34 (0.00s)
+    --- PASS: TestBoundedSequenceEventGoldenText/Sent_SequenceReset_TO:_12 (0.00s)
+    --- PASS: TestBoundedSequenceEventGoldenText/Received_SequenceReset_FROM:_12_TO:_34 (0.00s)
+    --- PASS: TestBoundedSequenceEventGoldenText/Resending_Message:_12 (0.00s)
+    --- PASS: TestBoundedSequenceEventGoldenText/Draining_12_messages_from_inbound_channel... (0.00s)
+=== RUN   TestBoundedSequenceEventIntegerBounds
+--- PASS: TestBoundedSequenceEventIntegerBounds (0.00s)
+=== RUN   TestBoundedSequenceEventLegacyLifetime
+--- PASS: TestBoundedSequenceEventLegacyLifetime (0.00s)
+=== RUN   TestBoundedSequenceEventCapabilityRequiresOwnedScratch
+--- PASS: TestBoundedSequenceEventCapabilityRequiresOwnedScratch (0.00s)
+=== RUN   TestBoundedSequenceEventsWarmedNoAllocations
+--- PASS: TestBoundedSequenceEventsWarmedNoAllocations (0.00s)
+=== RUN   TestBoundedFullSessionExactAllocations
+=== RUN   TestBoundedFullSessionExactAllocations/ordinary
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+=== RUN   TestBoundedFullSessionExactAllocations/groups
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+=== RUN   TestBoundedFullSessionExactAllocations/outbound_resend
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+=== RUN   TestBoundedFullSessionExactAllocations/inbound_gap
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+=== RUN   TestBoundedFullSessionExactAllocations/slow_consumer
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+=== RUN   TestBoundedFullSessionExactAllocations/warmed_post_reconnect
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+--- PASS: TestBoundedFullSessionExactAllocations (5.81s)
+    --- PASS: TestBoundedFullSessionExactAllocations/ordinary (0.77s)
+    --- PASS: TestBoundedFullSessionExactAllocations/groups (1.01s)
+    --- PASS: TestBoundedFullSessionExactAllocations/outbound_resend (0.90s)
+    --- PASS: TestBoundedFullSessionExactAllocations/inbound_gap (1.01s)
+    --- PASS: TestBoundedFullSessionExactAllocations/slow_consumer (1.31s)
+    --- PASS: TestBoundedFullSessionExactAllocations/warmed_post_reconnect (0.80s)
+=== RUN   TestBoundedRecoveryPointerTimeoutAndSecondRecovery
+=== RUN   TestBoundedRecoveryPointerTimeoutAndSecondRecovery/bounded_output=false
+=== RUN   TestBoundedRecoveryPointerTimeoutAndSecondRecovery/bounded_output=true
+--- PASS: TestBoundedRecoveryPointerTimeoutAndSecondRecovery (0.00s)
+    --- PASS: TestBoundedRecoveryPointerTimeoutAndSecondRecovery/bounded_output=false (0.00s)
+    --- PASS: TestBoundedRecoveryPointerTimeoutAndSecondRecovery/bounded_output=true (0.00s)
+=== RUN   TestBoundedRecoveryPendingPeerTimeoutReleasesStash
+=== RUN   TestBoundedRecoveryPendingPeerTimeoutReleasesStash/bounded_output=false
+=== RUN   TestBoundedRecoveryPendingPeerTimeoutReleasesStash/bounded_output=true
+--- PASS: TestBoundedRecoveryPendingPeerTimeoutReleasesStash (0.00s)
+    --- PASS: TestBoundedRecoveryPendingPeerTimeoutReleasesStash/bounded_output=false (0.00s)
+    --- PASS: TestBoundedRecoveryPendingPeerTimeoutReleasesStash/bounded_output=true (0.00s)
+=== RUN   TestBoundedRecoveryInSessionPendingCellReuse
+--- PASS: TestBoundedRecoveryInSessionPendingCellReuse (0.00s)
+PASS
+ok  	github.com/quickfixgo/quickfix	6.477s

@@ -1,0 +1,7 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+cpu: Apple M4 Pro
+BenchmarkHeartbeatStore/idle_heartbeat/borrowed_external         	  100000	      3093 ns/op	      80 B/op	       1 allocs/op
+PASS
+ok  	github.com/quickfixgo/quickfix	1.297s

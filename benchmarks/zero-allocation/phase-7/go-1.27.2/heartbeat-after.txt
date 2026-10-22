@@ -1,0 +1,51 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+cpu: Apple M4 Pro
+BenchmarkHeartbeatStore/idle_heartbeat/bounded         	  550446	      1823 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHeartbeatStore/idle_heartbeat/bounded         	  669138	      1814 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHeartbeatStore/idle_heartbeat/bounded         	  662289	      1800 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHeartbeatStore/idle_heartbeat/bounded         	  676041	      1832 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHeartbeatStore/idle_heartbeat/bounded         	  608388	      1835 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHeartbeatStore/idle_heartbeat/legacy_external 	  729830	      1617 ns/op	      80 B/op	       1 allocs/op
+BenchmarkHeartbeatStore/idle_heartbeat/legacy_external 	  779233	      1612 ns/op	      80 B/op	       1 allocs/op
+BenchmarkHeartbeatStore/idle_heartbeat/legacy_external 	  757724	      1588 ns/op	      80 B/op	       1 allocs/op
+BenchmarkHeartbeatStore/idle_heartbeat/legacy_external 	  752256	      1584 ns/op	      80 B/op	       1 allocs/op
+BenchmarkHeartbeatStore/idle_heartbeat/legacy_external 	  758289	      1560 ns/op	      80 B/op	       1 allocs/op
+BenchmarkHeartbeatStore/idle_heartbeat/borrowed_external         	  789631	      1571 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHeartbeatStore/idle_heartbeat/borrowed_external         	  748611	      1576 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHeartbeatStore/idle_heartbeat/borrowed_external         	  773290	      1581 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHeartbeatStore/idle_heartbeat/borrowed_external         	  781279	      1588 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHeartbeatStore/idle_heartbeat/borrowed_external         	  779523	      1572 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHeartbeatStore/timer_heartbeat/bounded                  	  532180	      2330 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHeartbeatStore/timer_heartbeat/bounded                  	  517059	      2294 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHeartbeatStore/timer_heartbeat/bounded                  	  503049	      2327 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHeartbeatStore/timer_heartbeat/bounded                  	  526545	      2319 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHeartbeatStore/timer_heartbeat/bounded                  	  518546	      2333 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHeartbeatStore/timer_heartbeat/legacy_external          	  549352	      2110 ns/op	      80 B/op	       1 allocs/op
+BenchmarkHeartbeatStore/timer_heartbeat/legacy_external          	  565077	      2089 ns/op	      80 B/op	       1 allocs/op
+BenchmarkHeartbeatStore/timer_heartbeat/legacy_external          	  580539	      2080 ns/op	      80 B/op	       1 allocs/op
+BenchmarkHeartbeatStore/timer_heartbeat/legacy_external          	  568390	      2092 ns/op	      80 B/op	       1 allocs/op
+BenchmarkHeartbeatStore/timer_heartbeat/legacy_external          	  582111	      2072 ns/op	      80 B/op	       1 allocs/op
+BenchmarkHeartbeatStore/timer_heartbeat/borrowed_external        	  579402	      2041 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHeartbeatStore/timer_heartbeat/borrowed_external        	  582975	      2068 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHeartbeatStore/timer_heartbeat/borrowed_external        	  570447	      2106 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHeartbeatStore/timer_heartbeat/borrowed_external        	  569251	      2073 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHeartbeatStore/timer_heartbeat/borrowed_external        	  571522	      2095 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHeartbeatStore/test_request/bounded                     	  619366	      1970 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHeartbeatStore/test_request/bounded                     	  602625	      1979 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHeartbeatStore/test_request/bounded                     	  625530	      1956 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHeartbeatStore/test_request/bounded                     	  614444	      1926 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHeartbeatStore/test_request/bounded                     	  613936	      1938 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHeartbeatStore/test_request/legacy_external             	  644738	      1754 ns/op	      80 B/op	       1 allocs/op
+BenchmarkHeartbeatStore/test_request/legacy_external             	  698784	      1739 ns/op	      80 B/op	       1 allocs/op
+BenchmarkHeartbeatStore/test_request/legacy_external             	  667641	      1731 ns/op	      80 B/op	       1 allocs/op
+BenchmarkHeartbeatStore/test_request/legacy_external             	  729703	      1721 ns/op	      80 B/op	       1 allocs/op
+BenchmarkHeartbeatStore/test_request/legacy_external             	  733100	      1721 ns/op	      80 B/op	       1 allocs/op
+BenchmarkHeartbeatStore/test_request/borrowed_external           	  685114	      1724 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHeartbeatStore/test_request/borrowed_external           	  705812	      1700 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHeartbeatStore/test_request/borrowed_external           	  725095	      1694 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHeartbeatStore/test_request/borrowed_external           	  735505	      1693 ns/op	       0 B/op	       0 allocs/op
+BenchmarkHeartbeatStore/test_request/borrowed_external           	  711676	      1725 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/quickfixgo/quickfix	55.765s

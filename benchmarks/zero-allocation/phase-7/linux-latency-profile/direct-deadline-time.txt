@@ -1,0 +1,58 @@
+File: quickfix-linux-arm64.test
+Type: cpu
+Time: Oct 16, 2026 at 11:00am (EDT)
+Duration: 15.91s, Total samples = 12.77s (80.25%)
+Active filters:
+   focus=SetWriteDeadline|setDeadlineImpl|setSendingTime|setOutboundTime|fillOutbou…
+Showing nodes accounting for 0.23s, 1.80% of 12.77s total
+      flat  flat%   sum%        cum   cum%
+         0     0%     0%      0.17s  1.33%  github.com/quickfixgo/quickfix.(*boundedFullApplication).FromApp
+         0     0%     0%      0.17s  1.33%  github.com/quickfixgo/quickfix.(*boundedFullApplication).handleOrder
+         0     0%     0%      0.17s  1.33%  github.com/quickfixgo/quickfix.(*boundedFullApplication).handleReport
+         0     0%     0%      0.17s  1.33%  github.com/quickfixgo/quickfix.(*session).fillOutboundHeader
+         0     0%     0%      0.17s  1.33%  github.com/quickfixgo/quickfix.(*session).fromCallback
+         0     0%     0%      0.17s  1.33%  github.com/quickfixgo/quickfix.(*session).prepareOutbound
+         0     0%     0%      0.17s  1.33%  github.com/quickfixgo/quickfix.(*session).queueForSend
+         0     0%     0%      0.17s  1.33%  github.com/quickfixgo/quickfix.(*session).run
+         0     0%     0%      0.17s  1.33%  github.com/quickfixgo/quickfix.(*session).verify (inline)
+         0     0%     0%      0.17s  1.33%  github.com/quickfixgo/quickfix.(*session).verifyMsgAgainstAppImpl
+         0     0%     0%      0.17s  1.33%  github.com/quickfixgo/quickfix.(*session).verifySelect
+         0     0%     0%      0.17s  1.33%  github.com/quickfixgo/quickfix.(*stateMachine).Incoming
+         0     0%     0%      0.17s  1.33%  github.com/quickfixgo/quickfix.SendToTarget
+         0     0%     0%      0.17s  1.33%  github.com/quickfixgo/quickfix.inSession.FixMsgIn
+         0     0%     0%      0.17s  1.33%  github.com/quickfixgo/quickfix.installOrdinaryReadToWriteMeasurement.func1.1
+         0     0%     0%      0.17s  1.33%  github.com/quickfixgo/quickfix.newBoundedFullSession.func1
+         0     0%     0%      0.11s  0.86%  github.com/quickfixgo/quickfix.(*Message).setOutboundTime
+         0     0%     0%      0.06s  0.47%  github.com/quickfixgo/quickfix.(*outboundWriter).run
+         0     0%     0%      0.06s  0.47%  github.com/quickfixgo/quickfix.(*outboundWriter).write
+     0.01s 0.078% 0.078%      0.06s  0.47%  github.com/quickfixgo/quickfix.FIXUTCTimestamp.AppendTo
+         0     0% 0.078%      0.06s  0.47%  internal/poll.(*FD).SetWriteDeadline (inline)
+     0.01s 0.078%  0.16%      0.06s  0.47%  internal/poll.setDeadlineImpl
+         0     0%  0.16%      0.06s  0.47%  net.(*conn).SetWriteDeadline
+         0     0%  0.16%      0.06s  0.47%  net.(*netFD).SetWriteDeadline (inline)
+         0     0%  0.16%      0.05s  0.39%  github.com/quickfixgo/quickfix.(*Message).setOutboundField
+         0     0%  0.16%      0.05s  0.39%  time.Time.AppendFormat
+     0.02s  0.16%  0.31%      0.05s  0.39%  time.Time.appendFormat
+         0     0%  0.31%      0.04s  0.31%  github.com/quickfixgo/quickfix.setCanonicalIdentity
+     0.02s  0.16%  0.47%      0.04s  0.31%  internal/poll.runtime_pollSetDeadline
+         0     0%  0.47%      0.03s  0.23%  github.com/quickfixgo/quickfix.(*messageArena).setScalar
+     0.03s  0.23%   0.7%      0.03s  0.23%  runtime.nanotime (partial-inline)
+     0.03s  0.23%  0.94%      0.03s  0.23%  time.nextStdChunk
+     0.02s  0.16%  1.10%      0.02s  0.16%  github.com/quickfixgo/quickfix.(*FieldMap).lookup
+     0.01s 0.078%  1.17%      0.02s  0.16%  github.com/quickfixgo/quickfix.(*FieldMap).mutableArena
+     0.01s 0.078%  1.25%      0.02s  0.16%  strconv.AppendInt
+         0     0%  1.25%      0.02s  0.16%  time.Now
+     0.01s 0.078%  1.33%      0.02s  0.16%  time.now
+     0.01s 0.078%  1.41%      0.01s 0.078%  github.com/quickfixgo/quickfix.(*FieldMap).fixedGetOrCreate
+     0.01s 0.078%  1.49%      0.01s 0.078%  github.com/quickfixgo/quickfix.(*fixedFieldMap).find
+         0     0%  1.49%      0.01s 0.078%  github.com/quickfixgo/quickfix.(*messageArena).find
+     0.01s 0.078%  1.57%      0.01s 0.078%  github.com/quickfixgo/quickfix.(*messageArena).intact (inline)
+         0     0%  1.57%      0.01s 0.078%  github.com/quickfixgo/quickfix.(*messageArena).scalarFits
+     0.01s 0.078%  1.64%      0.01s 0.078%  github.com/quickfixgo/quickfix.intTextLength (inline)
+         0     0%  1.64%      0.01s 0.078%  runtime.(*timer).lock (inline)
+         0     0%  1.64%      0.01s 0.078%  runtime.(*timer).modify
+         0     0%  1.64%      0.01s 0.078%  runtime.lock (inline)
+     0.01s 0.078%  1.72%      0.01s 0.078%  runtime.lock2
+         0     0%  1.72%      0.01s 0.078%  runtime.lockWithRank (inline)
+     0.01s 0.078%  1.80%      0.01s 0.078%  runtime.memmove
+         0     0%  1.80%      0.01s 0.078%  time.Until

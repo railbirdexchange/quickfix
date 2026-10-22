@@ -1,0 +1,28 @@
+=== RUN   TestBoundedFullSessionExactAllocations
+=== RUN   TestBoundedFullSessionExactAllocations/ordinary
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+=== RUN   TestBoundedFullSessionExactAllocations/groups
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+=== RUN   TestBoundedFullSessionExactAllocations/outbound_resend
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+=== RUN   TestBoundedFullSessionExactAllocations/inbound_gap
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=1 total_alloc_bytes_delta=48
+    bounded_full_session_allocations_test.go:56:
+        Error Trace:	/Users/a.alamer/factory/worktrees/quickfix-zero-alloc-session/bounded_full_session_allocations_test.go:56
+        Error:      	Should be zero, but was 1
+        Test:       	TestBoundedFullSessionExactAllocations/inbound_gap
+        Messages:   	the full warmed interval must have no heap allocation
+=== RUN   TestBoundedFullSessionExactAllocations/slow_consumer
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+=== RUN   TestBoundedFullSessionExactAllocations/warmed_post_reconnect
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+--- FAIL: TestBoundedFullSessionExactAllocations (5.53s)
+    --- PASS: TestBoundedFullSessionExactAllocations/ordinary (0.47s)
+    --- PASS: TestBoundedFullSessionExactAllocations/groups (1.02s)
+    --- PASS: TestBoundedFullSessionExactAllocations/outbound_resend (0.91s)
+    --- FAIL: TestBoundedFullSessionExactAllocations/inbound_gap (1.01s)
+    --- PASS: TestBoundedFullSessionExactAllocations/slow_consumer (1.32s)
+    --- PASS: TestBoundedFullSessionExactAllocations/warmed_post_reconnect (0.80s)
+FAIL
+FAIL	github.com/quickfixgo/quickfix	6.237s
+FAIL

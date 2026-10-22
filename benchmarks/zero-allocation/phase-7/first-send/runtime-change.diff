@@ -1,0 +1,123 @@
+diff --git a/message.go b/message.go
+index bc843de5..7681b483 100644
+--- a/message.go
++++ b/message.go
+@@ -127,6 +127,7 @@ type Message struct {
+ 	// CopyInto must not transfer its input-frame or parse-storage ownership.
+ 	parseSlot      *MessageSlot
+ 	outboundFields *outboundFields
++	outboundOwner  *Message // Identifies a prior successful send of this exact representation.
+ 	arena          *messageArena
+ }
+ 
+@@ -159,6 +160,7 @@ func (m *Message) CopyInto(to *Message) {
+ 	if err := m.constructionError(); err != nil {
+ 		panic(err)
+ 	}
++	to.outboundOwner = nil
+ 	if to.outboundFields != nil && to.outboundFields.owner != to {
+ 		to.outboundFields = nil
+ 	}
+@@ -218,6 +220,7 @@ func ParseMessageWithDataDictionary(
+ 	msg.Body.detachArena()
+ 	msg.Trailer.detachArena()
+ 	msg.arena = nil
++	msg.outboundOwner = nil
+ 	if msg.parseSlot != nil {
+ 		// Convenience parsing may reuse the original slab beyond the bounded
+ 		// parser's high-water mark, then shrink or replace the visible slice.
+diff --git a/scoped_outbound_fields.go b/scoped_outbound_fields.go
+index cbd186a0..5a9d6570 100644
+--- a/scoped_outbound_fields.go
++++ b/scoped_outbound_fields.go
+@@ -17,15 +17,20 @@ const (
+ 	outboundFieldCount
+ )
+ 
+-// First-use engine scalar storage belongs to the caller's Message and is never
+-// transferred to the socket writer. Repeated ordinary sends attach the full
+-// construction arena; explicit copies detach both kinds of reusable storage.
++// Engine scalar storage belongs to a reused caller Message or session parse
++// slot and is never transferred to the socket writer. A fresh ordinary Message
++// uses small owned scalar values until a second send establishes its scope.
+ type outboundFields struct {
+ 	owner   *Message
+ 	buffers [outboundFieldCount][80]byte
+ 	values  [outboundFieldCount][80]byte
+ }
+ 
++func (message *Message) hasOutboundScope() bool {
++	return message.arena != nil || message.parseSlot != nil ||
++		message.outboundFields != nil && message.outboundFields.owner == message
++}
++
+ func (message *Message) outboundFieldBuffer(index int) []byte {
+ 	if message.outboundFields == nil || message.outboundFields.owner != message {
+ 		message.outboundFields = &outboundFields{owner: message}
+@@ -50,6 +55,10 @@ func (message *Message) setOutboundField(fields *FieldMap, index int, tag Tag, w
+ }
+ 
+ func (message *Message) setOutboundInt(fields *FieldMap, index int, tag Tag, value int) {
++	if !message.hasOutboundScope() {
++		fields.SetInt(tag, value)
++		return
++	}
+ 	wire := strconv.AppendInt(message.outboundFieldBuffer(index), int64(tag), 10)
+ 	wire = append(wire, '=')
+ 	valueOffset := len(wire)
+@@ -59,6 +68,10 @@ func (message *Message) setOutboundInt(fields *FieldMap, index int, tag Tag, val
+ }
+ 
+ func (message *Message) setOutboundBool(fields *FieldMap, index int, tag Tag, value bool) {
++	if !message.hasOutboundScope() {
++		fields.SetBool(tag, value)
++		return
++	}
+ 	wire := strconv.AppendInt(message.outboundFieldBuffer(index), int64(tag), 10)
+ 	wire = append(wire, '=')
+ 	valueOffset := len(wire)
+@@ -71,6 +84,12 @@ func (message *Message) setOutboundBool(fields *FieldMap, index int, tag Tag, va
+ }
+ 
+ func (message *Message) setOutboundBytes(fields *FieldMap, index int, tag Tag, value []byte) {
++	if !message.hasOutboundScope() {
++		// Internal values may borrow an input frame or the writer's output
++		// slot. SetBytes copies wire bytes but retains its getter's input.
++		fields.SetBytes(tag, bytes.Clone(value))
++		return
++	}
+ 	wire := strconv.AppendInt(message.outboundFieldBuffer(index), int64(tag), 10)
+ 	wire = append(wire, '=')
+ 	valueOffset := len(wire)
+@@ -86,6 +105,10 @@ func (message *Message) setOutboundBytes(fields *FieldMap, index int, tag Tag, v
+ }
+ 
+ func (message *Message) setOutboundTime(value time.Time, precision TimestampPrecision) {
++	if !message.hasOutboundScope() {
++		message.Header.SetField(tagSendingTime, FIXUTCTimestamp{Time: value, Precision: precision})
++		return
++	}
+ 	wire := append(message.outboundFieldBuffer(outboundTimestamp), '5', '2', '=')
+ 	timestamp := FIXUTCTimestamp{Time: value, Precision: precision}
+ 	wire, err := timestamp.AppendTo(wire)
+diff --git a/scoped_outbound_session.go b/scoped_outbound_session.go
+index 5dae42ee..e1a2e9e2 100644
+--- a/scoped_outbound_session.go
++++ b/scoped_outbound_session.go
+@@ -107,7 +107,7 @@ func (s *session) prepareOutbound(message, inReplyTo *Message, replacement bool)
+ 	// a full fixed arena on single-use legacy builders. Incoming parsed slots
+ 	// already have their own session-owned storage and reset lifecycle.
+ 	if message.arena != nil || message.parseSlot == nil && !message.Header.scoped && !message.Body.scoped && !message.Trailer.scoped &&
+-		message.outboundFields != nil && message.outboundFields.owner == message {
++		message.outboundOwner == message {
+ 		if err := message.attachMessageArena(s.boundedIn.limits.MaxFrameBytes, s.boundedIn.limits.MaxFields); err != nil {
+ 			return nil, err
+ 		}
+@@ -264,6 +264,7 @@ func (s *session) prepareOutbound(message, inReplyTo *Message, replacement bool)
+ 		ring.scheduledResetPending.Store(false)
+ 		s.sentReset = sentResetRequested
+ 	}
++	message.outboundOwner = message
+ 	return slot, nil
+ }
+ 

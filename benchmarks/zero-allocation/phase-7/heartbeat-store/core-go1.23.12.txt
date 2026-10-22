@@ -1,0 +1,7 @@
+ok  	github.com/quickfixgo/quickfix	31.319s
+ok  	github.com/quickfixgo/quickfix/internal	0.439s
+ok  	github.com/quickfixgo/quickfix/datadictionary	0.461s
+ok  	github.com/quickfixgo/quickfix/store/memory	0.428s
+ok  	github.com/quickfixgo/quickfix/store/file	1.008s
+ok  	github.com/quickfixgo/quickfix/log/composite	0.646s
+ok  	github.com/quickfixgo/quickfix/log/file	0.375s

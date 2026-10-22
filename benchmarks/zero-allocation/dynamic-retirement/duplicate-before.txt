@@ -1,0 +1,11 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+cpu: Apple M4 Pro
+BenchmarkDynamicSessionDuplicateCreation 	    7233	    143755 ns/op	 2382232 B/op	      86 allocs/op
+BenchmarkDynamicSessionDuplicateCreation 	   10730	    107282 ns/op	 2382232 B/op	      86 allocs/op
+BenchmarkDynamicSessionDuplicateCreation 	   16772	     78347 ns/op	 2382232 B/op	      86 allocs/op
+BenchmarkDynamicSessionDuplicateCreation 	   15651	     77622 ns/op	 2382232 B/op	      86 allocs/op
+BenchmarkDynamicSessionDuplicateCreation 	   16934	     73316 ns/op	 2382232 B/op	      86 allocs/op
+PASS
+ok  	github.com/quickfixgo/quickfix	10.218s

@@ -1,0 +1,16 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+cpu: Apple M4 Pro
+BenchmarkBoundedValidation/new_order_single         	 1503355	       799.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBoundedValidation/new_order_single         	 1492563	       809.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBoundedValidation/new_order_single         	 1496162	       795.9 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBoundedValidation/new_order_single         	 1496206	       802.2 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBoundedValidation/new_order_single         	 1491112	       797.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBoundedValidation/nested_groups            	 1446904	       839.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBoundedValidation/nested_groups            	 1413396	       844.9 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBoundedValidation/nested_groups            	 1488807	       844.7 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBoundedValidation/nested_groups            	 1427116	       835.4 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBoundedValidation/nested_groups            	 1439624	       823.1 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/quickfixgo/quickfix	20.655s

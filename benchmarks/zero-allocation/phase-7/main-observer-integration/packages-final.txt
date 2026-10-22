@@ -1,0 +1,26 @@
+--- FAIL: TestBoundedFullSessionExactAllocations (9.86s)
+    --- FAIL: TestBoundedFullSessionExactAllocations/ordinary (0.89s)
+        bounded_full_session_allocations_test.go:45: completed_cycles=100 total_mallocs_delta=1 total_alloc_bytes_delta=48
+        bounded_full_session_allocations_test.go:48: 
+            	Error Trace:	/Users/a.alamer/factory/worktrees/quickfix-generic-session-registry/bounded_full_session_allocations_test.go:48
+            	Error:      	Should be zero, but was 1
+            	Test:       	TestBoundedFullSessionExactAllocations/ordinary
+            	Messages:   	the full warmed interval must have no heap allocation
+FAIL
+FAIL	github.com/quickfixgo/quickfix	38.150s
+?   	github.com/quickfixgo/quickfix/cmd/generate-fix	[no test files]
+?   	github.com/quickfixgo/quickfix/cmd/generate-fix/internal	[no test files]
+?   	github.com/quickfixgo/quickfix/config	[no test files]
+ok  	github.com/quickfixgo/quickfix/datadictionary	0.285s
+ok  	github.com/quickfixgo/quickfix/internal	0.212s
+?   	github.com/quickfixgo/quickfix/internal/testsuite	[no test files]
+ok  	github.com/quickfixgo/quickfix/log/composite	0.316s
+ok  	github.com/quickfixgo/quickfix/log/file	0.222s
+ok  	github.com/quickfixgo/quickfix/log/mongo	0.289s [no tests to run]
+?   	github.com/quickfixgo/quickfix/log/screen	[no test files]
+ok  	github.com/quickfixgo/quickfix/log/sql	0.280s
+ok  	github.com/quickfixgo/quickfix/store/file	0.552s
+ok  	github.com/quickfixgo/quickfix/store/memory	0.259s
+ok  	github.com/quickfixgo/quickfix/store/mongo	0.298s
+ok  	github.com/quickfixgo/quickfix/store/sql	0.304s
+FAIL

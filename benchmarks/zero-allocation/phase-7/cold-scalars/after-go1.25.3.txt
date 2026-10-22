@@ -1,0 +1,16 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+cpu: Apple M4 Pro
+BenchmarkScopedOutboundFirstSend/fresh_message         	  355791	      2946 ns/op	    2760 B/op	      24 allocs/op
+BenchmarkScopedOutboundFirstSend/fresh_message         	  414322	      2910 ns/op	    2760 B/op	      24 allocs/op
+BenchmarkScopedOutboundFirstSend/fresh_message         	  389193	      2939 ns/op	    2760 B/op	      24 allocs/op
+BenchmarkScopedOutboundFirstSend/fresh_message         	  387810	      2940 ns/op	    2760 B/op	      24 allocs/op
+BenchmarkScopedOutboundFirstSend/fresh_message         	  409729	      3041 ns/op	    2760 B/op	      24 allocs/op
+BenchmarkScopedOutboundFirstSend/reparsed_message      	  457332	      2569 ns/op	      88 B/op	       4 allocs/op
+BenchmarkScopedOutboundFirstSend/reparsed_message      	  478486	      2500 ns/op	      88 B/op	       4 allocs/op
+BenchmarkScopedOutboundFirstSend/reparsed_message      	  475509	      2491 ns/op	      88 B/op	       4 allocs/op
+BenchmarkScopedOutboundFirstSend/reparsed_message      	  472814	      2523 ns/op	      88 B/op	       4 allocs/op
+BenchmarkScopedOutboundFirstSend/reparsed_message      	  451690	      2476 ns/op	      88 B/op	       4 allocs/op
+PASS
+ok  	github.com/quickfixgo/quickfix	12.764s

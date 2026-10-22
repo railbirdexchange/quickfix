@@ -70,26 +70,40 @@ func (f sessionFactory) createSession(
 	sessionID SessionID, storeFactory MessageStoreFactory, settings *SessionSettings,
 	logFactory LogFactory, application Application,
 ) (session *session, err error) {
+	return f.createOwnedSession(sessionID, storeFactory, settings, logFactory, application, false)
+}
+
+func (f sessionFactory) createOwnedSession(
+	sessionID SessionID, storeFactory MessageStoreFactory, settings *SessionSettings,
+	logFactory LogFactory, application Application, dynamic bool,
+) (session *session, err error) {
+	reservation, err := reserveSessionID(sessionID, dynamic)
+	if err != nil {
+		return nil, err
+	}
+	committed := false
+	defer func() {
+		if committed {
+			return
+		}
+		if session != nil {
+			unregisterSessionInstance(session)
+			if closeErr := session.closeStore(); closeErr != nil {
+				session.log.OnEventf("Failed to close message store for session %v after createSession error: %v", sessionID, closeErr)
+				return // Keep the identity quarantined; Close did not prove completion.
+			}
+		}
+		releaseSessionReservation(sessionID, reservation)
+	}()
 
 	if session, err = f.newSession(sessionID, storeFactory, settings, logFactory, application); err != nil {
 		return
 	}
-
-	// Close the store on the error path to avoid leaking durable-store resources.
-	// After newSession because that's where session.store is initialized.
-	defer func() {
-		if err != nil && session != nil && session.store != nil {
-			if closeErr := session.store.Close(); closeErr != nil {
-				session.log.OnEventf("Failed to close message store for session %v after createSession error: %v", sessionID, closeErr)
-			}
-		}
-	}()
-
-	if err = registerSession(session); err != nil {
-		return
-	}
+	session.reservation = reservation
+	registerReservedSession(session)
 	application.OnCreate(session.sessionID)
 	session.log.OnEvent("Created session")
+	committed = true
 
 	return
 }
@@ -133,8 +147,6 @@ func (f sessionFactory) newSession(
 		}
 	}
 
-	// Always use a default message validator without data dictionaries
-	s.Validator = NewValidator(validatorSettings, nil, nil)
 	if sessionID.IsFIXT() {
 		if s.DefaultApplVerID, err = settings.Setting(config.DefaultApplVerID); err != nil {
 			return
@@ -170,8 +182,6 @@ func (f sessionFactory) newSession(
 				)
 				return
 			}
-
-			s.Validator = NewValidator(validatorSettings, s.appDataDictionary, s.transportDataDictionary)
 		}
 	} else if settings.HasSetting(config.DataDictionary) {
 		var dataDictionaryPath string
@@ -186,8 +196,6 @@ func (f sessionFactory) newSession(
 			)
 			return
 		}
-
-		s.Validator = NewValidator(validatorSettings, s.appDataDictionary, nil)
 	}
 
 	if settings.HasSetting(config.ResetOnLogon) {
@@ -464,15 +472,26 @@ func (f sessionFactory) newSession(
 	if s.log, err = logFactory.CreateSessionLog(s.sessionID); err != nil {
 		return
 	}
+	if err = s.configureBoundedInbound(settings); err != nil {
+		return
+	}
+	if s.Validator, err = newSessionValidator(validatorSettings, s.appDataDictionary, s.transportDataDictionary, s.boundedIn.limits.MaxFields); err != nil {
+		return
+	}
 
 	if s.store, err = storeFactory.Create(s.sessionID); err != nil {
+		return
+	}
+	s.cacheStoreCreationTime()
+	if err = s.configureOutbound(settings); err != nil {
+		s.closeStore()
 		return
 	}
 
 	s.sessionEvent = make(chan internal.Event)
 	s.messageEvent = make(chan bool, 1)
 	s.admin = make(chan interface{})
-	s.application = application
+	s.setApplication(application)
 	return
 }
 

@@ -30,6 +30,29 @@ type Log interface {
 	OnEventf(string, ...interface{})
 }
 
+// BorrowedLog explicitly accepts frame bytes whose lifetime ends when the call
+// returns. Implementations must finish reading or copying the bytes synchronously
+// and must not mutate them. Sessions use this optional logging capability to
+// avoid an owned-byte copy; ordinary Log implementations remain supported.
+// Implementations that allocate are outside the zero-allocation guarantee.
+type BorrowedLog interface {
+	Log
+	OnIncomingBorrowed([]byte)
+	OnOutgoingBorrowed([]byte)
+}
+
+// BorrowedEventLog opts into synchronous event byte views for bounded session
+// diagnostics. The bytes are read-only and valid only until OnEventBorrowed
+// returns; implementations must finish consuming or copying them in the call.
+// This capability is independent of BorrowedLog's frame callbacks. Other events
+// may still use OnEvent or OnEventf, and allocating implementations remain
+// outside the zero-allocation guarantee. Without this interface, event logging
+// preserves the existing OnEventf callback and argument lifetime.
+type BorrowedEventLog interface {
+	Log
+	OnEventBorrowed([]byte)
+}
+
 // The LogFactory interface creates global and session specific Log instances.
 type LogFactory interface {
 	// Create global log.

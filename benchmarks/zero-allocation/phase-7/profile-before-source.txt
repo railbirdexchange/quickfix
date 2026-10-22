@@ -1,0 +1,203 @@
+Total: 505916
+ROUTINE ======================== github.com/quickfixgo/quickfix.(*boundedOutboundSession).resendRange in /Users/a.alamer/factory/worktrees/quickfix-zero-alloc-session/bounded_resend.go
+      3008       3008 (flat, cum)  0.59% of Total
+         .          .     13:func (out *boundedOutboundSession) resendRange(begin, end int, inReplyTo *Message) error {
+         .          .     14:	if err := out.store.retainedRange(begin, end); err != nil {
+         .          .     15:		return err
+         .          .     16:	}
+         .          .     17:	defer out.replay.Reset()
+         .          .     18:	defer func() {
+         .          .     19:		out.replayBuilder.Reset()
+         .          .     20:		out.replayBuilder.active = false
+         .          .     21:	}()
+         .          .     22:
+         .          .     23:	nextSequence := begin
+         .          .     24:	searchSequence := begin
+         .          .     25:	for {
+         .          .     26:		index := out.store.nextEntry(searchSequence, end)
+         .          .     27:		if index < 0 {
+         .          .     28:			break
+         .          .     29:		}
+         .          .     30:		sequence := out.store.entries[index].sequence
+         .          .     31:		searchSequence = sequence + 1 // retainedRange excludes maxInt.
+         .          .     32:		wire, found := out.store.message(sequence)
+         .          .     33:		if !found {
+         .          .     34:			return ErrJournalRangeUnavailable
+         .          .     35:		}
+         .          .     36:		if err := out.replay.Parse(wire); err != nil {
+         .          .     37:			return err
+         .          .     38:		}
+         .          .     39:		message := out.replay.Message()
+         .          .     40:		messageType, err := message.Header.GetBytes(tagMsgType)
+         .          .     41:		if err != nil {
+         .          .     42:			return err
+         .          .     43:		}
+         .          .     44:		storedSequence, err := message.Header.GetInt(tagMsgSeqNum)
+         .          .     45:		if err != nil {
+         .          .     46:			return err
+         .          .     47:		}
+         .          .     48:		if storedSequence != sequence {
+         .          .     49:			return ErrInvalidJournalSequence
+         .          .     50:		}
+         .          .     51:		if isAdminMessageType(messageType) {
+         .          .     52:			continue
+         .          .     53:		}
+         .          .     54:
+         .          .     55:		builder := out.replayBuilder
+         .          .     56:		builder.active = true
+         .          .     57:		builder.Reset()
+         .          .     58:		if err := builder.CopyFrom(message); err != nil {
+         .          .     59:			return err
+         .          .     60:		}
+         .          .     61:		builder.Header().SetBool(tagPossDupFlag, true)
+         .          .     62:		if original, err := message.Header.GetBytes(tagSendingTime); err == nil {
+         .          .     63:			builder.Header().SetBytes(tagOrigSendingTime, original)
+         .          .     64:		}
+         .          .     65:		builder.Header().SetTime(tagSendingTime, boundedSendingTime(out.session))
+         .          .     66:		if err := builder.Err(); err != nil {
+         .          .     67:			return err
+         .          .     68:		}
+         .          .     69:		callbackErr := out.application.ToAppBorrowed(builder, out.session.sessionID)
+         .          .     70:		if err := builder.Err(); err != nil {
+         .          .     71:			return err
+         .          .     72:		}
+         .          .     73:		if callbackErr != nil {
+         .          .     74:			// Legacy resend treats a ToApp error as a veto and gap-fills it.
+         .          .     75:			builder.active = false
+         .          .     76:			continue
+         .          .     77:		}
+         .          .     78:		if nextSequence != sequence {
+         .          .     79:			if err := out.gapFill(nextSequence, sequence, inReplyTo); err != nil {
+         .          .     80:				return err
+         .          .     81:			}
+         .          .     82:		}
+      3008       3008     83:		out.session.log.OnEventf("Resending Message: %v", sequence)
+         .          .     84:		// Legacy resend also preserves the stored body regardless of ToApp
+         .          .     85:		// body mutations, including its original repeating-group field order.
+         .          .     86:		body := message.bodyBytes
+         .          .     87:		if body == nil {
+         .          .     88:			// A non-nil empty body selects the raw-body encoding path too.
+ROUTINE ======================== github.com/quickfixgo/quickfix.(*session).checkTargetTooHigh in /Users/a.alamer/factory/worktrees/quickfix-zero-alloc-session/session.go
+      2003       2003 (flat, cum)   0.4% of Total
+         .          .    815:func (s *session) checkTargetTooHigh(msg *Message) MessageRejectError {
+         .          .    816:	if !msg.Header.Has(tagMsgSeqNum) {
+         .          .    817:		return RequiredTagMissing(tagMsgSeqNum)
+         .          .    818:	}
+         .          .    819:
+         .          .    820:	seqNum, err := msg.Header.GetInt(tagMsgSeqNum)
+         .          .    821:	if err != nil {
+         .          .    822:		return err
+         .          .    823:	}
+         .          .    824:
+         .          .    825:	if seqNum > s.store.NextTargetMsgSeqNum() {
+      2003       2003    826:		return targetTooHigh{ReceivedTarget: seqNum, ExpectedTarget: s.store.NextTargetMsgSeqNum()}
+         .          .    827:	}
+         .          .    828:
+         .          .    829:	return nil
+         .          .    830:}
+         .          .    831:
+ROUTINE ======================== github.com/quickfixgo/quickfix.(*session).sendResendRequest in /Users/a.alamer/factory/worktrees/quickfix-zero-alloc-session/session.go
+      6007      38056 (flat, cum)  7.52% of Total
+         .          .    539:func (s *session) sendResendRequest(beginSeq, endSeq int) (nextState resendState, err error) {
+         .          .    540:	nextState.resendRangeEnd = endSeq
+         .          .    541:
+         .      14021    542:	resend := NewMessage()
+         .       6009    543:	resend.Header.SetBytes(tagMsgType, msgTypeResendRequest)
+      2002       8012    544:	resend.Body.SetField(tagBeginSeqNo, FIXInt(beginSeq))
+         .          .    545:
+         .          .    546:	var endSeqNo int
+         .          .    547:	if s.ResendRequestChunkSize != 0 {
+         .          .    548:		endSeqNo = beginSeq + s.ResendRequestChunkSize - 1
+         .          .    549:	} else {
+         .          .    550:		endSeqNo = endSeq
+         .          .    551:	}
+         .          .    552:
+         .          .    553:	if endSeqNo < endSeq {
+         .          .    554:		nextState.currentResendRangeEnd = endSeqNo
+         .          .    555:	} else {
+         .          .    556:		if s.sessionID.BeginString < BeginStringFIX42 {
+         .          .    557:			endSeqNo = 999999
+         .          .    558:		} else {
+         .          .    559:			endSeqNo = 0
+         .          .    560:		}
+         .          .    561:	}
+         .       6009    562:	resend.Body.SetField(tagEndSeqNo, FIXInt(endSeqNo))
+         .          .    563:
+         .          .    564:	if err = s.send(resend); err != nil {
+         .          .    565:		return
+         .          .    566:	}
+      4005       4005    567:	s.log.OnEventf("Sent ResendRequest FROM: %v TO: %v", beginSeq, endSeqNo)
+         .          .    568:
+         .          .    569:	return
+         .          .    570:}
+         .          .    571:
+         .          .    572:func (s *session) handleLogon(msg *Message) error {
+ROUTINE ======================== github.com/quickfixgo/quickfix.inSession.handleResendRequest in /Users/a.alamer/factory/worktrees/quickfix-zero-alloc-session/in_session.go
+      4010       9023 (flat, cum)  1.78% of Total
+         .          .    200:func (state inSession) handleResendRequest(session *session, msg *Message) (nextState sessionState) {
+         .          .    201:	if err := session.verifyIgnoreSeqNumTooHighOrLow(msg); err != nil {
+         .          .    202:		return state.processReject(session, msg, err)
+         .          .    203:	}
+         .          .    204:
+         .          .    205:	beginSeqNo, err := msg.Body.GetInt(tagBeginSeqNo)
+         .          .    206:	if err != nil {
+         .          .    207:		return state.processReject(session, msg, RequiredTagMissing(tagBeginSeqNo))
+         .          .    208:	}
+         .          .    209:	endSeqNo, err := msg.Body.GetInt(tagEndSeqNo)
+         .          .    210:	if err != nil {
+         .          .    211:		return state.processReject(session, msg, RequiredTagMissing(tagEndSeqNo))
+         .          .    212:	}
+         .          .    213:
+      4010       4010    214:	session.log.OnEventf("Received ResendRequest FROM: %d TO: %d", beginSeqNo, endSeqNo)
+         .          .    215:	expectedSeqNum := session.store.NextSenderMsgSeqNum()
+         .          .    216:
+         .          .    217:	if (session.sessionID.BeginString >= BeginStringFIX42 && endSeqNo == 0) ||
+         .          .    218:		(session.sessionID.BeginString <= BeginStringFIX42 && endSeqNo == 999999) ||
+         .          .    219:		(endSeqNo >= expectedSeqNum) {
+         .          .    220:		endSeqNo = expectedSeqNum - 1
+         .          .    221:	}
+         .          .    222:
+         .       5013    223:	if err := state.resendMessages(session, beginSeqNo, endSeqNo, *msg); err != nil {
+         .          .    224:		return handleStateError(session, err)
+         .          .    225:	}
+         .          .    226:
+         .          .    227:	if err := session.checkTargetTooLow(msg); err != nil {
+         .          .    228:		return state
+ROUTINE ======================== github.com/quickfixgo/quickfix.inSession.processReject in /Users/a.alamer/factory/worktrees/quickfix-zero-alloc-session/in_session.go
+      2003      44065 (flat, cum)  8.71% of Total
+         .          .    304:func (state inSession) processReject(session *session, msg *Message, rej MessageRejectError) sessionState {
+         .          .    305:	switch TypedError := rej.(type) {
+         .          .    306:	case *boundedOutboundReject:
+         .          .    307:		return session.failBoundedInbound(TypedError)
+         .          .    308:	case targetTooHigh:
+         .          .    309:		stashIndex := -1
+         .          .    310:		if msg.inbound != nil {
+         .          .    311:			var err error
+         .          .    312:			stashIndex, err = session.boundedIn.ring.stashIndex(TypedError.ReceivedTarget)
+         .          .    313:			if err != nil {
+         .          .    314:				return session.failBoundedInbound(err)
+         .          .    315:			}
+         .          .    316:		}
+         .          .    317:
+         .          .    318:		var nextState resendState
+         .          .    319:		currentState, recovering := session.State.(resendState)
+         .          .    320:		if msg.inbound != nil {
+         .          .    321:			currentState, recovering = boundedResendState(session.State)
+         .          .    322:		}
+         .          .    323:		if recovering {
+         .          .    324:			nextState = currentState
+         .          .    325:		} else {
+         .          .    326:			var err error
+         .      42062    327:			if nextState, err = session.doTargetTooHigh(TypedError); err != nil {
+         .          .    328:				return handleStateError(session, err)
+         .          .    329:			}
+         .          .    330:		}
+         .          .    331:
+         .          .    332:		if msg.inbound != nil {
+         .          .    333:			session.boundedIn.ring.retain(stashIndex, TypedError.ReceivedTarget, msg.inbound)
+      2003       2003    334:			return nextState
+         .          .    335:		}
+         .          .    336:		if nextState.messageStash == nil {
+         .          .    337:			nextState.messageStash = make(map[int]*Message)
+         .          .    338:		}
+         .          .    339:

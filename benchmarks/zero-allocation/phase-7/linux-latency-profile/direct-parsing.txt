@@ -1,0 +1,60 @@
+File: quickfix-linux-arm64.test
+Type: cpu
+Time: Oct 16, 2026 at 11:00am (EDT)
+Duration: 15.91s, Total samples = 12.77s (80.25%)
+Active filters:
+   focus=doParsing
+Showing nodes accounting for 0.98s, 7.67% of 12.77s total
+      flat  flat%   sum%        cum   cum%
+         0     0%     0%      0.98s  7.67%  github.com/quickfixgo/quickfix.(*MessageSlot).Parse
+     0.27s  2.11%  2.11%      0.98s  7.67%  github.com/quickfixgo/quickfix.doParsing
+         0     0%  2.11%      0.70s  5.48%  github.com/quickfixgo/quickfix.(*session).run
+         0     0%  2.11%      0.70s  5.48%  github.com/quickfixgo/quickfix.(*stateMachine).Incoming
+         0     0%  2.11%      0.70s  5.48%  github.com/quickfixgo/quickfix.newBoundedFullSession.func1
+         0     0%  2.11%      0.38s  2.98%  github.com/quickfixgo/quickfix.(*session).parseInboundSlot
+         0     0%  2.11%      0.32s  2.51%  github.com/quickfixgo/quickfix.(*boundedFullApplication).FromApp
+         0     0%  2.11%      0.32s  2.51%  github.com/quickfixgo/quickfix.(*boundedFullApplication).handleOrder
+         0     0%  2.11%      0.32s  2.51%  github.com/quickfixgo/quickfix.(*boundedFullApplication).handleReport
+         0     0%  2.11%      0.32s  2.51%  github.com/quickfixgo/quickfix.(*session).fromCallback
+         0     0%  2.11%      0.32s  2.51%  github.com/quickfixgo/quickfix.(*session).prepareOutbound
+         0     0%  2.11%      0.32s  2.51%  github.com/quickfixgo/quickfix.(*session).queueForSend
+         0     0%  2.11%      0.32s  2.51%  github.com/quickfixgo/quickfix.(*session).verify (inline)
+         0     0%  2.11%      0.32s  2.51%  github.com/quickfixgo/quickfix.(*session).verifyMsgAgainstAppImpl
+         0     0%  2.11%      0.32s  2.51%  github.com/quickfixgo/quickfix.(*session).verifySelect
+         0     0%  2.11%      0.32s  2.51%  github.com/quickfixgo/quickfix.SendToTarget
+         0     0%  2.11%      0.32s  2.51%  github.com/quickfixgo/quickfix.inSession.FixMsgIn
+         0     0%  2.11%      0.32s  2.51%  github.com/quickfixgo/quickfix.installOrdinaryReadToWriteMeasurement.func1.1
+         0     0%  2.11%      0.28s  2.19%  github.com/quickfixgo/quickfix.(*boundedFullSession).readMessage
+         0     0%  2.11%      0.28s  2.19%  github.com/quickfixgo/quickfix.(*boundedFullSession).readReport
+         0     0%  2.11%      0.28s  2.19%  github.com/quickfixgo/quickfix.(*boundedFullSession).unacknowledgedBatch
+         0     0%  2.11%      0.28s  2.19%  github.com/quickfixgo/quickfix.BenchmarkOrdinaryFullSessionReadToWrite.func1
+         0     0%  2.11%      0.28s  2.19%  github.com/quickfixgo/quickfix.measureOrdinaryFullSessionRoundTrip
+         0     0%  2.11%      0.28s  2.19%  github.com/quickfixgo/quickfix.measureOrdinaryReadToWrite
+         0     0%  2.11%      0.28s  2.19%  testing.(*B).launch
+         0     0%  2.11%      0.28s  2.19%  testing.(*B).runN
+     0.06s  0.47%  2.58%      0.27s  2.11%  github.com/quickfixgo/quickfix.extractField
+     0.01s 0.078%  2.66%      0.22s  1.72%  github.com/quickfixgo/quickfix.(*FieldMap).add (inline)
+     0.14s  1.10%  3.76%      0.20s  1.57%  github.com/quickfixgo/quickfix.(*FieldMap).put
+     0.06s  0.47%  4.23%      0.11s  0.86%  github.com/quickfixgo/quickfix.(*TagValue).parse
+     0.04s  0.31%  4.54%      0.10s  0.78%  bytes.IndexByte (inline)
+     0.06s  0.47%  5.01%      0.06s  0.47%  github.com/quickfixgo/quickfix.(*fixedFieldMap).find
+     0.06s  0.47%  5.48%      0.06s  0.47%  indexbytebody
+         0     0%  5.48%      0.05s  0.39%  github.com/quickfixgo/quickfix.(*FieldMap).clearNoLock
+     0.04s  0.31%  5.79%      0.05s  0.39%  github.com/quickfixgo/quickfix.(*FieldMap).fixedClear (inline)
+     0.05s  0.39%  6.19%      0.05s  0.39%  github.com/quickfixgo/quickfix.Tag.IsHeader (inline)
+     0.03s  0.23%  6.42%      0.05s  0.39%  github.com/quickfixgo/quickfix.atoi
+         0     0%  6.42%      0.05s  0.39%  github.com/quickfixgo/quickfix.extractSpecificField
+         0     0%  6.42%      0.05s  0.39%  github.com/quickfixgo/quickfix.isHeaderField (inline)
+     0.04s  0.31%  6.73%      0.05s  0.39%  runtime.mapaccess1_faststr
+     0.01s 0.078%  6.81%      0.03s  0.23%  runtime.(*_panic).nextDefer
+         0     0%  6.81%      0.02s  0.16%  github.com/quickfixgo/quickfix.(*msgParser).groupDefinition (inline)
+     0.02s  0.16%  6.97%      0.02s  0.16%  github.com/quickfixgo/quickfix.parseUInt (inline)
+     0.01s 0.078%  7.05%      0.02s  0.16%  runtime.mapaccess1_fast64
+     0.02s  0.16%  7.20%      0.02s  0.16%  runtime.popDefer
+     0.01s 0.078%  7.28%      0.01s 0.078%  aeshashbody
+     0.01s 0.078%  7.36%      0.01s 0.078%  github.com/quickfixgo/quickfix.TagValue.length (inline)
+     0.01s 0.078%  7.44%      0.01s 0.078%  github.com/quickfixgo/quickfix.fieldTag (inline)
+         0     0%  7.44%      0.01s 0.078%  runtime.deferprocStack
+     0.01s 0.078%  7.52%      0.01s 0.078%  runtime.duffzero
+     0.01s 0.078%  7.60%      0.01s 0.078%  runtime.memhash64
+     0.01s 0.078%  7.67%      0.01s 0.078%  runtime.return0
