@@ -1,0 +1,56 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+cpu: Apple M4 Pro
+BenchmarkScopedInboundSession/new_order_single/owned         	  482104	      2400 ns/op	    2728 B/op	      13 allocs/op
+BenchmarkScopedInboundSession/new_order_single/owned         	  484964	      2353 ns/op	    2728 B/op	      13 allocs/op
+BenchmarkScopedInboundSession/new_order_single/owned         	  503558	      2363 ns/op	    2728 B/op	      13 allocs/op
+BenchmarkScopedInboundSession/new_order_single/owned         	  509518	      2369 ns/op	    2728 B/op	      13 allocs/op
+BenchmarkScopedInboundSession/new_order_single/owned         	  513621	      2358 ns/op	    2728 B/op	      13 allocs/op
+BenchmarkScopedInboundSession/new_order_single/borrowed      	  945538	      1299 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedInboundSession/new_order_single/borrowed      	  942710	      1299 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedInboundSession/new_order_single/borrowed      	  874900	      1348 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedInboundSession/new_order_single/borrowed      	  864127	      1325 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedInboundSession/new_order_single/borrowed      	  944175	      1281 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedInboundSession/repeating_group/owned          	  244030	      4576 ns/op	    5064 B/op	      19 allocs/op
+BenchmarkScopedInboundSession/repeating_group/owned          	  253344	      4615 ns/op	    5064 B/op	      19 allocs/op
+BenchmarkScopedInboundSession/repeating_group/owned          	  256112	      4600 ns/op	    5064 B/op	      19 allocs/op
+BenchmarkScopedInboundSession/repeating_group/owned          	  250900	      4582 ns/op	    5064 B/op	      19 allocs/op
+BenchmarkScopedInboundSession/repeating_group/owned          	  251636	      4596 ns/op	    5064 B/op	      19 allocs/op
+BenchmarkScopedInboundSession/repeating_group/borrowed       	  620360	      1885 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedInboundSession/repeating_group/borrowed       	  629086	      1916 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedInboundSession/repeating_group/borrowed       	  632340	      1894 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedInboundSession/repeating_group/borrowed       	  627114	      1926 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedInboundSession/repeating_group/borrowed       	  639474	      1936 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/new_order_single/owned        	  566182	      2005 ns/op	      88 B/op	       4 allocs/op
+BenchmarkScopedOutboundSession/new_order_single/owned        	  584980	      2076 ns/op	      88 B/op	       4 allocs/op
+BenchmarkScopedOutboundSession/new_order_single/owned        	  540073	      1966 ns/op	      88 B/op	       4 allocs/op
+BenchmarkScopedOutboundSession/new_order_single/owned        	  632050	      1978 ns/op	      88 B/op	       4 allocs/op
+BenchmarkScopedOutboundSession/new_order_single/owned        	  615729	      1955 ns/op	      88 B/op	       4 allocs/op
+BenchmarkScopedOutboundSession/new_order_single/borrowed     	  632298	      1938 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/new_order_single/borrowed     	  633864	      1940 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/new_order_single/borrowed     	  633135	      1907 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/new_order_single/borrowed     	  623893	      1904 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/new_order_single/borrowed     	  632114	      1938 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/repeating_group/owned         	  420572	      2914 ns/op	      96 B/op	       4 allocs/op
+BenchmarkScopedOutboundSession/repeating_group/owned         	  417037	      2935 ns/op	      96 B/op	       4 allocs/op
+BenchmarkScopedOutboundSession/repeating_group/owned         	  423454	      3049 ns/op	      96 B/op	       4 allocs/op
+BenchmarkScopedOutboundSession/repeating_group/owned         	  413446	      2958 ns/op	      96 B/op	       4 allocs/op
+BenchmarkScopedOutboundSession/repeating_group/owned         	  429414	      3150 ns/op	      96 B/op	       4 allocs/op
+BenchmarkScopedOutboundSession/repeating_group/borrowed      	  429921	      2834 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/repeating_group/borrowed      	  426511	      2788 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/repeating_group/borrowed      	  429052	      2787 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/repeating_group/borrowed      	  433821	      2831 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/repeating_group/borrowed      	  440046	      2793 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/custom_message_type/owned     	  632360	      1914 ns/op	      96 B/op	       4 allocs/op
+BenchmarkScopedOutboundSession/custom_message_type/owned     	  629918	      1926 ns/op	      96 B/op	       4 allocs/op
+BenchmarkScopedOutboundSession/custom_message_type/owned     	  631644	      1909 ns/op	      96 B/op	       4 allocs/op
+BenchmarkScopedOutboundSession/custom_message_type/owned     	  650968	      1937 ns/op	      96 B/op	       4 allocs/op
+BenchmarkScopedOutboundSession/custom_message_type/owned     	  626510	      1904 ns/op	      96 B/op	       4 allocs/op
+BenchmarkScopedOutboundSession/custom_message_type/borrowed  	  643024	      1909 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/custom_message_type/borrowed  	  615681	      1917 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/custom_message_type/borrowed  	  614035	      1996 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/custom_message_type/borrowed  	  652105	      1993 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/custom_message_type/borrowed  	  637165	      1882 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/quickfixgo/quickfix	63.903s

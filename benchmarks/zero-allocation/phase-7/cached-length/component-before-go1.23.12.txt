@@ -1,0 +1,20 @@
+Warning: Permanently added '192.168.252.5' (ED25519) to the list of known hosts.
+goos: linux
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+BenchmarkScopedOutboundSession/new_order_single         	  520549	      2105 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/new_order_single         	  590443	      2118 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/new_order_single         	  605246	      2084 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/new_order_single         	  561256	      2110 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/new_order_single         	  562737	      2144 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/repeating_group          	  354855	      3307 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/repeating_group          	  346009	      3182 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/repeating_group          	  382076	      3201 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/repeating_group          	  370636	      3125 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/repeating_group          	  396262	      3118 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/custom_message_type      	  586243	      2091 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/custom_message_type      	  575164	      2084 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/custom_message_type      	  596388	      2112 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/custom_message_type      	  596450	      2063 ns/op	       0 B/op	       0 allocs/op
+BenchmarkScopedOutboundSession/custom_message_type      	  582315	      2093 ns/op	       0 B/op	       0 allocs/op
+PASS

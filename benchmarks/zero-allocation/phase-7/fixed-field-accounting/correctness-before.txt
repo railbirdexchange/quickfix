@@ -1,0 +1,37 @@
+=== RUN   TestFixedFieldAccountingLayout
+    fixed_field_accounting_benchmark_test.go:14: entry_bytes=96 backing_bytes=72 int_bytes=8
+    fixed_field_accounting_benchmark_test.go:17: field=tag offset=0 size=8
+    fixed_field_accounting_benchmark_test.go:17: field=values offset=8 size=24
+    fixed_field_accounting_benchmark_test.go:17: field=scalar offset=32 size=56
+    fixed_field_accounting_benchmark_test.go:17: field=state offset=88 size=1
+--- PASS: TestFixedFieldAccountingLayout (0.00s)
+=== RUN   TestFixedFieldAccountingAcrossTombstonesAndReset
+--- PASS: TestFixedFieldAccountingAcrossTombstonesAndReset (0.00s)
+=== RUN   TestFixedFieldAccountingExclusionsAndGroupReplacement
+--- PASS: TestFixedFieldAccountingExclusionsAndGroupReplacement (0.00s)
+=== RUN   TestFixedFieldMapReadersAndValueCopies
+--- PASS: TestFixedFieldMapReadersAndValueCopies (0.00s)
+=== RUN   TestFixedFieldMapBorrowedGroupsAndWireAccounting
+--- PASS: TestFixedFieldMapBorrowedGroupsAndWireAccounting (0.00s)
+=== RUN   TestFixedFieldMapCapacityFailureIsAtomic
+=== RUN   TestFixedFieldMapCapacityFailureIsAtomic/bytes
+=== RUN   TestFixedFieldMapCapacityFailureIsAtomic/string
+=== RUN   TestFixedFieldMapCapacityFailureIsAtomic/integer
+=== RUN   TestFixedFieldMapCapacityFailureIsAtomic/boolean
+=== RUN   TestFixedFieldMapCapacityFailureIsAtomic/field
+=== RUN   TestFixedFieldMapCapacityFailureIsAtomic/group
+--- PASS: TestFixedFieldMapCapacityFailureIsAtomic (0.00s)
+    --- PASS: TestFixedFieldMapCapacityFailureIsAtomic/bytes (0.00s)
+    --- PASS: TestFixedFieldMapCapacityFailureIsAtomic/string (0.00s)
+    --- PASS: TestFixedFieldMapCapacityFailureIsAtomic/integer (0.00s)
+    --- PASS: TestFixedFieldMapCapacityFailureIsAtomic/boolean (0.00s)
+    --- PASS: TestFixedFieldMapCapacityFailureIsAtomic/field (0.00s)
+    --- PASS: TestFixedFieldMapCapacityFailureIsAtomic/group (0.00s)
+=== RUN   TestFixedFieldMapDisjointTagChurnIsBounded
+--- PASS: TestFixedFieldMapDisjointTagChurnIsBounded (0.00s)
+=== RUN   TestFixedFieldMapCopyIntoAndOrdering
+--- PASS: TestFixedFieldMapCopyIntoAndOrdering (0.00s)
+=== RUN   TestFixedFieldMapInvalidCapacity
+--- PASS: TestFixedFieldMapInvalidCapacity (0.00s)
+PASS
+ok  	github.com/quickfixgo/quickfix	0.607s

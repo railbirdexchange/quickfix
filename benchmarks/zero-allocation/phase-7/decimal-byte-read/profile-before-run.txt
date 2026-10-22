@@ -1,0 +1,7 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+cpu: Apple M4 Pro
+BenchmarkFIXDecimalOwnedRead/price/field_getter         	  100000	      3347 ns/op	      80 B/op	       5 allocs/op
+PASS
+ok  	github.com/quickfixgo/quickfix	1.099s

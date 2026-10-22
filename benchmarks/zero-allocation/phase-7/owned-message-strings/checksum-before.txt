@@ -1,0 +1,6 @@
+=== RUN   TestMessageChecksumFormatting
+--- PASS: TestMessageChecksumFormatting (0.00s)
+=== RUN   TestMessageChecksumSetterKeepsOwnedValues
+--- PASS: TestMessageChecksumSetterKeepsOwnedValues (0.00s)
+PASS
+ok  	github.com/quickfixgo/quickfix	0.950s

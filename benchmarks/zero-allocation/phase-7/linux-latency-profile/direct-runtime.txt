@@ -1,0 +1,90 @@
+File: quickfix-linux-arm64.test
+Type: cpu
+Time: Oct 16, 2026 at 11:00am (EDT)
+Duration: 15.91s, Total samples = 12.77s (80.25%)
+Active filters:
+   focus=runtime\.(chan|select|schedule|findRunnable|netpoll)|[Dd]eadline
+Showing nodes accounting for 1.98s, 15.51% of 12.77s total
+Dropped 13 nodes (cum <= 0.06s)
+Showing top 80 nodes out of 105
+      flat  flat%   sum%        cum   cum%
+         0     0%     0%      1.11s  8.69%  github.com/quickfixgo/quickfix.(*session).run
+         0     0%     0%      1.11s  8.69%  github.com/quickfixgo/quickfix.newBoundedFullSession.func1
+     0.49s  3.84%  3.84%      1.07s  8.38%  runtime.selectgo
+         0     0%  3.84%      0.80s  6.26%  github.com/quickfixgo/quickfix.(*stateMachine).Incoming
+         0     0%  3.84%      0.77s  6.03%  github.com/quickfixgo/quickfix.(*session).fromCallback
+         0     0%  3.84%      0.77s  6.03%  github.com/quickfixgo/quickfix.(*session).verify (inline)
+         0     0%  3.84%      0.77s  6.03%  github.com/quickfixgo/quickfix.(*session).verifyMsgAgainstAppImpl
+         0     0%  3.84%      0.77s  6.03%  github.com/quickfixgo/quickfix.(*session).verifySelect
+         0     0%  3.84%      0.77s  6.03%  github.com/quickfixgo/quickfix.inSession.FixMsgIn
+         0     0%  3.84%      0.71s  5.56%  github.com/quickfixgo/quickfix.(*boundedFullApplication).FromAdmin
+         0     0%  3.84%      0.67s  5.25%  runtime.mcall
+         0     0%  3.84%      0.67s  5.25%  runtime.park_m
+     0.01s 0.078%  3.92%      0.66s  5.17%  runtime.schedule
+     0.03s  0.23%  4.15%      0.61s  4.78%  runtime.findRunnable
+     0.09s   0.7%  4.86%      0.41s  3.21%  runtime.netpoll
+     0.01s 0.078%  4.93%      0.31s  2.43%  internal/runtime/syscall.EpollWait
+     0.30s  2.35%  7.28%      0.30s  2.35%  internal/runtime/syscall.Syscall6
+     0.05s  0.39%  7.67%      0.28s  2.19%  runtime.chansend
+         0     0%  7.67%      0.27s  2.11%  github.com/quickfixgo/quickfix.(*boundedReadConnection).read
+         0     0%  7.67%      0.27s  2.11%  runtime.unlock (inline)
+     0.19s  1.49%  9.16%      0.27s  2.11%  runtime.unlock2
+         0     0%  9.16%      0.27s  2.11%  runtime.unlockWithRank (inline)
+     0.01s 0.078%  9.24%      0.24s  1.88%  runtime.chansend1
+     0.07s  0.55%  9.79%      0.20s  1.57%  runtime.selunlock
+     0.01s 0.078%  9.87%      0.16s  1.25%  runtime.send
+     0.15s  1.17% 11.04%      0.15s  1.17%  runtime.nanotime (partial-inline)
+         0     0% 11.04%      0.14s  1.10%  github.com/quickfixgo/quickfix.(*outboundWriter).run
+     0.07s  0.55% 11.59%      0.14s  1.10%  runtime.sellock
+     0.01s 0.078% 11.67%      0.13s  1.02%  runtime.(*timers).check
+         0     0% 11.67%      0.12s  0.94%  runtime.lock (inline)
+     0.12s  0.94% 12.61%      0.12s  0.94%  runtime.lock2
+         0     0% 12.61%      0.12s  0.94%  runtime.lockWithRank (inline)
+     0.03s  0.23% 12.84%      0.10s  0.78%  runtime.chanrecv
+     0.01s 0.078% 12.92%      0.10s  0.78%  runtime.goready (inline)
+         0     0% 12.92%      0.09s   0.7%  github.com/quickfixgo/quickfix.BenchmarkOrdinaryFullSessionReadToWrite.func1
+         0     0% 12.92%      0.09s   0.7%  github.com/quickfixgo/quickfix.measureOrdinaryReadToWrite
+         0     0% 12.92%      0.09s   0.7%  runtime.ready
+         0     0% 12.92%      0.09s   0.7%  runtime.send.goready.func1
+         0     0% 12.92%      0.09s   0.7%  runtime.systemstack
+         0     0% 12.92%      0.09s   0.7%  testing.(*B).launch
+         0     0% 12.92%      0.09s   0.7%  testing.(*B).runN
+         0     0% 12.92%      0.08s  0.63%  github.com/quickfixgo/quickfix.(*outboundWriter).write
+         0     0% 12.92%      0.08s  0.63%  github.com/quickfixgo/quickfix.(*parser).ReadMessageInto
+         0     0% 12.92%      0.08s  0.63%  github.com/quickfixgo/quickfix.(*parser).findIndex (inline)
+         0     0% 12.92%      0.08s  0.63%  github.com/quickfixgo/quickfix.(*parser).findIndexAfterOffset
+         0     0% 12.92%      0.08s  0.63%  github.com/quickfixgo/quickfix.(*parser).findStart
+         0     0% 12.92%      0.08s  0.63%  github.com/quickfixgo/quickfix.(*parser).readMore
+         0     0% 12.92%      0.08s  0.63%  github.com/quickfixgo/quickfix.(*parser).readMoreBounded
+         0     0% 12.92%      0.08s  0.63%  internal/poll.(*FD).Read
+         0     0% 12.92%      0.08s  0.63%  internal/poll.(*pollDesc).wait
+         0     0% 12.92%      0.08s  0.63%  internal/poll.(*pollDesc).waitRead (inline)
+         0     0% 12.92%      0.08s  0.63%  internal/poll.runtime_pollWait
+         0     0% 12.92%      0.08s  0.63%  net.(*conn).Read
+         0     0% 12.92%      0.08s  0.63%  net.(*netFD).Read
+     0.08s  0.63% 13.55%      0.08s  0.63%  runtime.(*mLockProfile).recordUnlock
+         0     0% 13.55%      0.08s  0.63%  runtime.netpollblock
+     0.04s  0.31% 13.86%      0.08s  0.63%  runtime.typedmemmove
+         0     0% 13.86%      0.07s  0.55%  github.com/quickfixgo/quickfix.measureOrdinaryFullSessionRoundTrip
+         0     0% 13.86%      0.06s  0.47%  github.com/quickfixgo/quickfix.(*boundedFullApplication).FromApp
+         0     0% 13.86%      0.06s  0.47%  github.com/quickfixgo/quickfix.(*boundedFullApplication).handleOrder
+         0     0% 13.86%      0.06s  0.47%  github.com/quickfixgo/quickfix.(*boundedFullApplication).handleReport
+         0     0% 13.86%      0.06s  0.47%  github.com/quickfixgo/quickfix.(*session).queueForSend
+         0     0% 13.86%      0.06s  0.47%  github.com/quickfixgo/quickfix.SendToTarget
+         0     0% 13.86%      0.06s  0.47%  github.com/quickfixgo/quickfix.installOrdinaryReadToWriteMeasurement.func1.1
+         0     0% 13.86%      0.06s  0.47%  internal/poll.(*FD).SetWriteDeadline (inline)
+     0.01s 0.078% 13.94%      0.06s  0.47%  internal/poll.setDeadlineImpl
+     0.06s  0.47% 14.41%      0.06s  0.47%  internal/runtime/atomic.(*Uintptr).CompareAndSwap (inline)
+         0     0% 14.41%      0.06s  0.47%  net.(*conn).SetWriteDeadline
+         0     0% 14.41%      0.06s  0.47%  net.(*netFD).SetWriteDeadline (inline)
+     0.03s  0.23% 14.64%      0.06s  0.47%  runtime.casgstatus
+     0.03s  0.23% 14.88%      0.06s  0.47%  runtime.wakep
+         0     0% 14.88%      0.05s  0.39%  github.com/quickfixgo/quickfix.(*session).flushOutbound
+         0     0% 14.88%      0.05s  0.39%  github.com/quickfixgo/quickfix.(*session).sendQueued
+         0     0% 14.88%      0.05s  0.39%  github.com/quickfixgo/quickfix.(*stateMachine).SendAppMessages
+     0.05s  0.39% 15.27%      0.05s  0.39%  runtime.memmove
+         0     0% 15.27%      0.05s  0.39%  runtime.selectnbrecv
+         0     0% 15.27%      0.05s  0.39%  runtime.selectnbsend
+     0.03s  0.23% 15.51%      0.05s  0.39%  runtime.typedmemclr
+         0     0% 15.51%      0.04s  0.31%  github.com/quickfixgo/quickfix.(*boundedFullSession).readMessage
+         0     0% 15.51%      0.04s  0.31%  github.com/quickfixgo/quickfix.(*boundedFullSession).readReport

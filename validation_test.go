@@ -112,17 +112,18 @@ func TestValidate(t *testing.T) {
 			t.Errorf("%v: Expected reason %v got %v", test.TestName, test.ExpectedRejectReason, reject.RejectReason())
 		}
 
+		refTagID, hasRefTagID := reject.RefTagID()
 		switch {
-		case reject.RefTagID() == nil && test.ExpectedRefTagID == nil:
+		case !hasRefTagID && test.ExpectedRefTagID == nil:
 		// OK, expected and actual ref tag not set.
-		case reject.RefTagID() != nil && test.ExpectedRefTagID == nil:
-			t.Errorf("%v: Unexpected RefTag '%v'", test.TestName, *reject.RefTagID())
-		case reject.RefTagID() == nil && test.ExpectedRefTagID != nil:
+		case hasRefTagID && test.ExpectedRefTagID == nil:
+			t.Errorf("%v: Unexpected RefTag '%v'", test.TestName, refTagID)
+		case !hasRefTagID && test.ExpectedRefTagID != nil:
 			t.Errorf("%v: Expected RefTag '%v'", test.TestName, *test.ExpectedRefTagID)
-		case *reject.RefTagID() == *test.ExpectedRefTagID:
+		case refTagID == *test.ExpectedRefTagID:
 			// OK, tags equal.
 		default:
-			t.Errorf("%v: Expected RefTag '%v' got '%v'", test.TestName, *test.ExpectedRefTagID, *reject.RefTagID())
+			t.Errorf("%v: Expected RefTag '%v' got '%v'", test.TestName, *test.ExpectedRefTagID, refTagID)
 		}
 	}
 }

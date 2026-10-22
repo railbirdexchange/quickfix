@@ -1,0 +1,61 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+cpu: Apple M4 Pro
+BenchmarkFixedFieldSetup/4         	 8082766	       134.2 ns/op	    1072 B/op	       4 allocs/op
+BenchmarkFixedFieldSetup/4         	 8979122	       137.2 ns/op	    1072 B/op	       4 allocs/op
+BenchmarkFixedFieldSetup/4         	 8792190	       141.1 ns/op	    1072 B/op	       4 allocs/op
+BenchmarkFixedFieldSetup/4         	 8149995	       135.4 ns/op	    1072 B/op	       4 allocs/op
+BenchmarkFixedFieldSetup/4         	 9042254	       141.3 ns/op	    1072 B/op	       4 allocs/op
+BenchmarkFixedFieldSetup/64        	 1311136	       915.2 ns/op	   15184 B/op	       4 allocs/op
+BenchmarkFixedFieldSetup/64        	 1351668	       860.1 ns/op	   15184 B/op	       4 allocs/op
+BenchmarkFixedFieldSetup/64        	 1495242	       802.4 ns/op	   15184 B/op	       4 allocs/op
+BenchmarkFixedFieldSetup/64        	 1466077	       801.0 ns/op	   15184 B/op	       4 allocs/op
+BenchmarkFixedFieldSetup/64        	 1553036	       832.7 ns/op	   15184 B/op	       4 allocs/op
+BenchmarkFixedFieldSetup/256       	  439050	      2636 ns/op	   55376 B/op	       4 allocs/op
+BenchmarkFixedFieldSetup/256       	  401892	      2578 ns/op	   55376 B/op	       4 allocs/op
+BenchmarkFixedFieldSetup/256       	  917775	      2078 ns/op	   55376 B/op	       4 allocs/op
+BenchmarkFixedFieldSetup/256       	  712454	      1833 ns/op	   55376 B/op	       4 allocs/op
+BenchmarkFixedFieldSetup/256       	  799725	      1743 ns/op	   55376 B/op	       4 allocs/op
+BenchmarkFixedFieldAccounting/sparse         	 2527519	       476.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedFieldAccounting/sparse         	 2489606	       472.9 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedFieldAccounting/sparse         	 2497818	       474.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedFieldAccounting/sparse         	 2575869	       473.9 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedFieldAccounting/sparse         	 2565364	       472.4 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedFieldAccounting/dense          	  460134	      2401 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedFieldAccounting/dense          	  500077	      2380 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedFieldAccounting/dense          	  477030	      2367 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedFieldAccounting/dense          	  502326	      2377 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedFieldAccounting/dense          	  493641	      2367 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedFieldAccounting/groups         	 2166224	       553.8 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedFieldAccounting/groups         	 2148157	       551.6 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedFieldAccounting/groups         	 2167225	       561.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedFieldAccounting/groups         	 2145620	       554.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedFieldAccounting/groups         	 2155225	       562.9 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedFieldAccounting/tombstones     	 2486858	       485.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedFieldAccounting/tombstones     	 2538502	       479.2 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedFieldAccounting/tombstones     	 2486341	       480.2 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedFieldAccounting/tombstones     	 2514200	       482.3 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedFieldAccounting/tombstones     	 2507599	       487.5 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedFieldLookup/8                  	575639994	         2.073 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedFieldLookup/8                  	580887120	         2.076 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedFieldLookup/8                  	580062175	         2.108 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedFieldLookup/8                  	572515213	         2.085 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedFieldLookup/8                  	573721522	         2.079 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedFieldLookup/256                	579004220	         2.085 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedFieldLookup/256                	579735468	         2.077 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedFieldLookup/256                	567670905	         2.094 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedFieldLookup/256                	585266166	         2.048 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedFieldLookup/256                	564996468	         2.076 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedFieldChurn                     	10291174	       116.5 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedFieldChurn                     	10493637	       116.4 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedFieldChurn                     	10413043	       117.8 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedFieldChurn                     	10630569	       116.4 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedFieldChurn                     	10411156	       117.4 ns/op	       0 B/op	       0 allocs/op
+BenchmarkFixedFieldCompletedString           	  196842	      6119 ns/op	     112 B/op	       1 allocs/op
+BenchmarkFixedFieldCompletedString           	  202460	      6057 ns/op	     112 B/op	       1 allocs/op
+BenchmarkFixedFieldCompletedString           	  203524	      6010 ns/op	     112 B/op	       1 allocs/op
+BenchmarkFixedFieldCompletedString           	  188998	      6045 ns/op	     112 B/op	       1 allocs/op
+BenchmarkFixedFieldCompletedString           	  186493	      6057 ns/op	     112 B/op	       1 allocs/op
+PASS
+ok  	github.com/quickfixgo/quickfix	83.249s

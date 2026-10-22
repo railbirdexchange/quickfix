@@ -1,0 +1,17 @@
+=== RUN   TestBoundedFullSessionExactAllocations
+=== RUN   TestBoundedFullSessionExactAllocations/inbound_gap
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+--- PASS: TestBoundedFullSessionExactAllocations (1.10s)
+    --- PASS: TestBoundedFullSessionExactAllocations/inbound_gap (1.10s)
+=== RUN   TestBoundedFullSessionExactAllocations
+=== RUN   TestBoundedFullSessionExactAllocations/inbound_gap
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+--- PASS: TestBoundedFullSessionExactAllocations (1.01s)
+    --- PASS: TestBoundedFullSessionExactAllocations/inbound_gap (1.01s)
+=== RUN   TestBoundedFullSessionExactAllocations
+=== RUN   TestBoundedFullSessionExactAllocations/inbound_gap
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+--- PASS: TestBoundedFullSessionExactAllocations (0.99s)
+    --- PASS: TestBoundedFullSessionExactAllocations/inbound_gap (0.98s)
+PASS
+ok  	github.com/quickfixgo/quickfix	3.716s

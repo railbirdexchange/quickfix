@@ -1,0 +1,21 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+cpu: Apple M4 Pro
+BenchmarkSessionRequiredValidation/valid         	 1866036	       647.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRequiredValidation/valid         	 1867742	       647.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRequiredValidation/valid         	 1837410	       653.6 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRequiredValidation/valid         	 1847316	       642.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRequiredValidation/valid         	 1866331	       647.8 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSessionRequiredValidation/missing_side  	 5445351	       209.8 ns/op	      64 B/op	       1 allocs/op
+BenchmarkSessionRequiredValidation/missing_side  	 5535669	       209.0 ns/op	      64 B/op	       1 allocs/op
+BenchmarkSessionRequiredValidation/missing_side  	 5449434	       214.5 ns/op	      64 B/op	       1 allocs/op
+BenchmarkSessionRequiredValidation/missing_side  	 5350497	       212.3 ns/op	      64 B/op	       1 allocs/op
+BenchmarkSessionRequiredValidation/missing_side  	 5378395	       208.4 ns/op	      64 B/op	       1 allocs/op
+BenchmarkSessionRequiredReject                   	  328054	      3640 ns/op	      64 B/op	       1 allocs/op
+BenchmarkSessionRequiredReject                   	  316990	      3738 ns/op	      64 B/op	       1 allocs/op
+BenchmarkSessionRequiredReject                   	  316686	      3711 ns/op	      64 B/op	       1 allocs/op
+BenchmarkSessionRequiredReject                   	  324444	      3950 ns/op	      64 B/op	       1 allocs/op
+BenchmarkSessionRequiredReject                   	  332214	      3607 ns/op	      64 B/op	       1 allocs/op
+PASS
+ok  	github.com/quickfixgo/quickfix	24.901s

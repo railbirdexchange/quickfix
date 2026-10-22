@@ -1,0 +1,36 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+cpu: Apple M4 Pro
+BenchmarkMessageString/ordinary/new_order_single         	 1537281	       792.4 ns/op	 129.98 MB/s	     152 B/op	       6 allocs/op
+BenchmarkMessageString/ordinary/new_order_single         	 1506828	       788.5 ns/op	 130.62 MB/s	     152 B/op	       6 allocs/op
+BenchmarkMessageString/ordinary/new_order_single         	 1501172	       791.4 ns/op	 130.15 MB/s	     152 B/op	       6 allocs/op
+BenchmarkMessageString/ordinary/new_order_single         	 1499977	       802.6 ns/op	 128.33 MB/s	     152 B/op	       6 allocs/op
+BenchmarkMessageString/ordinary/new_order_single         	 1484084	       793.1 ns/op	 129.86 MB/s	     152 B/op	       6 allocs/op
+BenchmarkMessageString/arena/new_order_single            	 1772347	       672.6 ns/op	 153.15 MB/s	     115 B/op	       2 allocs/op
+BenchmarkMessageString/arena/new_order_single            	 1740562	       677.3 ns/op	 152.08 MB/s	     115 B/op	       2 allocs/op
+BenchmarkMessageString/arena/new_order_single            	 1805977	       674.1 ns/op	 152.79 MB/s	     115 B/op	       2 allocs/op
+BenchmarkMessageString/arena/new_order_single            	 1789933	       671.2 ns/op	 153.45 MB/s	     115 B/op	       2 allocs/op
+BenchmarkMessageString/arena/new_order_single            	 1783682	       671.9 ns/op	 153.29 MB/s	     115 B/op	       2 allocs/op
+BenchmarkMessageString/raw/new_order_single              	59711022	        19.85 ns/op	5188.02 MB/s	     112 B/op	       1 allocs/op
+BenchmarkMessageString/raw/new_order_single              	62413718	        20.17 ns/op	5107.34 MB/s	     112 B/op	       1 allocs/op
+BenchmarkMessageString/raw/new_order_single              	61744144	        20.42 ns/op	5044.52 MB/s	     112 B/op	       1 allocs/op
+BenchmarkMessageString/raw/new_order_single              	59269136	        19.88 ns/op	5181.50 MB/s	     112 B/op	       1 allocs/op
+BenchmarkMessageString/raw/new_order_single              	62810919	        20.12 ns/op	5118.15 MB/s	     112 B/op	       1 allocs/op
+BenchmarkMessageString/ordinary/session_reject           	 1552645	       765.9 ns/op	 167.13 MB/s	     168 B/op	       6 allocs/op
+BenchmarkMessageString/ordinary/session_reject           	 1587873	       772.9 ns/op	 165.62 MB/s	     168 B/op	       6 allocs/op
+BenchmarkMessageString/ordinary/session_reject           	 1529715	       756.6 ns/op	 169.19 MB/s	     168 B/op	       6 allocs/op
+BenchmarkMessageString/ordinary/session_reject           	 1563026	       762.1 ns/op	 167.96 MB/s	     168 B/op	       6 allocs/op
+BenchmarkMessageString/ordinary/session_reject           	 1548244	       754.4 ns/op	 169.67 MB/s	     168 B/op	       6 allocs/op
+BenchmarkMessageString/arena/session_reject              	 1793605	       670.8 ns/op	 190.82 MB/s	     131 B/op	       2 allocs/op
+BenchmarkMessageString/arena/session_reject              	 1772438	       666.8 ns/op	 191.95 MB/s	     131 B/op	       2 allocs/op
+BenchmarkMessageString/arena/session_reject              	 1778330	       665.3 ns/op	 192.40 MB/s	     131 B/op	       2 allocs/op
+BenchmarkMessageString/arena/session_reject              	 1803902	       665.5 ns/op	 192.34 MB/s	     131 B/op	       2 allocs/op
+BenchmarkMessageString/arena/session_reject              	 1821872	       664.6 ns/op	 192.59 MB/s	     131 B/op	       2 allocs/op
+BenchmarkMessageString/raw/session_reject                	59035507	        21.21 ns/op	6035.56 MB/s	     128 B/op	       1 allocs/op
+BenchmarkMessageString/raw/session_reject                	46990105	        22.26 ns/op	5750.37 MB/s	     128 B/op	       1 allocs/op
+BenchmarkMessageString/raw/session_reject                	55510365	        20.61 ns/op	6211.38 MB/s	     128 B/op	       1 allocs/op
+BenchmarkMessageString/raw/session_reject                	59584519	        20.95 ns/op	6108.43 MB/s	     128 B/op	       1 allocs/op
+BenchmarkMessageString/raw/session_reject                	59372385	        21.92 ns/op	5838.89 MB/s	     128 B/op	       1 allocs/op
+PASS
+ok  	github.com/quickfixgo/quickfix	51.308s

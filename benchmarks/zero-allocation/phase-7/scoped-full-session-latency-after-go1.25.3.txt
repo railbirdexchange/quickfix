@@ -1,0 +1,16 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+cpu: Apple M4 Pro
+BenchmarkOrdinaryFullSessionRoundTrip/ordinary         	   22858	     48477 ns/op	     22858 latency-samples	   6971709 max-ns	     45083 p50-ns	     67042 p95-ns	     93708 p99-ns	     20629 requests/s	       0 B/op	       0 allocs/op
+BenchmarkOrdinaryFullSessionRoundTrip/ordinary         	   25905	     45481 ns/op	     25905 latency-samples	    139958 max-ns	     44250 p50-ns	     59875 p95-ns	     72375 p99-ns	     21987 requests/s	       0 B/op	       0 allocs/op
+BenchmarkOrdinaryFullSessionRoundTrip/ordinary         	   25423	     47598 ns/op	     25423 latency-samples	    364167 max-ns	     44959 p50-ns	     66583 p95-ns	     90167 p99-ns	     21009 requests/s	       0 B/op	       0 allocs/op
+BenchmarkOrdinaryFullSessionRoundTrip/ordinary         	   25682	     45780 ns/op	     25682 latency-samples	    220833 max-ns	     44166 p50-ns	     62250 p95-ns	     76542 p99-ns	     21843 requests/s	       0 B/op	       0 allocs/op
+BenchmarkOrdinaryFullSessionRoundTrip/ordinary         	   25970	     46629 ns/op	     25970 latency-samples	    151791 max-ns	     45166 p50-ns	     61709 p95-ns	     75167 p99-ns	     21446 requests/s	       0 B/op	       0 allocs/op
+BenchmarkOrdinaryFullSessionRoundTrip/groups           	   25046	     48418 ns/op	     25046 latency-samples	    313583 max-ns	     46666 p50-ns	     65417 p95-ns	     80833 p99-ns	     20654 requests/s	       0 B/op	       0 allocs/op
+BenchmarkOrdinaryFullSessionRoundTrip/groups           	   25104	     48017 ns/op	     25104 latency-samples	    160875 max-ns	     46458 p50-ns	     63500 p95-ns	     77584 p99-ns	     20826 requests/s	       0 B/op	       0 allocs/op
+BenchmarkOrdinaryFullSessionRoundTrip/groups           	   24525	     47687 ns/op	     24525 latency-samples	    164791 max-ns	     46291 p50-ns	     61584 p95-ns	     76292 p99-ns	     20970 requests/s	       0 B/op	       0 allocs/op
+BenchmarkOrdinaryFullSessionRoundTrip/groups           	   25038	     48020 ns/op	     25038 latency-samples	    162166 max-ns	     46500 p50-ns	     62833 p95-ns	     75375 p99-ns	     20825 requests/s	       0 B/op	       0 allocs/op
+BenchmarkOrdinaryFullSessionRoundTrip/groups           	   24534	     47778 ns/op	     24534 latency-samples	    141542 max-ns	     46333 p50-ns	     62416 p95-ns	     73917 p99-ns	     20930 requests/s	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/quickfixgo/quickfix	51.329s

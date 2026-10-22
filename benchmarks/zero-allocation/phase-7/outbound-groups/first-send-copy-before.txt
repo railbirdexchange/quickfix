@@ -1,0 +1,8 @@
+--- FAIL: TestBorrowedOutboundFirstSendCopiesOwnAllSections (0.04s)
+    --- FAIL: TestBorrowedOutboundFirstSendCopiesOwnAllSections/ToApp (0.02s)
+        borrowed_outbound_copy_test.go:58: tag 115: value "XXXXXX" reject <nil>; want "HEADER"
+    --- FAIL: TestBorrowedOutboundFirstSendCopiesOwnAllSections/ToAdmin (0.02s)
+        borrowed_outbound_copy_test.go:58: tag 115: value "XXXXXX" reject <nil>; want "HEADER"
+FAIL
+FAIL	github.com/quickfixgo/quickfix	0.801s
+FAIL

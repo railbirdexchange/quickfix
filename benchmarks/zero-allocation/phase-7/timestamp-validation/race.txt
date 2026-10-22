@@ -1,0 +1,5 @@
+ok  	github.com/quickfixgo/quickfix	47.464s
+ok  	github.com/quickfixgo/quickfix/internal	1.552s
+?   	github.com/quickfixgo/quickfix/internal/testsuite	[no test files]
+ok  	github.com/quickfixgo/quickfix/datadictionary	1.905s
+?   	github.com/quickfixgo/quickfix/config	[no test files]

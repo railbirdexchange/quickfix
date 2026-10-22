@@ -1,0 +1,29 @@
+File: quickfix-after.test
+Type: alloc_space
+Time: 2026-10-17 18:26:45 EDT
+Active filters:
+   focus=FIXDecimal.*Read|readDecimalQuantity
+Showing nodes accounting for 6296.07kB, 98.06% of 6420.38kB total
+Dropped 82 nodes (cum <= 32.10kB)
+      flat  flat%   sum%        cum   cum%
+ 3906.41kB 60.84% 60.84%  3906.41kB 60.84%  math/big.NewInt (inline)
+ 2343.82kB 36.51% 97.35%  6250.27kB 97.35%  github.com/quickfixgo/quickfix.readDecimalQuantity
+   39.28kB  0.61% 97.96%    39.28kB  0.61%  regexp/syntax.(*compiler).inst (inline)
+    3.66kB 0.057% 98.02%   115.09kB  1.79%  regexp.compile
+    2.41kB 0.037% 98.06%   121.44kB  1.89%  testing.(*B).Run
+    0.38kB 0.0058% 98.06%    87.12kB  1.36%  github.com/quickfixgo/quickfix.BenchmarkFIXDecimalOwnedRead
+    0.08kB 0.0012% 98.06%    34.77kB  0.54%  github.com/quickfixgo/quickfix.BenchmarkFIXDecimalOwnedRead.func1
+    0.05kB 0.00073% 98.06%  3906.45kB 60.84%  github.com/quickfixgo/quickfix.FieldMap.Get
+         0     0% 98.06%  3906.41kB 60.84%  github.com/quickfixgo/quickfix.(*FIXDecimal).Read
+         0     0% 98.06%  6252.32kB 97.38%  github.com/quickfixgo/quickfix.BenchmarkFIXDecimalOwnedRead.func1.2
+         0     0% 98.06%  3906.41kB 60.84%  github.com/quickfixgo/quickfix.FieldMap.GetField
+         0     0% 98.06%  3906.41kB 60.84%  github.com/shopspring/decimal.New (inline)
+         0     0% 98.06%   115.09kB  1.79%  regexp.Compile (inline)
+         0     0% 98.06%    53.45kB  0.83%  regexp.compileOnePass
+         0     0% 98.06%    40.27kB  0.63%  regexp/syntax.Compile
+         0     0% 98.06%  6251.16kB 97.36%  testing.(*B).launch
+         0     0% 98.06%   123.05kB  1.92%  testing.(*B).run1.func1
+         0     0% 98.06%  6374.21kB 99.28%  testing.(*B).runN
+         0     0% 98.06%   117.33kB  1.83%  testing.(*matcher).fullName
+         0     0% 98.06%   115.59kB  1.80%  testing.simpleMatch.matches
+         0     0% 98.06%   115.59kB  1.80%  testing/internal/testdeps.TestDeps.MatchString

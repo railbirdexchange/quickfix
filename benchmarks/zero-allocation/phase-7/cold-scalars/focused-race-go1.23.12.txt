@@ -1,0 +1,164 @@
+=== RUN   TestMessageArenaScalarWireParity
+--- PASS: TestMessageArenaScalarWireParity (0.00s)
+=== RUN   TestMessageArenaSetBytesAliasing
+=== RUN   TestMessageArenaSetBytesAliasing/growth_moves_source
+=== RUN   TestMessageArenaSetBytesAliasing/shrink_moves_source
+=== RUN   TestMessageArenaSetBytesAliasing/same_field_subslice
+=== RUN   TestMessageArenaSetBytesAliasing/same_field_full
+=== RUN   TestMessageArenaSetBytesAliasing/earlier_source
+=== RUN   TestMessageArenaSetBytesAliasing/external_alias_keeps_separate_wire
+=== RUN   TestMessageArenaSetBytesAliasing/mutable_owned_value_keeps_separate_wire
+=== RUN   TestMessageArenaSetBytesAliasing/overlap_from_wire_plane
+--- PASS: TestMessageArenaSetBytesAliasing (0.00s)
+    --- PASS: TestMessageArenaSetBytesAliasing/growth_moves_source (0.00s)
+    --- PASS: TestMessageArenaSetBytesAliasing/shrink_moves_source (0.00s)
+    --- PASS: TestMessageArenaSetBytesAliasing/same_field_subslice (0.00s)
+    --- PASS: TestMessageArenaSetBytesAliasing/same_field_full (0.00s)
+    --- PASS: TestMessageArenaSetBytesAliasing/earlier_source (0.00s)
+    --- PASS: TestMessageArenaSetBytesAliasing/external_alias_keeps_separate_wire (0.00s)
+    --- PASS: TestMessageArenaSetBytesAliasing/mutable_owned_value_keeps_separate_wire (0.00s)
+    --- PASS: TestMessageArenaSetBytesAliasing/overlap_from_wire_plane (0.00s)
+=== RUN   TestMessageArenaPublicReparseDetaches
+--- PASS: TestMessageArenaPublicReparseDetaches (0.00s)
+=== RUN   TestMessageArenaAttachRefusesOversizedInputWithoutMutation
+--- PASS: TestMessageArenaAttachRefusesOversizedInputWithoutMutation (0.00s)
+=== RUN   TestMessageArenaCannotChangeLimitsAfterAttachment
+--- PASS: TestMessageArenaCannotChangeLimitsAfterAttachment (0.00s)
+=== RUN   TestMessageArenaPublicSectionReplacementDetachesSurvivors
+=== RUN   TestMessageArenaPublicSectionReplacementDetachesSurvivors/remove
+=== RUN   TestMessageArenaPublicSectionReplacementDetachesSurvivors/clear
+=== RUN   TestMessageArenaPublicSectionReplacementDetachesSurvivors/scalar
+=== RUN   TestMessageArenaPublicSectionReplacementDetachesSurvivors/reattach
+--- PASS: TestMessageArenaPublicSectionReplacementDetachesSurvivors (0.00s)
+    --- PASS: TestMessageArenaPublicSectionReplacementDetachesSurvivors/remove (0.00s)
+    --- PASS: TestMessageArenaPublicSectionReplacementDetachesSurvivors/clear (0.00s)
+    --- PASS: TestMessageArenaPublicSectionReplacementDetachesSurvivors/scalar (0.00s)
+    --- PASS: TestMessageArenaPublicSectionReplacementDetachesSurvivors/reattach (0.00s)
+=== RUN   TestMessageArenaErrorSurvivesUnrelatedDetachment
+=== RUN   TestMessageArenaErrorSurvivesUnrelatedDetachment/init
+=== RUN   TestMessageArenaErrorSurvivesUnrelatedDetachment/copy
+=== RUN   TestMessageArenaErrorSurvivesUnrelatedDetachment/assignment
+--- PASS: TestMessageArenaErrorSurvivesUnrelatedDetachment (0.00s)
+    --- PASS: TestMessageArenaErrorSurvivesUnrelatedDetachment/init (0.00s)
+    --- PASS: TestMessageArenaErrorSurvivesUnrelatedDetachment/copy (0.00s)
+    --- PASS: TestMessageArenaErrorSurvivesUnrelatedDetachment/assignment (0.00s)
+=== RUN   TestMessageArenaCustomWriterCanReplaceDestination
+--- PASS: TestMessageArenaCustomWriterCanReplaceDestination (0.00s)
+=== RUN   TestMessageArenaCapacityIsAtomicAndLatched
+--- PASS: TestMessageArenaCapacityIsAtomicAndLatched (0.00s)
+=== RUN   TestMessageArenaWholeFrameAndFieldBudget
+--- PASS: TestMessageArenaWholeFrameAndFieldBudget (0.00s)
+=== RUN   TestMessageArenaRemoveClearAndChurn
+--- PASS: TestMessageArenaRemoveClearAndChurn (0.00s)
+=== RUN   TestMessageArenaCopyAndValueCopyDetach
+--- PASS: TestMessageArenaCopyAndValueCopyDetach (0.00s)
+=== RUN   TestMessageArenaExistingGroupsSurviveMovesAndCopies
+--- PASS: TestMessageArenaExistingGroupsSurviveMovesAndCopies (0.00s)
+=== RUN   TestMessageArenaScalarMutationsAllocateZero
+--- PASS: TestMessageArenaScalarMutationsAllocateZero (0.01s)
+=== RUN   TestScopedControlAcquisitionAndCopies
+--- PASS: TestScopedControlAcquisitionAndCopies (0.00s)
+=== RUN   TestScopedControlRestoresOwnerAfterCallbackReplacement
+=== RUN   TestScopedControlRestoresOwnerAfterCallbackReplacement/body
+=== RUN   TestScopedControlRestoresOwnerAfterCallbackReplacement/parsed_message
+--- PASS: TestScopedControlRestoresOwnerAfterCallbackReplacement (0.09s)
+    --- PASS: TestScopedControlRestoresOwnerAfterCallbackReplacement/body (0.05s)
+    --- PASS: TestScopedControlRestoresOwnerAfterCallbackReplacement/parsed_message (0.04s)
+=== RUN   TestScopedControlHeartbeatOwnsRequestID
+--- PASS: TestScopedControlHeartbeatOwnsRequestID (0.04s)
+=== RUN   TestScopedControlRejectOwnsRouteAndReference
+--- PASS: TestScopedControlRejectOwnsRouteAndReference (0.24s)
+=== RUN   TestScopedControlOwnedBytesStageOverlappingSource
+--- PASS: TestScopedControlOwnedBytesStageOverlappingSource (0.00s)
+=== RUN   TestScopedControlInvalidLimitsFailSessionSetup
+--- PASS: TestScopedControlInvalidLimitsFailSessionSetup (0.00s)
+=== RUN   TestScopedControlCallbackOwnershipAndCompletedWrite
+--- PASS: TestScopedControlCallbackOwnershipAndCompletedWrite (0.04s)
+=== RUN   TestScopedControlCapacityFailureReleasesScope
+--- PASS: TestScopedControlCapacityFailureReleasesScope (0.04s)
+=== RUN   TestScopedControlGapFillPreservesSequenceAndOriginalTime
+--- PASS: TestScopedControlGapFillPreservesSequenceAndOriginalTime (0.04s)
+=== RUN   TestScopedControlEmptyTestRequestIDAndTimeoutState
+--- PASS: TestScopedControlEmptyTestRequestIDAndTimeoutState (0.04s)
+=== RUN   TestScopedControlWarmedAllocations
+=== RUN   TestScopedControlWarmedAllocations/heartbeat
+=== RUN   TestScopedControlWarmedAllocations/test_request
+=== RUN   TestScopedControlWarmedAllocations/resend_request
+=== RUN   TestScopedControlWarmedAllocations/gap_fill
+=== RUN   TestScopedControlWarmedAllocations/logout
+=== RUN   TestScopedControlWarmedAllocations/logon
+=== RUN   TestScopedControlWarmedAllocations/reject
+--- PASS: TestScopedControlWarmedAllocations (0.35s)
+    --- PASS: TestScopedControlWarmedAllocations/heartbeat (0.05s)
+    --- PASS: TestScopedControlWarmedAllocations/test_request (0.05s)
+    --- PASS: TestScopedControlWarmedAllocations/resend_request (0.05s)
+    --- PASS: TestScopedControlWarmedAllocations/gap_fill (0.05s)
+    --- PASS: TestScopedControlWarmedAllocations/logout (0.05s)
+    --- PASS: TestScopedControlWarmedAllocations/logon (0.05s)
+    --- PASS: TestScopedControlWarmedAllocations/reject (0.05s)
+=== RUN   TestScopedOutboundBackpressureOrdinaryBurst
+=== RUN   TestScopedOutboundBackpressureOrdinaryBurst/0/from_app=false
+=== RUN   TestScopedOutboundBackpressureOrdinaryBurst/0/from_app=true
+=== RUN   TestScopedOutboundBackpressureOrdinaryBurst/2/from_app=false
+=== RUN   TestScopedOutboundBackpressureOrdinaryBurst/2/from_app=true
+--- PASS: TestScopedOutboundBackpressureOrdinaryBurst (0.00s)
+    --- PASS: TestScopedOutboundBackpressureOrdinaryBurst/0/from_app=false (0.00s)
+    --- PASS: TestScopedOutboundBackpressureOrdinaryBurst/0/from_app=true (0.00s)
+    --- PASS: TestScopedOutboundBackpressureOrdinaryBurst/2/from_app=false (0.00s)
+    --- PASS: TestScopedOutboundBackpressureOrdinaryBurst/2/from_app=true (0.00s)
+=== RUN   TestScopedOutboundBackpressureIgnoresStolenSessionWake
+--- PASS: TestScopedOutboundBackpressureIgnoresStolenSessionWake (0.00s)
+=== RUN   TestScopedOutboundBackpressureFailurePrecedesWriterJoin
+=== RUN   TestScopedOutboundBackpressureFailurePrecedesWriterJoin/0
+=== RUN   TestScopedOutboundBackpressureFailurePrecedesWriterJoin/2
+--- PASS: TestScopedOutboundBackpressureFailurePrecedesWriterJoin (0.00s)
+    --- PASS: TestScopedOutboundBackpressureFailurePrecedesWriterJoin/0 (0.00s)
+    --- PASS: TestScopedOutboundBackpressureFailurePrecedesWriterJoin/2 (0.00s)
+=== RUN   TestScopedOutboundBackpressurePreservesImmediateBoundaries
+=== RUN   TestScopedOutboundBackpressurePreservesImmediateBoundaries/prelogon
+=== RUN   TestScopedOutboundBackpressurePreservesImmediateBoundaries/offline
+=== RUN   TestScopedOutboundBackpressurePreservesImmediateBoundaries/reset_pending
+=== RUN   TestScopedOutboundBackpressurePreservesImmediateBoundaries/scheduled_reset
+=== RUN   TestScopedOutboundBackpressurePreservesImmediateBoundaries/reset_logon
+=== RUN   TestScopedOutboundBackpressurePreservesImmediateBoundaries/journal_full
+=== RUN   TestScopedOutboundBackpressurePreservesImmediateBoundaries/replacement
+--- PASS: TestScopedOutboundBackpressurePreservesImmediateBoundaries (0.00s)
+    --- PASS: TestScopedOutboundBackpressurePreservesImmediateBoundaries/prelogon (0.00s)
+    --- PASS: TestScopedOutboundBackpressurePreservesImmediateBoundaries/offline (0.00s)
+    --- PASS: TestScopedOutboundBackpressurePreservesImmediateBoundaries/reset_pending (0.00s)
+    --- PASS: TestScopedOutboundBackpressurePreservesImmediateBoundaries/scheduled_reset (0.00s)
+    --- PASS: TestScopedOutboundBackpressurePreservesImmediateBoundaries/reset_logon (0.00s)
+    --- PASS: TestScopedOutboundBackpressurePreservesImmediateBoundaries/journal_full (0.00s)
+    --- PASS: TestScopedOutboundBackpressurePreservesImmediateBoundaries/replacement (0.00s)
+=== RUN   TestScopedOutboundBackpressureClearsPublicationBeforeOnLogout
+--- PASS: TestScopedOutboundBackpressureClearsPublicationBeforeOnLogout (0.00s)
+=== RUN   TestScopedOutboundColdScalarOwnsSeparateRegions
+--- PASS: TestScopedOutboundColdScalarOwnsSeparateRegions (0.00s)
+=== RUN   TestScopedOutboundColdScalarFormatting
+--- PASS: TestScopedOutboundColdScalarFormatting (0.00s)
+=== RUN   TestScopedOutboundColdScalarSingleAllocation
+=== RUN   TestScopedOutboundColdScalarSingleAllocation/integer
+=== RUN   TestScopedOutboundColdScalarSingleAllocation/boolean
+=== RUN   TestScopedOutboundColdScalarSingleAllocation/bytes
+=== RUN   TestScopedOutboundColdScalarSingleAllocation/timestamp
+--- PASS: TestScopedOutboundColdScalarSingleAllocation (0.00s)
+    --- PASS: TestScopedOutboundColdScalarSingleAllocation/integer (0.00s)
+    --- PASS: TestScopedOutboundColdScalarSingleAllocation/boolean (0.00s)
+    --- PASS: TestScopedOutboundColdScalarSingleAllocation/bytes (0.00s)
+    --- PASS: TestScopedOutboundColdScalarSingleAllocation/timestamp (0.00s)
+=== RUN   TestScopedOutboundFirstSendEstablishesScopeOnlyOnReuse
+--- PASS: TestScopedOutboundFirstSendEstablishesScopeOnlyOnReuse (0.04s)
+=== RUN   TestScopedOutboundFirstSendOwnsEngineValuesAndWire
+--- PASS: TestScopedOutboundFirstSendOwnsEngineValuesAndWire (0.04s)
+=== RUN   TestScopedOutboundFirstSendInternalBytesDetachInput
+--- PASS: TestScopedOutboundFirstSendInternalBytesDetachInput (0.00s)
+=== RUN   TestScopedOutboundFirstSendReparseResetsReuse
+=== RUN   TestScopedOutboundFirstSendReparseResetsReuse/cold
+=== RUN   TestScopedOutboundFirstSendReparseResetsReuse/previously_warmed
+--- PASS: TestScopedOutboundFirstSendReparseResetsReuse (0.10s)
+    --- PASS: TestScopedOutboundFirstSendReparseResetsReuse/cold (0.05s)
+    --- PASS: TestScopedOutboundFirstSendReparseResetsReuse/previously_warmed (0.05s)
+=== RUN   TestScopedOutboundFirstSendCopyBoundaries
+--- PASS: TestScopedOutboundFirstSendCopyBoundaries (0.04s)
+PASS
+ok  	github.com/quickfixgo/quickfix	2.924s

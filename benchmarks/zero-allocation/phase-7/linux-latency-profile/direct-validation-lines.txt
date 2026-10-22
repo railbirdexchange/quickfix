@@ -1,0 +1,149 @@
+Total: 12.77s
+ROUTINE ======================== github.com/quickfixgo/quickfix.validateFIXWithScratch in /Users/a.alamer/factory/worktrees/quickfix-zero-alloc-session/validation.go
+      10ms      900ms (flat, cum)  7.05% of Total
+      10ms       10ms    108:func validateFIXWithScratch(d *datadictionary.DataDictionary, settings ValidatorSettings, msgType string, msg *Message, scratch *validationTagSet, required *validationRequiredMetadata) MessageRejectError {
+         .          .    109:	if d != nil {
+         .       20ms    110:		if err := validateMsgType(d, msgType, msg); err != nil {
+         .          .    111:			return err
+         .          .    112:		}
+         .          .    113:
+         .      210ms    114:		if err := validateRequired(d, d, msgType, msg, required); err != nil {
+         .          .    115:			return err
+         .          .    116:		}
+         .          .    117:	}
+         .          .    118:
+         .       20ms    119:	if err := validateFieldContent(msg, settings.CheckFieldsHaveValues, settings.CheckFieldsOutOfOrder); err != nil {
+         .          .    120:		return err
+         .          .    121:	}
+         .          .    122:
+         .          .    123:	if settings.RejectInvalidMessage && d != nil {
+         .      410ms    124:		if err := validateFields(d, d, settings, msg); err != nil {
+         .          .    125:			return err
+         .          .    126:		}
+         .          .    127:
+         .      230ms    128:		if err := validateWalkWithScratch(d, d, settings, msgType, msg, scratch); err != nil {
+         .          .    129:			return err
+         .          .    130:		}
+         .          .    131:	}
+         .          .    132:
+         .          .    133:	return nil
+ROUTINE ======================== github.com/quickfixgo/quickfix.validateField in /Users/a.alamer/factory/worktrees/quickfix-zero-alloc-session/validation.go
+      10ms      300ms (flat, cum)  2.35% of Total
+      10ms       10ms    498:func validateField(d *datadictionary.DataDictionary,
+         .          .    499:	settings ValidatorSettings,
+         .          .    500:	field *TagValue,
+         .          .    501:) MessageRejectError {
+         .          .    502:	if len(field.value) == 0 {
+         .          .    503:		return TagSpecifiedWithoutAValue(field.tag)
+         .          .    504:	}
+         .          .    505:
+         .       90ms    506:	fieldType, isMessageField := getFieldType(d, int(field.tag))
+         .          .    507:	if !isMessageField && !checkFieldNotDefined(settings, field.tag) {
+         .          .    508:		return InvalidTagNumber(field.tag)
+         .          .    509:	}
+         .          .    510:
+         .          .    511:	if !isMessageField {
+         .          .    512:		return nil
+         .          .    513:	}
+         .          .    514:
+         .       60ms    515:	if !validEnumValues(fieldType, field.value) {
+         .          .    516:		return ValueIsIncorrect(field.tag)
+         .          .    517:	}
+         .          .    518:
+         .      140ms    519:	if !validFieldValue(fieldType.Type, field.value) {
+         .          .    520:		return IncorrectDataFormatForValue(field.tag)
+         .          .    521:	}
+         .          .    522:
+         .          .    523:	return nil
+         .          .    524:}
+ROUTINE ======================== github.com/quickfixgo/quickfix.validateFieldContent in /Users/a.alamer/factory/worktrees/quickfix-zero-alloc-session/validation.go
+      20ms       20ms (flat, cum)  0.16% of Total
+         .          .    398:func validateFieldContent(msg *Message, checkFieldsHaveValues, checkFieldsOutOfOrder bool) MessageRejectError {
+         .          .    399:	if !checkFieldsHaveValues && !checkFieldsOutOfOrder {
+         .          .    400:		return nil
+         .          .    401:	}
+         .          .    402:	inHeader := true
+         .          .    403:	inTrailer := false
+         .          .    404:	for _, field := range msg.fields {
+         .          .    405:		t := field.tag
+         .          .    406:		if checkFieldsHaveValues && len(field.value) == 0 {
+         .          .    407:			return TagSpecifiedWithoutAValue(t)
+         .          .    408:		}
+         .          .    409:		switch {
+         .          .    410:		case inHeader && t.IsHeader():
+         .          .    411:		case inHeader && !t.IsHeader():
+         .          .    412:			inHeader = false
+         .          .    413:		case !inHeader && t.IsHeader() && checkFieldsOutOfOrder:
+         .          .    414:			return tagSpecifiedOutOfRequiredOrder(t)
+      20ms       20ms    415:		case t.IsTrailer():
+         .          .    416:			inTrailer = true
+         .          .    417:		case inTrailer && !t.IsTrailer() && checkFieldsOutOfOrder:
+         .          .    418:			return tagSpecifiedOutOfRequiredOrder(t)
+         .          .    419:		}
+         .          .    420:	}
+ROUTINE ======================== github.com/quickfixgo/quickfix.validateFields in /Users/a.alamer/factory/worktrees/quickfix-zero-alloc-session/validation.go
+      60ms      410ms (flat, cum)  3.21% of Total
+         .          .    457:func validateFields(transportDD *datadictionary.DataDictionary,
+         .          .    458:	appDD *datadictionary.DataDictionary,
+         .          .    459:	settings ValidatorSettings,
+         .          .    460:	message *Message,
+         .          .    461:) MessageRejectError {
+         .          .    462:	for index := range message.fields {
+      10ms       10ms    463:		field := &message.fields[index]
+         .          .    464:		switch {
+         .       50ms    465:		case field.tag.IsHeader():
+      10ms      160ms    466:			if err := validateField(transportDD, settings, field); err != nil {
+         .          .    467:				return err
+         .          .    468:			}
+      20ms       20ms    469:		case field.tag.IsTrailer():
+      10ms       20ms    470:			if err := validateField(transportDD, settings, field); err != nil {
+         .          .    471:				return err
+         .          .    472:			}
+         .          .    473:		default:
+      10ms      150ms    474:			if err := validateField(appDD, settings, field); err != nil {
+         .          .    475:				return err
+         .          .    476:			}
+         .          .    477:		}
+         .          .    478:	}
+         .          .    479:
+ROUTINE ======================== github.com/quickfixgo/quickfix.validateWalkWithTagSet in /Users/a.alamer/factory/worktrees/quickfix-zero-alloc-session/validation.go
+      10ms      230ms (flat, cum)  1.80% of Total
+         .          .    294:func validateWalkWithTagSet(transportDD, appDD *datadictionary.DataDictionary, settings ValidatorSettings, msgType string, msg *Message, seen *validationTagSet) MessageRejectError {
+         .          .    295:	remainingFields := msg.fields
+         .       30ms    296:	bodyDef := appDD.Messages[msgType]
+         .          .    297:
+         .          .    298:	var messageDef *datadictionary.MessageDef
+         .          .    299:	var fieldDef *datadictionary.FieldDef
+         .          .    300:	var err MessageRejectError
+         .          .    301:	var ok bool
+         .          .    302:
+         .          .    303:	for len(remainingFields) > 0 {
+         .          .    304:		tag := remainingFields[0].tag
+         .          .    305:
+         .          .    306:		switch {
+         .       10ms    307:		case tag.IsHeader():
+         .          .    308:			messageDef = transportDD.Header
+         .          .    309:		case tag.IsTrailer():
+         .          .    310:			messageDef = transportDD.Trailer
+         .          .    311:		default: // is body
+         .          .    312:			messageDef = bodyDef
+         .          .    313:		}
+         .          .    314:
+         .       80ms    315:		if !seen.add(tag) {
+         .          .    316:			return tagAppearsMoreThanOnce(tag)
+         .          .    317:		}
+         .          .    318:
+      10ms       90ms    319:		if fieldDef, ok = messageDef.Fields[int(tag)]; !ok {
+         .          .    320:			if !checkFieldNotDefined(settings, tag) {
+         .          .    321:				return TagNotDefinedForThisMessageType(tag)
+         .          .    322:			}
+         .          .    323:			remainingFields = remainingFields[1:]
+         .          .    324:			continue
+         .          .    325:		}
+         .          .    326:
+         .       20ms    327:		if remainingFields, err = validateVisitField(fieldDef, remainingFields); err != nil {
+         .          .    328:			return err
+         .          .    329:		}
+         .          .    330:	}
+         .          .    331:
+         .          .    332:	if len(remainingFields) != 0 {

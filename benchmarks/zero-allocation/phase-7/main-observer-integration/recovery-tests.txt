@@ -1,0 +1,144 @@
+=== RUN   TestBoundedConnectionStopBlockedRead
+=== RUN   TestBoundedConnectionStopBlockedRead/read_deadline
+=== RUN   TestBoundedConnectionStopBlockedRead/close_fallback
+--- PASS: TestBoundedConnectionStopBlockedRead (0.00s)
+    --- PASS: TestBoundedConnectionStopBlockedRead/read_deadline (0.00s)
+    --- PASS: TestBoundedConnectionStopBlockedRead/close_fallback (0.00s)
+=== RUN   TestBoundedConnectionStopBlockedInboundSend
+--- PASS: TestBoundedConnectionStopBlockedInboundSend (0.00s)
+=== RUN   TestBoundedConnectionStopDrainsQueuedSlots
+--- PASS: TestBoundedConnectionStopDrainsQueuedSlots (0.00s)
+=== RUN   TestBoundedConnectionSlowConsumerAndReconnect
+--- PASS: TestBoundedConnectionSlowConsumerAndReconnect (0.00s)
+=== RUN   TestBoundedConnectionFirstFrameAndCoalescedRemainder
+--- PASS: TestBoundedConnectionFirstFrameAndCoalescedRemainder (0.00s)
+=== RUN   TestBoundedConnectionFrameCapacityTerminalError
+--- PASS: TestBoundedConnectionFrameCapacityTerminalError (0.00s)
+=== RUN   TestBoundedConnectionRejectOversizedFirstFrame
+--- PASS: TestBoundedConnectionRejectOversizedFirstFrame (0.00s)
+=== RUN   TestBoundedConnectionFailedLogonPreparationReclaimsAcceptedReader
+--- PASS: TestBoundedConnectionFailedLogonPreparationReclaimsAcceptedReader (0.00s)
+=== RUN   TestBoundedFrameRecoveryLegacyBoundaries
+=== RUN   TestBoundedFrameRecoveryLegacyBoundaries/short_length/chunk_1
+=== RUN   TestBoundedFrameRecoveryLegacyBoundaries/short_length/chunk_7
+=== RUN   TestBoundedFrameRecoveryLegacyBoundaries/short_length/chunk_0
+=== RUN   TestBoundedFrameRecoveryLegacyBoundaries/long_length_consumes_following_frame/chunk_1
+=== RUN   TestBoundedFrameRecoveryLegacyBoundaries/long_length_consumes_following_frame/chunk_7
+=== RUN   TestBoundedFrameRecoveryLegacyBoundaries/long_length_consumes_following_frame/chunk_0
+=== RUN   TestBoundedFrameRecoveryLegacyBoundaries/nonnumeric_checksum/chunk_1
+=== RUN   TestBoundedFrameRecoveryLegacyBoundaries/nonnumeric_checksum/chunk_7
+=== RUN   TestBoundedFrameRecoveryLegacyBoundaries/nonnumeric_checksum/chunk_0
+=== RUN   TestBoundedFrameRecoveryLegacyBoundaries/short_checksum/chunk_1
+=== RUN   TestBoundedFrameRecoveryLegacyBoundaries/short_checksum/chunk_7
+=== RUN   TestBoundedFrameRecoveryLegacyBoundaries/short_checksum/chunk_0
+=== RUN   TestBoundedFrameRecoveryLegacyBoundaries/long_checksum/chunk_1
+=== RUN   TestBoundedFrameRecoveryLegacyBoundaries/long_checksum/chunk_7
+=== RUN   TestBoundedFrameRecoveryLegacyBoundaries/long_checksum/chunk_0
+=== RUN   TestBoundedFrameRecoveryLegacyBoundaries/out_of_order_length/chunk_1
+=== RUN   TestBoundedFrameRecoveryLegacyBoundaries/out_of_order_length/chunk_7
+=== RUN   TestBoundedFrameRecoveryLegacyBoundaries/out_of_order_length/chunk_0
+--- PASS: TestBoundedFrameRecoveryLegacyBoundaries (0.00s)
+    --- PASS: TestBoundedFrameRecoveryLegacyBoundaries/short_length/chunk_1 (0.00s)
+    --- PASS: TestBoundedFrameRecoveryLegacyBoundaries/short_length/chunk_7 (0.00s)
+    --- PASS: TestBoundedFrameRecoveryLegacyBoundaries/short_length/chunk_0 (0.00s)
+    --- PASS: TestBoundedFrameRecoveryLegacyBoundaries/long_length_consumes_following_frame/chunk_1 (0.00s)
+    --- PASS: TestBoundedFrameRecoveryLegacyBoundaries/long_length_consumes_following_frame/chunk_7 (0.00s)
+    --- PASS: TestBoundedFrameRecoveryLegacyBoundaries/long_length_consumes_following_frame/chunk_0 (0.00s)
+    --- PASS: TestBoundedFrameRecoveryLegacyBoundaries/nonnumeric_checksum/chunk_1 (0.00s)
+    --- PASS: TestBoundedFrameRecoveryLegacyBoundaries/nonnumeric_checksum/chunk_7 (0.00s)
+    --- PASS: TestBoundedFrameRecoveryLegacyBoundaries/nonnumeric_checksum/chunk_0 (0.00s)
+    --- PASS: TestBoundedFrameRecoveryLegacyBoundaries/short_checksum/chunk_1 (0.00s)
+    --- PASS: TestBoundedFrameRecoveryLegacyBoundaries/short_checksum/chunk_7 (0.00s)
+    --- PASS: TestBoundedFrameRecoveryLegacyBoundaries/short_checksum/chunk_0 (0.00s)
+    --- PASS: TestBoundedFrameRecoveryLegacyBoundaries/long_checksum/chunk_1 (0.00s)
+    --- PASS: TestBoundedFrameRecoveryLegacyBoundaries/long_checksum/chunk_7 (0.00s)
+    --- PASS: TestBoundedFrameRecoveryLegacyBoundaries/long_checksum/chunk_0 (0.00s)
+    --- PASS: TestBoundedFrameRecoveryLegacyBoundaries/out_of_order_length/chunk_1 (0.00s)
+    --- PASS: TestBoundedFrameRecoveryLegacyBoundaries/out_of_order_length/chunk_7 (0.00s)
+    --- PASS: TestBoundedFrameRecoveryLegacyBoundaries/out_of_order_length/chunk_0 (0.00s)
+=== RUN   TestBoundedFrameRecoveryShortDestinationRetainsMalformedFrame
+--- PASS: TestBoundedFrameRecoveryShortDestinationRetainsMalformedFrame (0.00s)
+=== RUN   TestBoundedFrameRecoveryTerminalErrorsReturnSlot
+=== RUN   TestBoundedFrameRecoveryTerminalErrorsReturnSlot/missing_length
+=== RUN   TestBoundedFrameRecoveryTerminalErrorsReturnSlot/empty_length
+=== RUN   TestBoundedFrameRecoveryTerminalErrorsReturnSlot/zero_length
+=== RUN   TestBoundedFrameRecoveryTerminalErrorsReturnSlot/negative_length
+=== RUN   TestBoundedFrameRecoveryTerminalErrorsReturnSlot/overflow
+=== RUN   TestBoundedFrameRecoveryTerminalErrorsReturnSlot/out_of_order_overflow
+=== RUN   TestBoundedFrameRecoveryTerminalErrorsReturnSlot/out_of_order_exceeds_remaining_capacity
+=== RUN   TestBoundedFrameRecoveryTerminalErrorsReturnSlot/no_checksum_within_capacity
+=== RUN   TestBoundedFrameRecoveryTerminalErrorsReturnSlot/unterminated_checksum
+=== RUN   TestBoundedFrameRecoveryTerminalErrorsReturnSlot/short_checksum_at_eof
+--- PASS: TestBoundedFrameRecoveryTerminalErrorsReturnSlot (0.00s)
+    --- PASS: TestBoundedFrameRecoveryTerminalErrorsReturnSlot/missing_length (0.00s)
+    --- PASS: TestBoundedFrameRecoveryTerminalErrorsReturnSlot/empty_length (0.00s)
+    --- PASS: TestBoundedFrameRecoveryTerminalErrorsReturnSlot/zero_length (0.00s)
+    --- PASS: TestBoundedFrameRecoveryTerminalErrorsReturnSlot/negative_length (0.00s)
+    --- PASS: TestBoundedFrameRecoveryTerminalErrorsReturnSlot/overflow (0.00s)
+    --- PASS: TestBoundedFrameRecoveryTerminalErrorsReturnSlot/out_of_order_overflow (0.00s)
+    --- PASS: TestBoundedFrameRecoveryTerminalErrorsReturnSlot/out_of_order_exceeds_remaining_capacity (0.00s)
+    --- PASS: TestBoundedFrameRecoveryTerminalErrorsReturnSlot/no_checksum_within_capacity (0.00s)
+    --- PASS: TestBoundedFrameRecoveryTerminalErrorsReturnSlot/unterminated_checksum (0.00s)
+    --- PASS: TestBoundedFrameRecoveryTerminalErrorsReturnSlot/short_checksum_at_eof (0.00s)
+=== RUN   TestBoundedFrameRecoveryDropsMalformedBeforeValidSessionMessage
+=== RUN   TestBoundedFrameRecoveryDropsMalformedBeforeValidSessionMessage/chunk_1
+=== RUN   TestBoundedFrameRecoveryDropsMalformedBeforeValidSessionMessage/chunk_0
+--- PASS: TestBoundedFrameRecoveryDropsMalformedBeforeValidSessionMessage (0.00s)
+    --- PASS: TestBoundedFrameRecoveryDropsMalformedBeforeValidSessionMessage/chunk_1 (0.00s)
+    --- PASS: TestBoundedFrameRecoveryDropsMalformedBeforeValidSessionMessage/chunk_0 (0.00s)
+=== RUN   TestBoundedFrameRecoveryMarkerSkipsParseAndDispatch
+--- PASS: TestBoundedFrameRecoveryMarkerSkipsParseAndDispatch (0.00s)
+=== RUN   TestBoundedInboundSessionCapacityPreservesStore
+=== RUN   TestBoundedInboundSessionCapacityPreservesStore/stash
+=== RUN   TestBoundedInboundSessionCapacityPreservesStore/fields
+=== RUN   TestBoundedInboundSessionCapacityPreservesStore/group-entries
+=== RUN   TestBoundedInboundSessionCapacityPreservesStore/group-depth
+=== RUN   TestBoundedInboundSessionCapacityPreservesStore/frame-read
+=== RUN   TestBoundedInboundSessionCapacityPreservesStore/zero-stash
+--- PASS: TestBoundedInboundSessionCapacityPreservesStore (0.03s)
+    --- PASS: TestBoundedInboundSessionCapacityPreservesStore/stash (0.00s)
+    --- PASS: TestBoundedInboundSessionCapacityPreservesStore/fields (0.00s)
+    --- PASS: TestBoundedInboundSessionCapacityPreservesStore/group-entries (0.02s)
+    --- PASS: TestBoundedInboundSessionCapacityPreservesStore/group-depth (0.01s)
+    --- PASS: TestBoundedInboundSessionCapacityPreservesStore/frame-read (0.00s)
+    --- PASS: TestBoundedInboundSessionCapacityPreservesStore/zero-stash (0.00s)
+=== RUN   TestBoundedParserFragmentedAndCoalescedFrames
+--- PASS: TestBoundedParserFragmentedAndCoalescedFrames (0.00s)
+=== RUN   TestBoundedParserShortDestinationRetainsFrame
+--- PASS: TestBoundedParserShortDestinationRetainsFrame (0.00s)
+=== RUN   TestBoundedParserCapacityAndMalformedLength
+=== RUN   TestBoundedParserCapacityAndMalformedLength/frame_over_capacity
+=== RUN   TestBoundedParserCapacityAndMalformedLength/scratch_full_before_start
+=== RUN   TestBoundedParserCapacityAndMalformedLength/missing_length_value
+=== RUN   TestBoundedParserCapacityAndMalformedLength/zero_length
+=== RUN   TestBoundedParserCapacityAndMalformedLength/negative_length
+=== RUN   TestBoundedParserCapacityAndMalformedLength/signed_length
+=== RUN   TestBoundedParserCapacityAndMalformedLength/wrong_second_field
+=== RUN   TestBoundedParserCapacityAndMalformedLength/overflow_length
+=== RUN   TestBoundedParserCapacityAndMalformedLength/length_too_short
+=== RUN   TestBoundedParserCapacityAndMalformedLength/length_too_long
+=== RUN   TestBoundedParserCapacityAndMalformedLength/checksum_not_numeric
+=== RUN   TestBoundedParserCapacityAndMalformedLength/checksum_wrong_width
+--- PASS: TestBoundedParserCapacityAndMalformedLength (0.00s)
+    --- PASS: TestBoundedParserCapacityAndMalformedLength/frame_over_capacity (0.00s)
+    --- PASS: TestBoundedParserCapacityAndMalformedLength/scratch_full_before_start (0.00s)
+    --- PASS: TestBoundedParserCapacityAndMalformedLength/missing_length_value (0.00s)
+    --- PASS: TestBoundedParserCapacityAndMalformedLength/zero_length (0.00s)
+    --- PASS: TestBoundedParserCapacityAndMalformedLength/negative_length (0.00s)
+    --- PASS: TestBoundedParserCapacityAndMalformedLength/signed_length (0.00s)
+    --- PASS: TestBoundedParserCapacityAndMalformedLength/wrong_second_field (0.00s)
+    --- PASS: TestBoundedParserCapacityAndMalformedLength/overflow_length (0.00s)
+    --- PASS: TestBoundedParserCapacityAndMalformedLength/length_too_short (0.00s)
+    --- PASS: TestBoundedParserCapacityAndMalformedLength/length_too_long (0.00s)
+    --- PASS: TestBoundedParserCapacityAndMalformedLength/checksum_not_numeric (0.00s)
+    --- PASS: TestBoundedParserCapacityAndMalformedLength/checksum_wrong_width (0.00s)
+=== RUN   TestBoundedParserPartialEOF
+--- PASS: TestBoundedParserPartialEOF (0.00s)
+=== RUN   TestBoundedParserConfiguration
+--- PASS: TestBoundedParserConfiguration (0.00s)
+=== RUN   TestBoundedParserNoProgress
+--- PASS: TestBoundedParserNoProgress (0.00s)
+=== RUN   TestBoundedFramingNoAllocations
+--- PASS: TestBoundedFramingNoAllocations (0.00s)
+PASS
+ok  	github.com/quickfixgo/quickfix	0.787s

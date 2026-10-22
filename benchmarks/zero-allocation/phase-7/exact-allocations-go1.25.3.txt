@@ -1,0 +1,102 @@
+=== RUN   TestBoundedFullSessionExactAllocations
+=== RUN   TestBoundedFullSessionExactAllocations/ordinary
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+=== RUN   TestBoundedFullSessionExactAllocations/groups
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+=== RUN   TestBoundedFullSessionExactAllocations/outbound_resend
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+=== RUN   TestBoundedFullSessionExactAllocations/inbound_gap
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+=== RUN   TestBoundedFullSessionExactAllocations/slow_consumer
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+=== RUN   TestBoundedFullSessionExactAllocations/warmed_post_reconnect
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+--- PASS: TestBoundedFullSessionExactAllocations (5.88s)
+    --- PASS: TestBoundedFullSessionExactAllocations/ordinary (0.84s)
+    --- PASS: TestBoundedFullSessionExactAllocations/groups (1.01s)
+    --- PASS: TestBoundedFullSessionExactAllocations/outbound_resend (0.92s)
+    --- PASS: TestBoundedFullSessionExactAllocations/inbound_gap (1.00s)
+    --- PASS: TestBoundedFullSessionExactAllocations/slow_consumer (1.32s)
+    --- PASS: TestBoundedFullSessionExactAllocations/warmed_post_reconnect (0.80s)
+=== RUN   TestBoundedFullSessionExactAllocations
+=== RUN   TestBoundedFullSessionExactAllocations/ordinary
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+=== RUN   TestBoundedFullSessionExactAllocations/groups
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+=== RUN   TestBoundedFullSessionExactAllocations/outbound_resend
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+=== RUN   TestBoundedFullSessionExactAllocations/inbound_gap
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+=== RUN   TestBoundedFullSessionExactAllocations/slow_consumer
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+=== RUN   TestBoundedFullSessionExactAllocations/warmed_post_reconnect
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+--- PASS: TestBoundedFullSessionExactAllocations (5.99s)
+    --- PASS: TestBoundedFullSessionExactAllocations/ordinary (0.94s)
+    --- PASS: TestBoundedFullSessionExactAllocations/groups (1.02s)
+    --- PASS: TestBoundedFullSessionExactAllocations/outbound_resend (0.92s)
+    --- PASS: TestBoundedFullSessionExactAllocations/inbound_gap (1.00s)
+    --- PASS: TestBoundedFullSessionExactAllocations/slow_consumer (1.31s)
+    --- PASS: TestBoundedFullSessionExactAllocations/warmed_post_reconnect (0.80s)
+=== RUN   TestBoundedFullSessionExactAllocations
+=== RUN   TestBoundedFullSessionExactAllocations/ordinary
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+=== RUN   TestBoundedFullSessionExactAllocations/groups
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+=== RUN   TestBoundedFullSessionExactAllocations/outbound_resend
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+=== RUN   TestBoundedFullSessionExactAllocations/inbound_gap
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+=== RUN   TestBoundedFullSessionExactAllocations/slow_consumer
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+=== RUN   TestBoundedFullSessionExactAllocations/warmed_post_reconnect
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+--- PASS: TestBoundedFullSessionExactAllocations (6.02s)
+    --- PASS: TestBoundedFullSessionExactAllocations/ordinary (0.94s)
+    --- PASS: TestBoundedFullSessionExactAllocations/groups (1.03s)
+    --- PASS: TestBoundedFullSessionExactAllocations/outbound_resend (0.91s)
+    --- PASS: TestBoundedFullSessionExactAllocations/inbound_gap (1.00s)
+    --- PASS: TestBoundedFullSessionExactAllocations/slow_consumer (1.29s)
+    --- PASS: TestBoundedFullSessionExactAllocations/warmed_post_reconnect (0.85s)
+=== RUN   TestBoundedFullSessionExactAllocations
+=== RUN   TestBoundedFullSessionExactAllocations/ordinary
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+=== RUN   TestBoundedFullSessionExactAllocations/groups
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+=== RUN   TestBoundedFullSessionExactAllocations/outbound_resend
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+=== RUN   TestBoundedFullSessionExactAllocations/inbound_gap
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+=== RUN   TestBoundedFullSessionExactAllocations/slow_consumer
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+=== RUN   TestBoundedFullSessionExactAllocations/warmed_post_reconnect
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+--- PASS: TestBoundedFullSessionExactAllocations (5.99s)
+    --- PASS: TestBoundedFullSessionExactAllocations/ordinary (0.94s)
+    --- PASS: TestBoundedFullSessionExactAllocations/groups (1.01s)
+    --- PASS: TestBoundedFullSessionExactAllocations/outbound_resend (0.91s)
+    --- PASS: TestBoundedFullSessionExactAllocations/inbound_gap (1.01s)
+    --- PASS: TestBoundedFullSessionExactAllocations/slow_consumer (1.32s)
+    --- PASS: TestBoundedFullSessionExactAllocations/warmed_post_reconnect (0.80s)
+=== RUN   TestBoundedFullSessionExactAllocations
+=== RUN   TestBoundedFullSessionExactAllocations/ordinary
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+=== RUN   TestBoundedFullSessionExactAllocations/groups
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+=== RUN   TestBoundedFullSessionExactAllocations/outbound_resend
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+=== RUN   TestBoundedFullSessionExactAllocations/inbound_gap
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+=== RUN   TestBoundedFullSessionExactAllocations/slow_consumer
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+=== RUN   TestBoundedFullSessionExactAllocations/warmed_post_reconnect
+    bounded_full_session_allocations_test.go:53: completed_cycles=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
+--- PASS: TestBoundedFullSessionExactAllocations (6.00s)
+    --- PASS: TestBoundedFullSessionExactAllocations/ordinary (0.96s)
+    --- PASS: TestBoundedFullSessionExactAllocations/groups (1.01s)
+    --- PASS: TestBoundedFullSessionExactAllocations/outbound_resend (0.91s)
+    --- PASS: TestBoundedFullSessionExactAllocations/inbound_gap (1.01s)
+    --- PASS: TestBoundedFullSessionExactAllocations/slow_consumer (1.31s)
+    --- PASS: TestBoundedFullSessionExactAllocations/warmed_post_reconnect (0.80s)
+PASS
+ok  	github.com/quickfixgo/quickfix	30.685s
