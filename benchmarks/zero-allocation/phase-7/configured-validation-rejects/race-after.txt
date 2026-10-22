@@ -1,2 +1,0 @@
-ok  	github.com/quickfixgo/quickfix	46.275s
-ok  	github.com/quickfixgo/quickfix/internal	1.577s

@@ -36,8 +36,8 @@ func TestNewMessageRejectError(t *testing.T) {
 	if msgRej.RejectReason() != expectedRejectReason {
 		t.Errorf("expected: %d, got: %d\n", expectedRejectReason, msgRej.RejectReason())
 	}
-	if refTagID, present := msgRej.RefTagID(); !present || refTagID != expectedRefTagID {
-		t.Errorf("expected: %d, got: %d (present: %v)\n", expectedRefTagID, refTagID, present)
+	if *msgRej.RefTagID() != expectedRefTagID {
+		t.Errorf("expected: %d, got: %d\n", expectedRefTagID, msgRej.RefTagID())
 	}
 	if msgRej.IsBusinessReject() != expectedIsBusinessReject {
 		t.Error("Expected IsBusinessReject to be false\n")
@@ -59,8 +59,8 @@ func TestNewBusinessMessageRejectError(t *testing.T) {
 	if msgRej.RejectReason() != expectedRejectReason {
 		t.Errorf("expected: %d, got: %d\n", expectedRejectReason, msgRej.RejectReason())
 	}
-	if refTagID, present := msgRej.RefTagID(); !present || refTagID != expectedRefTagID {
-		t.Errorf("expected: %d, got: %d (present: %v)\n", expectedRefTagID, refTagID, present)
+	if *msgRej.RefTagID() != expectedRefTagID {
+		t.Errorf("expected: %d, got: %d\n", expectedRefTagID, msgRej.RefTagID())
 	}
 	if msgRej.IsBusinessReject() != expectedIsBusinessReject {
 		t.Error("Expected IsBusinessReject to be true\n")
@@ -86,8 +86,8 @@ func TestNewBusinessMessageRejectErrorWithRefID(t *testing.T) {
 	if strings.Compare(msgRej.BusinessRejectRefID(), expectedbusinessRejectRefID) != 0 {
 		t.Errorf("expected: %s, got: %s\n", expectedbusinessRejectRefID, msgRej.BusinessRejectRefID())
 	}
-	if refTagID, present := msgRej.RefTagID(); !present || refTagID != expectedRefTagID {
-		t.Errorf("expected: %d, got: %d (present: %v)\n", expectedRefTagID, refTagID, present)
+	if *msgRej.RefTagID() != expectedRefTagID {
+		t.Errorf("expected: %d, got: %d\n", expectedRefTagID, msgRej.RefTagID())
 	}
 	if msgRej.IsBusinessReject() != expectedIsBusinessReject {
 		t.Error("Expected IsBusinessReject to be true\n")
@@ -109,8 +109,8 @@ func TestIncorrectDataFormatForValue(t *testing.T) {
 	if msgRej.RejectReason() != expectedRejectReason {
 		t.Errorf("expected: %d, got: %d\n", expectedRejectReason, msgRej.RejectReason())
 	}
-	if refTagID, present := msgRej.RefTagID(); !present || refTagID != expectedRefTagID {
-		t.Errorf("expected: %d, got: %d (present: %v)\n", expectedRefTagID, refTagID, present)
+	if *msgRej.RefTagID() != expectedRefTagID {
+		t.Errorf("expected: %d, got: %d\n", expectedRefTagID, msgRej.RefTagID())
 	}
 	if msgRej.IsBusinessReject() != expectedIsBusinessReject {
 		t.Error("Expected IsBusinessReject to be false\n")
@@ -125,8 +125,8 @@ func TestValueIsIncorrect(t *testing.T) {
 		expectedIsBusinessReject     = false
 	)
 	msgRej := ValueIsIncorrect(expectedRefTagID)
-	if refTagID, present := msgRej.RefTagID(); !present || refTagID != expectedRefTagID {
-		t.Errorf("expected: %d, got: %d (present: %v)\n", expectedRefTagID, refTagID, present)
+	if *msgRej.RefTagID() != expectedRefTagID {
+		t.Errorf("expected: %d, got: %d\n", expectedRefTagID, msgRej.RefTagID())
 	}
 	if strings.Compare(msgRej.Error(), expectedErrorString) != 0 {
 		t.Errorf("expected: %s, got: %s\n", expectedErrorString, msgRej.Error())
@@ -149,8 +149,8 @@ func TestConditionallyRequiredFieldMissing(t *testing.T) {
 		expectedIsBusinessReject     = true
 	)
 	msgRej := ConditionallyRequiredFieldMissing(expectedRefTagID)
-	if refTagID, present := msgRej.RefTagID(); !present || refTagID != expectedRefTagID {
-		t.Errorf("expected: %d, got: %d (present: %v)\n", expectedRefTagID, refTagID, present)
+	if *msgRej.RefTagID() != expectedRefTagID {
+		t.Errorf("expected: %d, got: %d\n", expectedRefTagID, msgRej.RefTagID())
 	}
 	if strings.Compare(msgRej.Error(), expectedErrorString) != 0 {
 		t.Errorf("expected: %s, got: %s\n", expectedErrorString, msgRej.Error())
@@ -181,8 +181,8 @@ func TestInvalidMessageType(t *testing.T) {
 	if msgRej.RejectReason() != expectedRejectReason {
 		t.Errorf("expected: %d, got: %d\n", expectedRejectReason, msgRej.RejectReason())
 	}
-	if refTagID, present := msgRej.RefTagID(); present {
-		t.Errorf("expected: absent, got: %d\n", refTagID)
+	if msgRej.RefTagID() != nil {
+		t.Errorf("expected: nil, got: %d\n", msgRej.RefTagID())
 	}
 	if msgRej.IsBusinessReject() != expectedIsBusinessReject {
 		t.Error("Expected IsBusinessReject to be false\n")
@@ -196,8 +196,8 @@ func TestUnsupportedMessageType(t *testing.T) {
 		expectedIsBusinessReject = true
 	)
 	msgRej := UnsupportedMessageType()
-	if refTagID, present := msgRej.RefTagID(); present {
-		t.Errorf("expected: absent, got: %d\n", refTagID)
+	if msgRej.RefTagID() != nil {
+		t.Errorf("expected: nil, got: %d\n", msgRej.RefTagID())
 	}
 	if strings.Compare(msgRej.Error(), expectedErrorString) != 0 {
 		t.Errorf("expected: %s, got: %s\n", expectedErrorString, msgRej.Error())
@@ -225,8 +225,8 @@ func TestTagNotDefinedForThisMessageType(t *testing.T) {
 	if msgRej.RejectReason() != expectedRejectReason {
 		t.Errorf("expected: %d, got: %d\n", expectedRejectReason, msgRej.RejectReason())
 	}
-	if refTagID, present := msgRej.RefTagID(); !present || refTagID != expectedRefTagID {
-		t.Errorf("expected: %d, got: %d (present: %v)\n", expectedRefTagID, refTagID, present)
+	if *msgRej.RefTagID() != expectedRefTagID {
+		t.Errorf("expected: %d, got: %d\n", expectedRefTagID, msgRej.RefTagID())
 	}
 	if msgRej.IsBusinessReject() != expectedIsBusinessReject {
 		t.Error("Expected IsBusinessReject to be false\n")
@@ -248,8 +248,8 @@ func TestRequiredTagMissing(t *testing.T) {
 	if msgRej.RejectReason() != expectedRejectReason {
 		t.Errorf("expected: %d, got: %d\n", expectedRejectReason, msgRej.RejectReason())
 	}
-	if refTagID, present := msgRej.RefTagID(); !present || refTagID != expectedRefTagID {
-		t.Errorf("expected: %d, got: %d (present: %v)\n", expectedRefTagID, refTagID, present)
+	if *msgRej.RefTagID() != expectedRefTagID {
+		t.Errorf("expected: %d, got: %d\n", expectedRefTagID, msgRej.RefTagID())
 	}
 	if msgRej.IsBusinessReject() != expectedIsBusinessReject {
 		t.Error("Expected IsBusinessReject to be false\n")
@@ -271,8 +271,8 @@ func TestTagSpecifiedWithoutAValue(t *testing.T) {
 	if msgRej.RejectReason() != expectedRejectReason {
 		t.Errorf("expected: %d, got: %d\n", expectedRejectReason, msgRej.RejectReason())
 	}
-	if refTagID, present := msgRej.RefTagID(); !present || refTagID != expectedRefTagID {
-		t.Errorf("expected: %d, got: %d (present: %v)\n", expectedRefTagID, refTagID, present)
+	if *msgRej.RefTagID() != expectedRefTagID {
+		t.Errorf("expected: %d, got: %d\n", expectedRefTagID, msgRej.RefTagID())
 	}
 	if msgRej.IsBusinessReject() != expectedIsBusinessReject {
 		t.Error("Expected IsBusinessReject to be false\n")
@@ -294,48 +294,10 @@ func TestInvalidTagNumber(t *testing.T) {
 	if msgRej.RejectReason() != expectedRejectReason {
 		t.Errorf("expected: %d, got: %d\n", expectedRejectReason, msgRej.RejectReason())
 	}
-	if refTagID, present := msgRej.RefTagID(); !present || refTagID != expectedRefTagID {
-		t.Errorf("expected: %d, got: %d (present: %v)\n", expectedRefTagID, refTagID, present)
+	if *msgRej.RefTagID() != expectedRefTagID {
+		t.Errorf("expected: %d, got: %d\n", expectedRefTagID, msgRej.RefTagID())
 	}
 	if msgRej.IsBusinessReject() != expectedIsBusinessReject {
 		t.Error("Expected IsBusinessReject to be false\n")
-	}
-}
-
-func TestMessageRejectConstructorsSnapshotReferenceTag(t *testing.T) {
-	for _, constructor := range []struct {
-		name string
-		make func(*Tag) MessageRejectError
-	}{
-		{"session", func(tag *Tag) MessageRejectError { return NewMessageRejectError("custom", 5, tag) }},
-		{"business", func(tag *Tag) MessageRejectError { return NewBusinessMessageRejectError("custom", 5, tag) }},
-		{"business_ref", func(tag *Tag) MessageRejectError {
-			return NewBusinessMessageRejectErrorWithRefID("custom", 5, "ref", tag)
-		}},
-	} {
-		t.Run(constructor.name, func(t *testing.T) {
-			if tag, present := constructor.make(nil).RefTagID(); present || tag != 0 {
-				t.Fatalf("nil input returned (%d, %v), want (0, false)", tag, present)
-			}
-			for _, want := range []Tag{0, 44, -1} {
-				input := want
-				reject := constructor.make(&input)
-				input = 999
-				value, present := reject.RefTagID()
-				if !present || value != want {
-					t.Fatalf("constructor retained input storage: got (%d, %v), want (%d, true)", value, present, want)
-				}
-				value = 1000
-				if got, present := reject.RefTagID(); !present || got != want || got == value {
-					t.Fatalf("returned reference value changed error: got (%d, %v), want (%d, true)", got, present, want)
-				}
-			}
-		})
-	}
-}
-
-func TestRejectLogonHasNoReferenceTag(t *testing.T) {
-	if tag, present := (RejectLogon{Text: "no session"}).RefTagID(); tag != 0 || present {
-		t.Fatalf("logon reject reference = (%d, %v), want (0, false)", tag, present)
 	}
 }

@@ -1,8 +1,0 @@
-goos: darwin
-goarch: arm64
-pkg: github.com/quickfixgo/quickfix
-cpu: Apple M4 Pro
-BenchmarkBoundedFullSession/outbound_resend         	    2000	    158233 ns/op	   5.23 MB/s	     360 B/op	       6 allocs/op
-BenchmarkBoundedFullSession/inbound_gap             	    2000	    194468 ns/op	   5.14 MB/s	    1552 B/op	      29 allocs/op
-PASS
-ok  	github.com/quickfixgo/quickfix	5.003s

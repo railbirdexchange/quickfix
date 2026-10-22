@@ -19,7 +19,6 @@ import (
 	"bytes"
 	"fmt"
 	"math"
-	"strings"
 	"time"
 
 	"github.com/quickfixgo/quickfix/datadictionary"
@@ -39,10 +38,6 @@ type msgParser struct {
 	trailerBytes            []byte
 	foundBody               bool
 	foundTrailer            bool
-	messageDef              *datadictionary.MessageDef
-	limits                  *ParseLimits
-	declaredGroupEntries    int
-	actualGroupEntries      int
 }
 
 // in the message header, the first 3 tags in the message header must be 8,9,35.
@@ -121,17 +116,7 @@ type Message struct {
 	bodyBytes []byte
 
 	// Field bytes as they appear in the raw message.
-	fields     []TagValue
-	groupStack []*datadictionary.FieldDef
-	inbound    *inboundSlot
-	// parseSlot identifies the original slot even in Message value copies.
-	// CopyInto must not transfer its input-frame or parse-storage ownership.
-	parseSlot      *MessageSlot
-	outboundFields *outboundFields
-	outboundOwner  *Message // Identifies a prior successful send of this exact representation.
-	arena          *messageArena
-	// Only the explicit borrowed application boundary may recycle scalar views.
-	outboundBorrowed bool
+	fields []TagValue
 }
 
 // ToMessage returns the message itself.
@@ -154,55 +139,20 @@ func NewMessage() *Message {
 	return m
 }
 
-// CopyInto overwrites to with this message. Copies from session callbacks own
-// their field and group bytes and remain valid after the callback returns.
+// CopyInto erases the dest messages and copies the currency message content
+// into it.
 func (m *Message) CopyInto(to *Message) {
-	if m == to {
-		return
-	}
-	if err := m.constructionError(); err != nil {
-		panic(err)
-	}
-	to.outboundOwner = nil
-	if to.outboundFields != nil && to.outboundFields.owner != to {
-		to.outboundFields = nil
-	}
-	scoped := m.parseSlot != nil && m.parseSlot.scopedFields[0].fixed != nil || m.Header.scoped || m.Body.scoped || m.Trailer.scoped
-	reusable := m.arena != nil || m.Header.reusable || m.Body.reusable || m.Trailer.reusable
-	if scoped || reusable {
-		// A callback may replace an entire section. Its local marker can then
-		// be absent, but the complete scoped message still requires owned copies.
-		header, body, trailer := m.Header.FieldMap, m.Body.FieldMap, m.Trailer.FieldMap
-		header.scoped, body.scoped, trailer.scoped = true, true, true
-		header.CopyInto(&to.Header.FieldMap)
-		body.CopyInto(&to.Body.FieldMap)
-		trailer.CopyInto(&to.Trailer.FieldMap)
-	} else {
-		m.Header.CopyInto(&to.Header.FieldMap)
-		m.Body.CopyInto(&to.Body.FieldMap)
-		m.Trailer.CopyInto(&to.Trailer.FieldMap)
-	}
+	m.Header.CopyInto(&to.Header.FieldMap)
+	m.Body.CopyInto(&to.Body.FieldMap)
+	m.Trailer.CopyInto(&to.Trailer.FieldMap)
 
 	to.ReceiveTime = m.ReceiveTime
 	to.bodyBytes = make([]byte, len(m.bodyBytes))
 	copy(to.bodyBytes, m.bodyBytes)
 	to.fields = make([]TagValue, len(m.fields))
 	for i := range to.fields {
-		value := m.fields[i].value
-		if scoped || reusable {
-			value = bytes.Clone(value)
-		}
-		to.fields[i].init(m.fields[i].tag, value)
+		to.fields[i].init(m.fields[i].tag, m.fields[i].value)
 	}
-	copiedSlot := to.parseSlot != nil && &to.parseSlot.message != to
-	if scoped || reusable || copiedSlot {
-		to.rawMessage = nil
-	}
-	if copiedSlot || scoped && to.parseSlot == nil {
-		to.inbound = nil
-		to.parseSlot = nil
-	}
-	to.arena = nil
 }
 
 // ParseMessage constructs a Message from a byte slice wrapping a FIX message.
@@ -217,18 +167,6 @@ func ParseMessageWithDataDictionary(
 	transportDataDictionary *datadictionary.DataDictionary,
 	appDataDictionary *datadictionary.DataDictionary,
 ) (err error) {
-	// Convenience reparsing replaces the entire field representation. It is a
-	// cold ownership boundary, not a mutation within the outbound scalar arena.
-	msg.Header.detachArena()
-	msg.Body.detachArena()
-	msg.Trailer.detachArena()
-	msg.arena = nil
-	msg.outboundOwner = nil
-	if msg.parseSlot != nil {
-		// Convenience parsing may reuse the original slab beyond the bounded
-		// parser's high-water mark, then shrink or replace the visible slice.
-		msg.parseSlot.fieldsUsed = cap(msg.parseSlot.parseFields)
-	}
 	// Create msgparser before we go any further.
 	mp := &msgParser{
 		msg:                     msg,
@@ -243,39 +181,24 @@ func ParseMessageWithDataDictionary(
 
 // doParsing executes the message parsing process.
 func doParsing(mp *msgParser) (err error) {
-	mp.msg.Header.lock()
-	defer mp.msg.Header.unlock()
-	mp.msg.Body.lock()
-	defer mp.msg.Body.unlock()
-	mp.msg.Trailer.lock()
-	defer mp.msg.Trailer.unlock()
+	mp.msg.Header.rwLock.Lock()
+	defer mp.msg.Header.rwLock.Unlock()
+	mp.msg.Body.rwLock.Lock()
+	defer mp.msg.Body.rwLock.Unlock()
+	mp.msg.Trailer.rwLock.Lock()
+	defer mp.msg.Trailer.rwLock.Unlock()
 
 	// Initialize for parsing.
 	mp.msg.Header.clearNoLock()
 	mp.msg.Body.clearNoLock()
 	mp.msg.Trailer.clearNoLock()
-	mp.msg.bodyBytes = nil
-	mp.msg.groupStack = mp.msg.groupStack[:0]
 
 	// Allocate expected message fields in one chunk.
-	var fieldCount int
-	if mp.limits != nil {
-		// A binary XMLData value may itself contain SOH bytes. Bound actual
-		// extracted fields instead of treating those data bytes as fields.
-		fieldCount = cap(mp.msg.fields)
-	} else {
-		fieldCount = bytes.Count(mp.rawBytes, []byte{'\001'})
-	}
+	fieldCount := bytes.Count(mp.rawBytes, []byte{'\001'})
 	if fieldCount == 0 {
 		return parseError{OrigError: fmt.Sprintf("No Fields detected in %s", string(mp.rawBytes))}
 	}
-	if fieldCount < 4 {
-		return parseError{OrigError: "Incomplete message"}
-	}
 	if cap(mp.msg.fields) < fieldCount {
-		if mp.limits != nil {
-			return ErrFieldCapacity
-		}
 		mp.msg.fields = make([]TagValue, fieldCount)
 	} else {
 		mp.msg.fields = mp.msg.fields[0:fieldCount]
@@ -305,15 +228,6 @@ func doParsing(mp *msgParser) (err error) {
 	mp.msg.Header.add(mp.msg.fields[mp.fieldIndex : mp.fieldIndex+1])
 
 	// Start parsing.
-	dictionary := mp.appDataDictionary
-	if mp.limits != nil {
-		dictionary = boundedMessageDictionary(mp.transportDataDictionary, dictionary, mp.parsedFieldBytes.value)
-	}
-	if dictionary != nil {
-		// A transient byte-to-string map key does not copy the frame's bytes.
-		mp.messageDef = dictionary.Messages[string(mp.parsedFieldBytes.value)]
-	}
-	mp.msg.bodyBytes = mp.rawBytes
 	mp.fieldIndex++
 	xmlDataLen := 0
 	xmlDataMsg := false
@@ -321,12 +235,6 @@ func doParsing(mp *msgParser) (err error) {
 	mp.foundBody = false
 	mp.foundTrailer = false
 	for {
-		if mp.fieldIndex >= len(mp.msg.fields) {
-			if mp.limits != nil && len(mp.rawBytes) > 0 {
-				return ErrFieldCapacity
-			}
-			return parseError{OrigError: "Missing CheckSum field"}
-		}
 		mp.parsedFieldBytes = &mp.msg.fields[mp.fieldIndex]
 		if xmlDataLen > 0 {
 			mp.rawBytes, err = extractXMLDataField(mp.parsedFieldBytes, mp.rawBytes, xmlDataLen)
@@ -341,32 +249,16 @@ func doParsing(mp *msgParser) (err error) {
 
 		switch {
 		case isHeaderField(mp.parsedFieldBytes.tag, mp.transportDataDictionary):
-			if group := mp.sectionGroup(mp.parsedFieldBytes.tag, true); group != nil {
-				if err := parseGroup(mp, group, &mp.msg.Header.FieldMap); err != nil {
-					return err
-				}
-			} else {
-				mp.msg.Header.add(mp.msg.fields[mp.fieldIndex : mp.fieldIndex+1])
-			}
+			mp.msg.Header.add(mp.msg.fields[mp.fieldIndex : mp.fieldIndex+1])
 		case isTrailerField(mp.parsedFieldBytes.tag, mp.transportDataDictionary):
-			if group := mp.sectionGroup(mp.parsedFieldBytes.tag, false); group != nil {
-				if err := parseGroup(mp, group, &mp.msg.Trailer.FieldMap); err != nil {
-					return err
-				}
-			} else {
-				mp.msg.Trailer.add(mp.msg.fields[mp.fieldIndex : mp.fieldIndex+1])
-			}
+			mp.msg.Trailer.add(mp.msg.fields[mp.fieldIndex : mp.fieldIndex+1])
 			mp.foundTrailer = true
+		case isNumInGroupField(mp.msg, []Tag{mp.parsedFieldBytes.tag}, mp.appDataDictionary):
+			parseGroup(mp, []Tag{mp.parsedFieldBytes.tag})
 		default:
-			if group := mp.groupDefinition(mp.parsedFieldBytes.tag); group != nil {
-				if err = parseGroup(mp, group, &mp.msg.Body.FieldMap); err != nil {
-					return err
-				}
-			} else {
-				mp.foundBody = true
-				mp.trailerBytes = mp.rawBytes
-				mp.msg.Body.add(mp.msg.fields[mp.fieldIndex : mp.fieldIndex+1])
-			}
+			mp.foundBody = true
+			mp.trailerBytes = mp.rawBytes
+			mp.msg.Body.add(mp.msg.fields[mp.fieldIndex : mp.fieldIndex+1])
 		}
 		if mp.parsedFieldBytes.tag == tagCheckSum {
 			break
@@ -377,22 +269,9 @@ func doParsing(mp *msgParser) (err error) {
 		}
 
 		if mp.parsedFieldBytes.tag == tagXMLDataLen {
-			if mp.limits != nil {
-				xmlDataLen, err = boundedUnsigned(mp.parsedFieldBytes.value, len(mp.rawBytes), ErrFrameCapacity)
-				if err != nil {
-					return err
-				}
-			} else {
-				xmlDataLen, _ = mp.msg.Header.getIntNoLock(tagXMLDataLen)
-			}
+			xmlDataLen, _ = mp.msg.Header.getIntNoLock(tagXMLDataLen)
 		}
 		mp.fieldIndex++
-	}
-	if mp.limits != nil {
-		if len(mp.rawBytes) != 0 {
-			return parseError{OrigError: "Fields after CheckSum"}
-		}
-		mp.msg.fields = mp.msg.fields[:mp.fieldIndex+1]
 	}
 
 	// This will happen if there are no fields in the body
@@ -415,17 +294,9 @@ func doParsing(mp *msgParser) (err error) {
 		}
 	}
 
-	var bodyLength int
-	if mp.limits != nil {
-		bodyLength, err = boundedUnsigned(mp.msg.fields[1].value, mp.limits.MaxFrameBytes, ErrFrameCapacity)
-	} else {
-		bodyLength, err = mp.msg.Header.getIntNoLock(tagBodyLength)
-	}
+	bodyLength, err := mp.msg.Header.getIntNoLock(tagBodyLength)
 	if err != nil {
-		if mp.limits == nil {
-			return parseError{OrigError: err.Error()}
-		}
-		return err
+		err = parseError{OrigError: err.Error()}
 	} else if length != bodyLength && !xmlDataMsg {
 		err = parseError{OrigError: fmt.Sprintf("Incorrect Message Length, expected %d, got %d", bodyLength, length)}
 	}
@@ -434,135 +305,151 @@ func doParsing(mp *msgParser) (err error) {
 }
 
 // parseGroup iterates through a repeating group to maintain correct order of those fields.
-func parseGroup(mp *msgParser, definition *datadictionary.FieldDef, section *FieldMap) error {
-	bodyGroup := section == &mp.msg.Body.FieldMap
-	if bodyGroup {
-		mp.foundBody = true
-	}
-	start := mp.fieldIndex
-	mp.msg.groupStack = mp.msg.groupStack[:0]
-	if err := mp.pushGroup(definition); err != nil {
-		return err
-	}
+func parseGroup(mp *msgParser, tags []Tag) {
+	mp.foundBody = true
+	dm := mp.msg.fields[mp.fieldIndex : mp.fieldIndex+1]
+	fields := getGroupFields(mp.msg, tags, mp.appDataDictionary)
 
 	for {
 		mp.fieldIndex++
-		if mp.fieldIndex >= len(mp.msg.fields) {
-			if mp.limits != nil && len(mp.rawBytes) > 0 {
-				return ErrFieldCapacity
-			}
-			return parseError{OrigError: "Missing CheckSum field"}
-		}
 		mp.parsedFieldBytes = &mp.msg.fields[mp.fieldIndex]
 		preExtractBytes := mp.rawBytes
-		var err error
-		mp.rawBytes, err = extractField(mp.parsedFieldBytes, mp.rawBytes)
-		if err != nil {
-			return err
-		}
-		if bodyGroup {
-			mp.trailerBytes = mp.rawBytes
-		}
+		mp.rawBytes, _ = extractField(mp.parsedFieldBytes, mp.rawBytes)
+		mp.trailerBytes = mp.rawBytes
 
-		// Search the innermost group first, then its ancestors. Each group
-		// keeps its original contiguous range in the message's field slab.
-		var child *datadictionary.FieldDef
-		for depth := len(mp.msg.groupStack); depth > 0; depth-- {
-			parent := mp.msg.groupStack[depth-1]
-			if child = parent.Child(int(mp.parsedFieldBytes.tag)); child != nil {
-				mp.msg.groupStack = mp.msg.groupStack[:depth]
-				if mp.limits != nil && parent.Fields[0].Tag() == int(mp.parsedFieldBytes.tag) {
-					mp.actualGroupEntries++
-					if mp.actualGroupEntries > mp.limits.MaxGroupEntries {
-						return ErrGroupCapacity
-					}
-				}
-				break
+		// Is this field a member for the group.
+		if isGroupMember(mp.parsedFieldBytes.tag, fields) {
+			// Is this field a nested repeating group.
+			if isNumInGroupField(mp.msg, append(tags, mp.parsedFieldBytes.tag), mp.appDataDictionary) {
+				dm = append(dm, *mp.parsedFieldBytes)
+				tags = append(tags, mp.parsedFieldBytes.tag)
+				fields = getGroupFields(mp.msg, tags, mp.appDataDictionary)
+				continue
 			}
-		}
-		if child != nil {
-			if len(child.Fields) > 0 {
-				if err := mp.pushGroup(child); err != nil {
-					return err
-				}
-			}
-			continue
-		}
-
-		section.add(mp.msg.fields[start:mp.fieldIndex])
-		if !bodyGroup || mp.limits != nil {
-			// The normal loop classifies the first field outside this header or
-			// trailer group. Rewind that field without moving/copying its bytes.
-			mp.fieldIndex--
-			mp.parsedFieldBytes = &mp.msg.fields[mp.fieldIndex]
-			mp.rawBytes = preExtractBytes
-			if bodyGroup {
-				mp.trailerBytes = preExtractBytes
-			}
-			return nil
-		}
-		if isHeaderField(mp.parsedFieldBytes.tag, mp.transportDataDictionary) {
+			// Add the field member to the group.
+			dm = append(dm, *mp.parsedFieldBytes)
+		} else if isHeaderField(mp.parsedFieldBytes.tag, mp.transportDataDictionary) {
+			// Found a header tag for some reason..
+			mp.msg.Body.add(dm)
 			mp.msg.Header.add(mp.msg.fields[mp.fieldIndex : mp.fieldIndex+1])
+			break
 		} else if isTrailerField(mp.parsedFieldBytes.tag, mp.transportDataDictionary) {
+			// Found the trailer at the end of the message.
+			mp.msg.Body.add(dm)
 			mp.msg.Trailer.add(mp.msg.fields[mp.fieldIndex : mp.fieldIndex+1])
 			mp.foundTrailer = true
-			// The original body ends before the trailer, including on resend.
+			// Restore the buffer that still holds the trailer so the caller strips
+			// it from bodyBytes; otherwise the trailer stays embedded and resend
+			// emits a duplicate 10= tag.
 			mp.trailerBytes = preExtractBytes
-		} else if next := mp.groupDefinition(mp.parsedFieldBytes.tag); next != nil {
-			start = mp.fieldIndex
-			mp.msg.groupStack = mp.msg.groupStack[:0]
-			if err := mp.pushGroup(next); err != nil {
-				return err
-			}
-			continue
+			break
 		} else {
+			// Found a body field outside the group.
+			searchTags := []Tag{mp.parsedFieldBytes.tag}
+			// Is this a new group not inside the existing group.
+			if isNumInGroupField(mp.msg, searchTags, mp.appDataDictionary) {
+				// Add the current repeating group.
+				mp.msg.Body.add(dm)
+				// Cycle again with the new group.
+				dm = mp.msg.fields[mp.fieldIndex : mp.fieldIndex+1]
+				fields = getGroupFields(mp.msg, searchTags, mp.appDataDictionary)
+				continue
+			}
+			if len(tags) > 1 {
+				searchTags = tags[:len(tags)-1]
+			}
+			// Did this tag occur after a nested group and belongs to the parent group.
+			if isNumInGroupField(mp.msg, searchTags, mp.appDataDictionary) {
+				// Add the field member to the group.
+				dm = append(dm, *mp.parsedFieldBytes)
+				// Continue parsing the parent group.
+				fields = getGroupFields(mp.msg, searchTags, mp.appDataDictionary)
+				continue
+			}
+			// Add the repeating group.
+			mp.msg.Body.add(dm)
+			// Add the next body field.
 			mp.msg.Body.add(mp.msg.fields[mp.fieldIndex : mp.fieldIndex+1])
+
+			break
 		}
-		return nil
 	}
 }
 
-func (mp *msgParser) groupDefinition(tag Tag) *datadictionary.FieldDef {
-	if mp.messageDef != nil {
-		if field := mp.messageDef.Fields[int(tag)]; field != nil && len(field.Fields) > 0 {
-			return field
+// isNumInGroupField evaluates if this tag is the start of a repeating group.
+// tags slice will contain multiple tags if the tag in question is found while processing a group already.
+func isNumInGroupField(msg *Message, tags []Tag, appDataDictionary *datadictionary.DataDictionary) bool {
+	if appDataDictionary != nil {
+		msgt, err := msg.msgTypeNoLock()
+		if err != nil {
+			return false
+		}
+		mm, ok := appDataDictionary.Messages[msgt]
+		if ok {
+			fields := mm.Fields
+			for idx, tag := range tags {
+				fd, ok := fields[int(tag)]
+				if ok {
+					if idx == len(tags)-1 {
+						if len(fd.Fields) > 0 {
+							return true
+						}
+					} else {
+						// Map nested fields.
+						newFields := make(map[int]*datadictionary.FieldDef)
+						for _, ff := range fd.Fields {
+							newFields[ff.Tag()] = ff
+						}
+						fields = newFields
+					}
+				}
+			}
 		}
 	}
-	return nil
+	return false
 }
 
-func (mp *msgParser) sectionGroup(tag Tag, header bool) *datadictionary.FieldDef {
-	if mp.limits == nil || mp.transportDataDictionary == nil {
-		return nil
-	}
-	section := mp.transportDataDictionary.Trailer
-	if header {
-		section = mp.transportDataDictionary.Header
-	}
-	if section != nil {
-		if definition := section.Fields[int(tag)]; definition != nil && len(definition.Fields) > 0 {
-			return definition
+// getGroupFields gets the relevant fields for parsing a repeating group if this tag is the start of a repeating group.
+// tags slice will contain multiple tags if the tag in question is found while processing a group already.
+func getGroupFields(msg *Message, tags []Tag, appDataDictionary *datadictionary.DataDictionary) (fields []*datadictionary.FieldDef) {
+	if appDataDictionary != nil {
+		msgt, err := msg.msgTypeNoLock()
+		if err != nil {
+			return
+		}
+		mm, ok := appDataDictionary.Messages[msgt]
+		if ok {
+			fields := mm.Fields
+			for idx, tag := range tags {
+				fd, ok := fields[int(tag)]
+				if ok {
+					if idx == len(tags)-1 {
+						if len(fd.Fields) > 0 {
+							return fd.Fields
+						}
+					} else {
+						// Map nested fields.
+						newFields := make(map[int]*datadictionary.FieldDef)
+						for _, ff := range fd.Fields {
+							newFields[ff.Tag()] = ff
+						}
+						fields = newFields
+					}
+				}
+			}
 		}
 	}
-	return nil
+	return
 }
 
-func (mp *msgParser) pushGroup(definition *datadictionary.FieldDef) error {
-	if mp.limits != nil {
-		if len(mp.msg.groupStack) >= mp.limits.MaxGroupDepth || len(mp.msg.groupStack) == cap(mp.msg.groupStack) {
-			return ErrGroupDepth
+// isGroupMember evaluates if this tag belongs to a repeating group.
+func isGroupMember(tag Tag, fields []*datadictionary.FieldDef) bool {
+	for _, f := range fields {
+		if f.Tag() == int(tag) {
+			return true
 		}
-		count, err := boundedUnsigned(mp.parsedFieldBytes.value, mp.limits.MaxGroupEntries-mp.declaredGroupEntries, ErrGroupCapacity)
-		if err != nil && err != ErrInvalidUnsignedValue {
-			return err
-		}
-		// Invalid count syntax belongs to dictionary validation, which supplies
-		// the existing FIX reject reason/tag. Actual fields and delimiters are
-		// still bounded even when the declared count is malformed.
-		mp.declaredGroupEntries += count
 	}
-	mp.msg.groupStack = append(mp.msg.groupStack, definition)
-	return nil
+	return false
 }
 
 func isHeaderField(tag Tag, dataDict *datadictionary.DataDictionary) bool {
@@ -570,7 +457,7 @@ func isHeaderField(tag Tag, dataDict *datadictionary.DataDictionary) bool {
 		return true
 	}
 
-	if dataDict == nil || dataDict.Header == nil {
+	if dataDict == nil {
 		return false
 	}
 
@@ -583,7 +470,7 @@ func isTrailerField(tag Tag, dataDict *datadictionary.DataDictionary) bool {
 		return true
 	}
 
-	if dataDict == nil || dataDict.Trailer == nil {
+	if dataDict == nil {
 		return false
 	}
 
@@ -594,6 +481,10 @@ func isTrailerField(tag Tag, dataDict *datadictionary.DataDictionary) bool {
 // MsgType returns MsgType (tag 35) field's value.
 func (m *Message) MsgType() (string, MessageRejectError) {
 	return m.Header.GetString(tagMsgType)
+}
+
+func (m *Message) msgTypeNoLock() (string, MessageRejectError) {
+	return m.Header.getStringNoLock(tagMsgType)
 }
 
 // IsMsgTypeOf returns true if the Header contains MsgType (tag 35) field and its value is the specified one.
@@ -662,9 +553,6 @@ func extractXMLDataField(parsedFieldBytes *TagValue, buffer []byte, dataLen int)
 		remBytes = buffer
 		return
 	}
-	if dataLen < 0 || dataLen >= len(buffer)-endIndex-1 {
-		return buffer, parseError{OrigError: "Incomplete XMLData field"}
-	}
 	endIndex += dataLen + 1
 
 	err = parsedFieldBytes.parse(buffer[:endIndex+1])
@@ -683,13 +571,7 @@ func extractField(parsedFieldBytes *TagValue, buffer []byte) (remBytes []byte, e
 	return buffer[(endIndex + 1):], err
 }
 
-// Bytes returns the wire representation. During a session callback the returned
-// bytes borrow the input frame and expire when the callback returns. CopyInto
-// creates an owned message; String returns an owned string.
 func (m *Message) Bytes() []byte {
-	if err := m.constructionError(); err != nil {
-		panic(err)
-	}
 	if m.rawMessage != nil {
 		return m.rawMessage.Bytes()
 	}
@@ -697,66 +579,27 @@ func (m *Message) Bytes() []byte {
 	return m.build()
 }
 
-// String returns an owned wire representation that remains valid after a
-// session callback returns.
 func (m *Message) String() string {
-	if err := m.constructionError(); err != nil {
-		panic(err)
-	}
 	if m.rawMessage != nil {
 		return m.rawMessage.String()
 	}
 
-	m.cook(m.Body.length(), m.Body.total())
-	if err := m.constructionError(); err != nil {
-		panic(err)
-	}
-	var wire strings.Builder
-	wire.Grow(m.Header.serializedLength() + m.Body.serializedLength() + m.Trailer.serializedLength())
-	m.Header.writeString(&wire)
-	m.Body.writeString(&wire)
-	m.Trailer.writeString(&wire)
-	return wire.String()
+	return string(m.build())
 }
 
-// All valid checksum strings share one immutable backing allocation prepared at
-// startup. SetString retains its existing owned-value behavior in both maps.
-var checkSumStrings = func() (values [256]string) {
-	var digits [3 * 256]byte
-	for value := range values {
-		offset := 3 * value
-		digits[offset] = byte(value/100) + '0'
-		digits[offset+1] = byte(value/10%10) + '0'
-		digits[offset+2] = byte(value%10) + '0'
-	}
-	text := string(digits[:])
-	for value := range values {
-		values[value] = text[3*value : 3*value+3]
-	}
-	return values
-}()
-
 func formatCheckSum(value int) string {
-	if value < 0 || value > 255 {
-		return fmt.Sprintf("%03d", value)
-	}
-	return checkSumStrings[value]
+	return fmt.Sprintf("%03d", value)
 }
 
 // Build constructs a []byte from a Message instance.
 func (m *Message) build() []byte {
-	if err := m.constructionError(); err != nil {
-		panic(err)
-	}
 	m.cook(m.Body.length(), m.Body.total())
-	if err := m.constructionError(); err != nil {
-		panic(err)
-	}
 
-	dst := make([]byte, 0, m.Header.serializedLength()+m.Body.serializedLength()+m.Trailer.serializedLength())
-	dst = m.Header.appendLegacy(dst)
-	dst = m.Body.appendLegacy(dst)
-	return m.Trailer.appendLegacy(dst)
+	var b bytes.Buffer
+	m.Header.write(&b)
+	m.Body.write(&b)
+	m.Trailer.write(&b)
+	return b.Bytes()
 }
 
 // Constructs a []byte from a Message instance, using the given bodyBytes.
@@ -765,18 +608,13 @@ func (m *Message) build() []byte {
 // This func lets us pull the Message from the Store, parse it, update the Header, and then build it back into bytes using the original Body.
 // Note: The only standard non-Body group is NoHops.  If that is used in the Header, this workaround may fail.
 func (m *Message) buildWithBodyBytes(bodyBytes []byte) []byte {
-	if err := m.constructionError(); err != nil {
-		panic(err)
-	}
 	m.cook(len(bodyBytes), bytesTotal(bodyBytes))
-	if err := m.constructionError(); err != nil {
-		panic(err)
-	}
 
-	dst := make([]byte, 0, m.Header.serializedLength()+len(bodyBytes)+m.Trailer.serializedLength())
-	dst = m.Header.appendLegacy(dst)
-	dst = append(dst, bodyBytes...)
-	return m.Trailer.appendLegacy(dst)
+	var b bytes.Buffer
+	m.Header.write(&b)
+	b.Write(bodyBytes)
+	m.Trailer.write(&b)
+	return b.Bytes()
 }
 
 func (m *Message) cook(bodyLen, bodyTotal int) {

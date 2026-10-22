@@ -74,15 +74,5 @@ func (f *FIXInt) Read(bytes []byte) error {
 }
 
 func (f FIXInt) Write() []byte {
-	dst, _ := f.AppendTo(make([]byte, 0, intTextLength(int(f))))
-	return dst
-}
-
-// AppendTo appends the FIX integer to caller-owned storage without growing it.
-// Insufficient capacity returns ErrBufferTooSmall and leaves dst unchanged.
-func (f FIXInt) AppendTo(dst []byte) ([]byte, error) {
-	if intTextLength(int(f)) > cap(dst)-len(dst) {
-		return dst, ErrBufferTooSmall
-	}
-	return strconv.AppendInt(dst, int64(f), 10), nil
+	return strconv.AppendInt(nil, int64(f), 10)
 }

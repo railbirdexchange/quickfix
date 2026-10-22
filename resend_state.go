@@ -30,11 +30,11 @@ func (s resendState) Timeout(session *session, event internal.Event) (nextState 
 	nextState = inSession{}.Timeout(session, event)
 	switch nextState.(type) {
 	case inSession:
-		nextState = session.recoveryState(s)
-	case pendingTimeout, *pendingTimeout:
+		nextState = s
+	case pendingTimeout:
 		// Wrap pendingTimeout in resend. prevents us falling back to inSession if recovering
 		// from pendingTimeout.
-		nextState = session.timeoutState(session.recoveryState(s))
+		nextState = pendingTimeout{s}
 	}
 
 	return
@@ -46,9 +46,6 @@ func (s resendState) FixMsgIn(session *session, msg *Message) (nextState session
 	if !nextState.IsLoggedOn() {
 		return
 	}
-	if session.boundedIn != nil {
-		session.boundedIn.ring.discardBefore(session.store.NextTargetMsgSeqNum())
-	}
 
 	if s.currentResendRangeEnd != 0 && s.currentResendRangeEnd < session.store.NextTargetMsgSeqNum() {
 		nextResendState, err := session.sendResendRequest(session.store.NextTargetMsgSeqNum(), s.resendRangeEnd)
@@ -56,16 +53,12 @@ func (s resendState) FixMsgIn(session *session, msg *Message) (nextState session
 			return handleStateError(session, err)
 		}
 		nextResendState.messageStash = s.messageStash
-		return session.recoveryState(nextResendState)
+		return nextResendState
 	}
 
 	var gapFillFlag FIXBoolean
 	if msg.Body.Has(tagGapFillFlag) {
-		value, err := msg.Body.GetBytes(tagGapFillFlag)
-		if err == nil && gapFillFlag.Read(value) != nil {
-			err = IncorrectDataFormatForValue(tagGapFillFlag)
-		}
-		if err != nil {
+		if err := msg.Body.GetField(tagGapFillFlag, &gapFillFlag); err != nil {
 			return handleStateError(session, err)
 		}
 	}
@@ -76,50 +69,11 @@ func (s resendState) FixMsgIn(session *session, msg *Message) (nextState session
 			return handleStateError(session, err)
 		}
 		nextResendState.messageStash = s.messageStash
-		return session.recoveryState(nextResendState)
+		return nextResendState
 	}
 
 	if s.resendRangeEnd >= session.store.NextTargetMsgSeqNum() {
-		return session.recoveryState(s)
-	}
-	if session.boundedIn != nil {
-		ring := session.boundedIn.ring
-		for {
-			slot := ring.take(session.store.NextTargetMsgSeqNum())
-			if slot == nil {
-				break
-			}
-			message, err := session.parseInboundSlot(slot)
-			if err != nil {
-				slot.release()
-				return session.failBoundedInbound(err)
-			}
-			nextState = inSession{}.FixMsgIn(session, message)
-			if !slot.retained {
-				slot.release()
-			}
-			if !nextState.IsLoggedOn() {
-				return
-			}
-			ring.discardBefore(session.store.NextTargetMsgSeqNum())
-		}
-		// Later out-of-order frames can extend beyond the original recovery
-		// range. Keep their slots and request the next gap instead of discarding
-		// messages merely because the original range has completed.
-		lowest, found := 0, false
-		for _, entry := range ring.stash {
-			if entry.slot != nil && (!found || entry.seq < lowest) {
-				lowest, found = entry.seq, true
-			}
-		}
-		if found {
-			state, err := session.sendResendRequest(session.store.NextTargetMsgSeqNum(), lowest-1)
-			if err != nil {
-				return handleStateError(session, err)
-			}
-			return session.recoveryState(state)
-		}
-		return
+		return s
 	}
 
 	for len(s.messageStash) > 0 {

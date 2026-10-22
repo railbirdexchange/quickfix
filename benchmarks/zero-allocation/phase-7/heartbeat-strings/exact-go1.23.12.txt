@@ -1,5 +1,0 @@
-=== RUN   TestHeartbeatObservedStringReadsExactAllocations
-    heartbeat_string_allocations_test.go:52: completed_writes=100 total_mallocs_delta=0 total_alloc_bytes_delta=0
---- PASS: TestHeartbeatObservedStringReadsExactAllocations (0.01s)
-PASS
-ok  	github.com/quickfixgo/quickfix	0.596s

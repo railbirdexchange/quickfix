@@ -326,27 +326,6 @@ func (s *SessionSuite) TestCheckSessionTimeNoStartTimeEndTime() {
 	}
 }
 
-func (s *SessionSuite) TestIncomingWithoutScheduleStillEntersSessionTime() {
-	s.session.SessionTime = nil
-	s.session.State = notSessionTime{}
-	waiting := make(chan interface{})
-	s.session.notifyOnInSessionTime = waiting
-	s.IncrNextSenderMsgSeqNum()
-	s.IncrNextTargetMsgSeqNum()
-
-	// An unconnected input still performs schedule lifecycle processing before
-	// returning. Skipping the unused clock must not skip this transition.
-	s.session.Incoming(s.session, fixIn{})
-	s.State(latentState{})
-	s.NextSenderMsgSeqNum(2)
-	s.NextTargetMsgSeqNum(2)
-	select {
-	case <-waiting:
-	default:
-		s.Fail("session-time waiter was not notified")
-	}
-}
-
 func (s *SessionSuite) TestCheckSessionTimeInRange() {
 	var tests = []struct {
 		before, after sessionState
@@ -376,7 +355,6 @@ func (s *SessionSuite) TestCheckSessionTimeInRange() {
 			memStore.SetCreationTime(now.Add(time.Duration(-1) * time.Minute))
 		}
 		s.session.store = memStore
-		s.session.cacheStoreCreationTime()
 		s.IncrNextSenderMsgSeqNum()
 		s.IncrNextTargetMsgSeqNum()
 
@@ -1401,7 +1379,7 @@ func (suite *SessionSendTestSuite) TestSendAppMessagesReportsLoopLockWaitAndQueu
 
 func (suite *SessionSendTestSuite) TestBuiltMessageObserverReceivesTheBytesThatAreSent() {
 	app := &builtObservingApp{MockApp: &suite.MockApp}
-	suite.session.setApplication(app)
+	suite.session.application = app
 
 	suite.MockApp.On("ToApp").Return(nil)
 	require.Nil(suite.T(), suite.queueForSend(suite.NewOrderSingle()))
@@ -1416,7 +1394,7 @@ func (suite *SessionSendTestSuite) TestBuiltMessageObserverReceivesTheBytesThatA
 
 func (suite *SessionSendTestSuite) TestBuiltMessageObserverIsNotCalledWhenToAppRefusesTheMessage() {
 	app := &builtObservingApp{MockApp: &suite.MockApp}
-	suite.session.setApplication(app)
+	suite.session.application = app
 
 	suite.MockApp.On("ToApp").Return(ErrDoNotSend)
 	suite.Equal(ErrDoNotSend, suite.queueForSend(suite.NewOrderSingle()))

@@ -27,68 +27,15 @@ type Application interface {
 	// OnLogout notification of a session logging off or disconnecting.
 	OnLogout(sessionID SessionID)
 
-	// ToAdmin notification of admin message being sent to target. A message
-	// supplied to Send or SendToTarget remains caller-owned after sending.
-	// Engine-generated controls are owned messages that remain valid afterward.
-	// BorrowApplication explicitly replaces owned delivery with callback-scoped
-	// views of engine-generated controls.
+	// ToAdmin notification of admin message being sent to target.
 	ToAdmin(message *Message, sessionID SessionID)
 
-	// ToApp notification of app message being sent to target. Ordinary sends
-	// pass the original caller-owned Message synchronously. During resend,
-	// the engine supplies an owned message that survives request completion.
-	// BorrowApplication explicitly replaces owned replay delivery with a
-	// callback-scoped view.
+	// ToApp notification of app message being sent to target.
 	ToApp(message *Message, sessionID SessionID) error
 
-	// FromAdmin processes an inbound admin message. Messages and their field
-	// bytes remain valid after the callback returns. BorrowApplication explicitly
-	// replaces this owned delivery with callback-scoped delivery.
+	// FromAdmin notification of admin message being received from target.
 	FromAdmin(message *Message, sessionID SessionID) MessageRejectError
 
-	// FromApp processes an inbound application message, with the same ownership
-	// rules as FromAdmin.
+	// FromApp notification of app message being received from target.
 	FromApp(message *Message, sessionID SessionID) MessageRejectError
-}
-
-// BorrowApplication declares that application finishes using engine-owned
-// messages and byte views before each callback returns. It uses the same session
-// engine as an ordinary Application, omitting the ownership copies at delivery.
-// Pass the returned Application to NewAcceptor or NewInitiator.
-//
-// Incoming messages, engine-generated admin messages and resend messages must
-// not be retained or passed to asynchronous work. CopyInto, GetGroup and string
-// getters can create owned values when retention is necessary, and may allocate.
-// Caller-created outgoing Messages remain caller-owned. Repeated sends can
-// attach fixed construction storage; field byte views may move or be overwritten
-// on subsequent mutation or send. Do not retain those views across operations.
-// CopyInto and GetGroup inside outgoing callbacks own their snapshots even on
-// the first send, before reusable construction storage is attached.
-// If application implements BuiltMessageObserver, its hook is forwarded with
-// the same scoped message contract and read-only raw bytes that expire on return.
-// Ordinary Application delivery retains the legacy lifetimes.
-func BorrowApplication(application Application) Application {
-	if applicationBorrowsMessages(application) {
-		return application
-	}
-	return borrowedApplication{Application: application}
-}
-
-type borrowedApplication struct{ Application }
-
-func (application borrowedApplication) ToApp(message *Message, sessionID SessionID) error {
-	scope := beginBorrowedOutboundCopy(message)
-	defer scope.release()
-	return application.Application.ToApp(message, sessionID)
-}
-
-func (application borrowedApplication) ToAdmin(message *Message, sessionID SessionID) {
-	scope := beginBorrowedOutboundCopy(message)
-	defer scope.release()
-	application.Application.ToAdmin(message, sessionID)
-}
-
-func applicationBorrowsMessages(application Application) bool {
-	_, borrowed := application.(borrowedApplication)
-	return borrowed
 }

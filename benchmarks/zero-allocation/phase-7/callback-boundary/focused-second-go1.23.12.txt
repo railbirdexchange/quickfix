@@ -1,7 +1,0 @@
---- FAIL: TestScopedControlCallbackOwnershipAndCompletedWrite (0.00s)
-    scoped_control_test.go:294: callback does not own the acquired control
---- FAIL: TestScopedControlCapacityFailureReleasesScope (0.00s)
-    scoped_control_test.go:341: oversized callback result: quickfix: output buffer capacity exceeded
-FAIL
-FAIL	github.com/quickfixgo/quickfix	2.669s
-FAIL

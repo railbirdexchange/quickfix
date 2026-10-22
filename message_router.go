@@ -15,6 +15,11 @@
 
 package quickfix
 
+type routeKey struct {
+	FIXVersion string
+	MsgType    string
+}
+
 // FIX ApplVerID string values.
 const (
 	ApplVerIDFIX27    = "0"
@@ -32,36 +37,26 @@ const (
 // A MessageRoute is a function that can process a fromApp/fromAdmin callback.
 type MessageRoute func(msg *Message, sessionID SessionID) MessageRejectError
 
-// A MessageRouter dispatches messages to MessageRoutes. Configure routes before
-// using the router concurrently; concurrent Route calls do not modify the router.
+// A MessageRouter is a mutex for MessageRoutes.
 type MessageRouter struct {
-	routes map[string]map[string]MessageRoute
+	routes map[routeKey]MessageRoute
 }
 
 // NewMessageRouter returns an initialized MessageRouter instance.
 func NewMessageRouter() *MessageRouter {
-	return &MessageRouter{routes: make(map[string]map[string]MessageRoute)}
+	return &MessageRouter{routes: make(map[routeKey]MessageRoute)}
 }
 
 // AddRoute adds a route to the MessageRouter instance keyed to begin string and msgType.
 func (c MessageRouter) AddRoute(beginString string, msgType string, router MessageRoute) {
-	routes, ok := c.routes[beginString]
-	if !ok {
-		routes = make(map[string]MessageRoute)
-		c.routes[beginString] = routes
-	}
-	routes[msgType] = router
+	c.routes[routeKey{beginString, msgType}] = router
 }
 
-// Route may be called from the fromApp/fromAdmin callbacks. Missing BeginString
-// or MsgType returns the corresponding field error. After resolving the routing
-// headers and any required FIXT application version, an unregistered admin
-// message or BusinessMessageReject (j) is ignored. Other unregistered application
-// messages return UnsupportedMessageType.
+// Route may be called from the fromApp/fromAdmin callbacks. Messages that cannot be routed will be rejected with UnsupportedMessageType.
 func (c MessageRouter) Route(msg *Message, sessionID SessionID) MessageRejectError {
 	beginString, err := msg.Header.GetBytes(tagBeginString)
 	if err != nil {
-		return err
+		return nil
 	}
 
 	msgType, err := msg.Header.GetBytes(tagMsgType)
@@ -69,53 +64,47 @@ func (c MessageRouter) Route(msg *Message, sessionID SessionID) MessageRejectErr
 		return err
 	}
 
-	return c.tryRoute(beginString, msgType, msg, sessionID)
+	return c.tryRoute(string(beginString), string(msgType), msg, sessionID)
 }
 
-func (c MessageRouter) tryRoute(beginString []byte, msgType []byte, msg *Message, sessionID SessionID) MessageRejectError {
-	// Direct string-map lookups borrow the bytes only for the lookup, including
-	// custom values longer than the compiler's temporary string buffer.
-	routes := c.routes[string(beginString)]
-	isAdminMsg := isAdminMessageType(msgType)
+func (c MessageRouter) tryRoute(beginString string, msgType string, msg *Message, sessionID SessionID) MessageRejectError {
+	fixVersion := beginString
+	isAdminMsg := isAdminMessageType([]byte(msgType))
 
-	if string(beginString) == BeginStringFIXT11 && !isAdminMsg {
-		applVerID, present := msg.Header.getBytesIfPresent(tagApplVerID)
-		if !present {
+	if beginString == BeginStringFIXT11 && !isAdminMsg {
+		var applVerID FIXString
+		if err := msg.Header.GetField(tagApplVerID, &applVerID); err != nil {
 			session, ok := lookupSession(sessionID)
 			if !ok {
 				return NewMessageRejectError(errUnknownSession.Error(), rejectReasonCompIDProblem, nil)
 			}
-			applVerID = []byte(session.TargetDefaultApplicationVersionID())
+			applVerID = FIXString(session.TargetDefaultApplicationVersionID())
 		}
 
-		routes = c.routesForApplVerID(applVerID)
+		switch applVerID {
+		case ApplVerIDFIX40:
+			fixVersion = BeginStringFIX40
+		case ApplVerIDFIX41:
+			fixVersion = BeginStringFIX41
+		case ApplVerIDFIX42:
+			fixVersion = BeginStringFIX42
+		case ApplVerIDFIX43:
+			fixVersion = BeginStringFIX43
+		case ApplVerIDFIX44:
+			fixVersion = BeginStringFIX44
+		default:
+			fixVersion = string(applVerID)
+		}
 	}
 
-	if route, ok := routes[string(msgType)]; ok {
+	if route, ok := c.routes[routeKey{fixVersion, msgType}]; ok {
 		return route(msg, sessionID)
 	}
 
 	switch {
-	case isAdminMsg || string(msgType) == "j":
+	case isAdminMsg || msgType == "j":
 		return nil
 	}
 
 	return UnsupportedMessageType()
-}
-
-func (c MessageRouter) routesForApplVerID(applVerID []byte) map[string]MessageRoute {
-	switch string(applVerID) {
-	case ApplVerIDFIX40:
-		return c.routes[BeginStringFIX40]
-	case ApplVerIDFIX41:
-		return c.routes[BeginStringFIX41]
-	case ApplVerIDFIX42:
-		return c.routes[BeginStringFIX42]
-	case ApplVerIDFIX43:
-		return c.routes[BeginStringFIX43]
-	case ApplVerIDFIX44:
-		return c.routes[BeginStringFIX44]
-	default:
-		return c.routes[string(applVerID)]
-	}
 }

@@ -15,11 +15,7 @@
 
 package quickfix
 
-import (
-	"errors"
-
-	"github.com/quagmt/udecimal"
-)
+import "github.com/quagmt/udecimal"
 
 // FIXUDecimal is a FIX Float Value that implements an arbitrary precision fixed-point udecimal.  Implements FieldValue.
 type FIXUDecimal struct {
@@ -33,11 +29,7 @@ func (d FIXUDecimal) Write() []byte {
 	return []byte(d.Decimal.Trunc(d.Scale).StringFixed(d.Scale))
 }
 
-func (d *FIXUDecimal) Read(bytes []byte) error {
-	if err := d.Decimal.UnmarshalText(bytes); err != nil {
-		// UnmarshalText wraps the Parse error once; preserve Read's existing
-		// error text and direct sentinel comparisons.
-		return errors.Unwrap(err)
-	}
-	return nil
+func (d *FIXUDecimal) Read(bytes []byte) (err error) {
+	d.Decimal, err = udecimal.Parse(string(bytes))
+	return
 }

@@ -1,4 +1,0 @@
-# github.com/quickfixgo/quickfix [github.com/quickfixgo/quickfix.test]
-./outbound_callback_ownership_test.go:198:87: cannot use *NewMessage() (variable of type Message) as *Message value in argument to (inSession{}).resendMessages
-FAIL	github.com/quickfixgo/quickfix [build failed]
-FAIL

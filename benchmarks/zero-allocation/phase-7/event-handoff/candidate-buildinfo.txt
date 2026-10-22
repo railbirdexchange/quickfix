@@ -1,1 +1,0 @@
-benchmarks/zero-allocation/phase-7/event-handoff/event-handoff-linux-arm64.test: go1.23.12

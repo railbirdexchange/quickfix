@@ -1,2 +1,0 @@
-ok  	github.com/quickfixgo/quickfix	51.711s
-ok  	github.com/quickfixgo/quickfix/datadictionary	1.710s

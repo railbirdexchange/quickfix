@@ -1,8 +1,0 @@
-Focus expression matched no samples
-File: quickfix-after.test
-Type: alloc_space
-Time: 2026-10-17 18:53:14 EDT
-Active filters:
-   focus=prepareOutbound
-Showing nodes accounting for 0, 0% of 43.29MB total
-      flat  flat%   sum%        cum   cum%

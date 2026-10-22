@@ -14,7 +14,7 @@ See v0.9.0 release notes [here](https://github.com/quickfixgo/quickfix/releases/
 <ul>
   <li>100% free and open source with a liberal <a href="https://github.com/quickfixgo/quickfix/blob/master/LICENSE.txt">license</a></li>
   <li>Supports FIX versions 4.0 - 5.0SP2</li>
-  <li>Runs on any hardware and operating system supported by Go (1.24+ required)</li>
+  <li>Runs on any hardware and operating system supported by Go (1.21+ required)</li>
   <li>Spec driven run-time message validation</li>
   <li>Spec driven code generation of type-safe FIX messages, fields, and repeating groups</li>
   <li>Support for protocol customizations</li>
@@ -48,7 +48,6 @@ go get -u github.com/quickfixgo/quickfix
 
 ## Getting Started
 
-* [Bounded zero-allocation session profile and measured contract](ZERO_ALLOCATION.md)
 * [QuickFIX User Manual](https://quickfixengine.org/go/documentation/)
 * [Go API Documentation](https://godoc.org/github.com/quickfixgo/quickfix)
 * See [examples](https://github.com/quickfixgo/examples) for some simple examples of using QuickFIX/Go.
@@ -114,14 +113,6 @@ If you wish to work on QuickFIX/Go itself, you will need [Docker](https://docs.d
 * This opens the project in a docker container pre-configured with everything you need
 
 ### Build and Test
-
-The preferred toolchain is Go 1.27.2. The minimum supported Go version is 1.24,
-checked in CI with Go 1.24.x and Go 1.27.2. With
-`GOTOOLCHAIN=auto`, working in this module selects at least the preferred toolchain;
-the module's toolchain preference does not select the compiler for an
-application that imports QuickFIX/Go. CI uses `GOTOOLCHAIN=local` so each
-compatibility job runs its explicitly installed version. The existing linter
-runs on Go 1.24.x.
 
 The default make target runs [go vet](https://godoc.org/golang.org/x/tools/cmd/vet) and unit tests.
 
