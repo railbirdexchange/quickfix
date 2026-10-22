@@ -264,12 +264,13 @@ func (s *session) prepareOutbound(message, inReplyTo *Message, replacement bool)
 	if reservation >= 0 {
 		if resetStore {
 			err = journal.commitReset(reservation, slot.wire)
+			s.cacheStoreCreationTime()
 		} else {
 			err = journal.commit(reservation, sequence, slot.wire, true)
 		}
 	} else {
 		if resetStore {
-			err = s.store.Reset()
+			err = s.resetStore()
 		}
 		if err == nil {
 			if s.DisableMessagePersist {
@@ -489,7 +490,7 @@ func (s *session) enqueueReplay(message *Message, body []byte) error {
 		return s.EnqueueBytesAndSend(wire)
 	}
 	s.sendMutex.Lock()
-	defer s.sendMutex.Unlock()
+	defer s.unlockSend()
 	slot, err := s.reserveResendOutput()
 	if err != nil {
 		return err
@@ -513,8 +514,10 @@ func (s *session) refreshStore() error {
 	s.resendMutex.Lock()
 	defer s.resendMutex.Unlock()
 	s.sendMutex.Lock()
-	defer s.sendMutex.Unlock()
-	return s.store.Refresh()
+	defer s.unlockSend()
+	err := s.store.Refresh()
+	s.cacheStoreCreationTime()
+	return err
 }
 
 func (s *session) stageLogonReset() {
@@ -525,8 +528,8 @@ func (s *session) finishLogonReset() error {
 	s.resendMutex.Lock()
 	defer s.resendMutex.Unlock()
 	s.sendMutex.Lock()
-	defer s.sendMutex.Unlock()
-	if err := s.store.Reset(); err != nil {
+	defer s.unlockSend()
+	if err := s.resetStore(); err != nil {
 		return err
 	}
 	s.outbound.resetPending.Store(false)

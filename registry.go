@@ -146,7 +146,7 @@ func SetNextSenderMsgSeqNum(sessionID SessionID, seqNum int) error {
 	session.resendMutex.Lock()
 	defer session.resendMutex.Unlock()
 	session.sendMutex.Lock()
-	defer session.sendMutex.Unlock()
+	defer session.unlockSend()
 	if session.retired {
 		return errUnknownSession
 	}

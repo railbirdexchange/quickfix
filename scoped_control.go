@@ -103,7 +103,7 @@ func (s *session) enqueueControl(message *Message) error {
 		return s.EnqueueBytesAndSend(message.build())
 	}
 	s.sendMutex.Lock()
-	defer s.sendMutex.Unlock()
+	defer s.unlockSend()
 	slot, err := s.reserveResendOutput()
 	if err != nil {
 		return err

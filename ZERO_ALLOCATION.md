@@ -281,6 +281,25 @@ or hold a journal reservation while waiting. Writer failure returns an error
 without committing the waiting send. The runtime never grows the ring or
 converts a failed send into success.
 
+Routine receive-loop flushing does not wait for the send mutex. A busy sender
+is notified to retry the deferred flush after unlock; continuously contending
+senders also perform a nonblocking flush under their existing ownership, so
+outbound progress does not depend on the loop winning that mutex. This includes
+a sender whose callback rejects its own message. Offline, retired and staged
+reset sessions do not take this cooperative flush path. Bounded writer capacity
+continues to wake the loop after completed writes and slot return.
+
+Scheduled sessions read an atomic snapshot of the store's creation second on
+ordinary receives. Construction, start, reset and refresh publish that metadata,
+including partially failed storage operations. A snapshot outside the current
+session range is rechecked against the real store under send ownership before
+resetting. Schedule boundaries, callback serialization, persistence and resend
+ordering remain enforced. This removes unrelated outbound-callback waits from
+ordinary inbound processing; it does not preempt a slow inbound callback or
+make a synchronous send from that callback bypass sender ownership. The
+[contention qualification](benchmarks/zero-allocation/phase-7/send-fairness/README.md)
+records the measured boundary.
+
 Pending/scheduled reset and journal-admission errors remain immediate, before
 flushing queued traffic or entering a capacity wait. Pending reset returns
 `ErrOutboundResetPending`; full retention returns `ErrJournalFull`. A reset

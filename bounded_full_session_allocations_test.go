@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/quickfixgo/quickfix/internal"
 	"github.com/stretchr/testify/require"
 )
 
@@ -15,9 +16,18 @@ import (
 func TestBoundedFullSessionExactAllocations(t *testing.T) {
 	previous := runtime.GOMAXPROCS(1)
 	defer runtime.GOMAXPROCS(previous)
-	for _, scenario := range []string{"ordinary", "groups", "outbound_resend", "inbound_gap", "slow_consumer", "warmed_post_reconnect", "heartbeat_test_request"} {
+	for _, scenario := range []string{"ordinary", "groups", "outbound_resend", "inbound_gap", "slow_consumer", "warmed_post_reconnect", "heartbeat_test_request", "scheduled_groups"} {
 		t.Run(scenario, func(t *testing.T) {
 			fixture := newBoundedFullSession(t, scenario != "ordinary")
+			if scenario == "scheduled_groups" {
+				schedule, err := internal.NewUTCTimeRange(internal.NewTimeOfDay(0, 0, 0), internal.NewTimeOfDay(0, 0, 0), nil)
+				require.NoError(t, err)
+				// Configure on the session owner before warm-up. This exercises
+				// the creation-time snapshot in the full TCP allocation interval.
+				require.NoError(t, fixture.configure(func(application *boundedFullApplication) {
+					application.session.SessionTime = schedule
+				}))
+			}
 			require.NoError(t, fixture.warm())
 			switch scenario {
 			case "slow_consumer":

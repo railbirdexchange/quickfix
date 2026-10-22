@@ -482,6 +482,7 @@ func (f sessionFactory) newSession(
 	if s.store, err = storeFactory.Create(s.sessionID); err != nil {
 		return
 	}
+	s.cacheStoreCreationTime()
 	if err = s.configureOutbound(settings); err != nil {
 		s.closeStore()
 		return

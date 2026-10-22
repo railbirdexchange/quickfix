@@ -531,6 +531,7 @@ func TestScopedOutboundSessionEndCapacityPreservesStore(t *testing.T) {
 	now := time.Date(2026, time.October, 16, 12, 0, 0, 0, time.UTC)
 	creation := now.Add(-2 * time.Hour)
 	store.SetCreationTime(creation)
+	current.cacheStoreCreationTime()
 	require.NoError(t, store.SaveMessageAndIncrNextSenderMsgSeqNum(1, []byte("retained at session end")))
 	require.NoError(t, store.SetNextTargetMsgSeqNum(7))
 	var err error
@@ -561,6 +562,7 @@ func TestScopedOutboundSessionRolloverCapacityPreservesStore(t *testing.T) {
 	now := time.Date(2026, time.October, 16, 10, 0, 0, 0, time.UTC)
 	creation := now.AddDate(0, 0, -1)
 	store.SetCreationTime(creation)
+	current.cacheStoreCreationTime()
 	require.NoError(t, store.SaveMessageAndIncrNextSenderMsgSeqNum(1, []byte("retained before rollover")))
 	require.NoError(t, store.SetNextTargetMsgSeqNum(7))
 	var err error
@@ -661,6 +663,7 @@ func TestScopedOutboundRolloverResetSurvivesFailedNextLogon(t *testing.T) {
 				now := time.Date(2026, time.October, 16, 10, 0, 0, 0, time.UTC)
 				creation := now.AddDate(0, 0, -1)
 				store.SetCreationTime(creation)
+				current.cacheStoreCreationTime()
 				require.NoError(t, store.SaveMessageAndIncrNextSenderMsgSeqNum(1, []byte("retained until reset commits")))
 				require.NoError(t, store.SetNextTargetMsgSeqNum(7))
 				var err error
@@ -758,6 +761,7 @@ func TestScopedOutboundSuccessfulScheduleTransitionsRemainUnchanged(t *testing.T
 				creation = now.AddDate(0, 0, -1)
 			}
 			store.SetCreationTime(creation)
+			current.cacheStoreCreationTime()
 			require.NoError(t, store.SaveMessageAndIncrNextSenderMsgSeqNum(1, []byte("old session history")))
 			require.NoError(t, store.SetNextTargetMsgSeqNum(7))
 			var err error

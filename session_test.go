@@ -376,6 +376,7 @@ func (s *SessionSuite) TestCheckSessionTimeInRange() {
 			memStore.SetCreationTime(now.Add(time.Duration(-1) * time.Minute))
 		}
 		s.session.store = memStore
+		s.session.cacheStoreCreationTime()
 		s.IncrNextSenderMsgSeqNum()
 		s.IncrNextTargetMsgSeqNum()
 

@@ -29,6 +29,9 @@ type stateMachine struct {
 }
 
 func (sm *stateMachine) Start(s *session) {
+	s.sendMutex.Lock()
+	s.cacheStoreCreationTime()
+	s.unlockSend()
 	s.outboundLoggedOn.Store(false)
 	sm.pendingStop = false
 	sm.stopped = false
@@ -55,7 +58,7 @@ func (sm *stateMachine) Connect(session *session) {
 		if session.outbound != nil {
 			session.stageLogonReset()
 		} else {
-			if err := session.store.Reset(); err != nil {
+			if err := session.resetStore(); err != nil {
 				session.logError(err)
 				return
 			}
@@ -166,8 +169,10 @@ func (sm *stateMachine) SendAppMessages(session *session) {
 	sm.CheckSessionTime(session, time.Now())
 
 	lockStartedAt := startSendStage()
-	session.sendMutex.Lock()
-	defer session.sendMutex.Unlock()
+	if !session.tryLockSend() {
+		return
+	}
+	defer session.unlockSend()
 	session.finishSendStage("loop_send_lock_wait", nil, lockStartedAt, true)
 	session.observeQueueDepth()
 
@@ -217,10 +222,7 @@ func (sm *stateMachine) CheckSessionTime(session *session, now time.Time) {
 		return
 	}
 
-	session.sendMutex.Lock()
-	creationTime := session.store.CreationTime()
-	session.sendMutex.Unlock()
-	if !session.SessionTime.IsInSameRange(creationTime, now) {
+	if !session.storeInSessionTime(now) {
 		session.log.OnEvent("Session reset")
 		if err := sm.State.ShutdownNow(session); isOutboundCapacityError(err) {
 			session.preserveOnDisconnect = true

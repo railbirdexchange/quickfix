@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/quickfixgo/quickfix/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,6 +24,8 @@ type starvationApp struct {
 	loggedOn  chan SessionID
 	mu        sync.Mutex
 	latencies []time.Duration
+	received  atomic.Uint64
+	invalid   atomic.Uint64
 }
 
 func (a *starvationApp) OnCreate(SessionID) {}
@@ -55,15 +58,18 @@ func (a *starvationApp) FromAdmin(*Message, SessionID) MessageRejectError { retu
 func (a *starvationApp) FromApp(msg *Message, _ SessionID) MessageRejectError {
 	sentAt, rejectErr := msg.Body.GetString(starvationSentAtTag)
 	if rejectErr != nil {
+		a.invalid.Add(1)
 		return nil
 	}
 	nanos, parseErr := strconv.ParseInt(sentAt, 10, 64)
 	if parseErr != nil {
+		a.invalid.Add(1)
 		return nil
 	}
 	a.mu.Lock()
 	a.latencies = append(a.latencies, time.Since(time.Unix(0, nanos)))
 	a.mu.Unlock()
+	a.received.Add(1)
 	return nil
 }
 
@@ -125,6 +131,15 @@ func percentile(values []time.Duration, fraction float64) time.Duration {
 }
 
 func TestInboundIsNotStarvedByOutboundFlood(t *testing.T) {
+	runInboundStarvationFlood(t, false)
+}
+
+func TestBoundedInboundIsNotStarvedByOutboundFlood(t *testing.T) {
+	runInboundStarvationFlood(t, true)
+}
+
+func runInboundStarvationFlood(t *testing.T, bounded bool) {
+	t.Helper()
 	if os.Getenv("QUICKFIX_STARVATION_TEST") != "1" {
 		t.Skip("set QUICKFIX_STARVATION_TEST=1 to run the inbound starvation reproduction")
 	}
@@ -143,13 +158,36 @@ func TestInboundIsNotStarvedByOutboundFlood(t *testing.T) {
 	}
 	acceptorApp := &starvationApp{toAppCost: toAppCost, loggedOn: make(chan SessionID, 1)}
 	initiatorApp := &starvationApp{loggedOn: make(chan SessionID, 1)}
+	acceptorSettings := starvationSettings(t, port, "VENUE", "DEALER", "acceptor")
+	initiatorSettings := starvationSettings(t, port, "DEALER", "VENUE", "initiator")
+	storeFactory := NewMemoryStoreFactory()
+	if bounded {
+		// Fixed retained storage covers the default four-second flood at one
+		// millisecond per ToApp plus probes and session controls. Deliberately
+		// faster overrides can exhaust it and must fail the no-drop assertions.
+		const journalMessages, frameBytes = 16384, 1024
+		storeFactory = NewBoundedStoreFactory(journalMessages, frameBytes)
+		for _, settings := range []*Settings{acceptorSettings, initiatorSettings} {
+			global := settings.GlobalSettings()
+			global.Set(config.InChanCapacity, "32")
+			global.Set(config.InboundFrameQueueCapacity, "32")
+			global.Set(config.OutboundFrameQueueCapacity, "32")
+			global.Set(config.SocketOutboundBufferSize, "32")
+			global.Set(config.BoundedInboundStashCapacity, "32")
+			global.Set(config.BoundedMaxFrameBytes, strconv.Itoa(frameBytes))
+			global.Set(config.BoundedMaxFields, "64")
+			global.Set(config.BoundedMaxGroupEntries, "8")
+			global.Set(config.BoundedMaxGroupDepth, "4")
+		}
+		t.Logf("bounded frame_bytes=%d inbound_queue=32 outbound_queue=32 writer_queue=32 retained_messages=%d", frameBytes, journalMessages)
+	}
 
-	acceptor, err := NewAcceptor(acceptorApp, NewMemoryStoreFactory(), starvationSettings(t, port, "VENUE", "DEALER", "acceptor"), NewNullLogFactory())
+	acceptor, err := NewAcceptor(acceptorApp, storeFactory, acceptorSettings, NewNullLogFactory())
 	require.NoError(t, err)
 	require.NoError(t, acceptor.Start())
 	defer acceptor.Stop()
 
-	initiator, err := NewInitiator(initiatorApp, NewMemoryStoreFactory(), starvationSettings(t, port, "DEALER", "VENUE", "initiator"), NewNullLogFactory())
+	initiator, err := NewInitiator(initiatorApp, storeFactory, initiatorSettings, NewNullLogFactory())
 	require.NoError(t, err)
 	require.NoError(t, initiator.Start())
 	defer initiator.Stop()
@@ -168,31 +206,64 @@ func TestInboundIsNotStarvedByOutboundFlood(t *testing.T) {
 
 	measure := func(flood bool) []time.Duration {
 		acceptorApp.takeLatencies()
+		outboundBefore := initiatorApp.received.Load()
 		var stop atomic.Bool
+		var outboundAccepted, outboundErrors atomic.Uint64
+		firstOutboundError := make(chan error, 1)
 		var flooding sync.WaitGroup
+		defer func() { stop.Store(true); flooding.Wait() }()
 		if flood {
 			for range senders {
 				flooding.Add(1)
 				go func() {
 					defer flooding.Done()
 					for !stop.Load() {
-						_ = SendToTarget(starvationMessage(time.Now()), acceptorSession)
+						if err := SendToTarget(starvationMessage(time.Now()), acceptorSession); err != nil {
+							outboundErrors.Add(1)
+							select {
+							case firstOutboundError <- err:
+							default:
+							}
+						} else {
+							outboundAccepted.Add(1)
+						}
 					}
 				}()
 			}
 		}
 		ticker := time.NewTicker(2 * time.Millisecond)
+		defer ticker.Stop()
 		deadline := time.Now().Add(3 * time.Second)
+		inboundAccepted := 0
 		for time.Now().Before(deadline) {
 			<-ticker.C
 			require.NoError(t, SendToTarget(starvationMessage(time.Now()), initiatorSession))
+			inboundAccepted++
 		}
 		ticker.Stop()
+		outboundDuringLoad := initiatorApp.received.Load() - outboundBefore
 		time.Sleep(time.Second)
 		stop.Store(true)
 		flooding.Wait()
 		time.Sleep(2 * time.Second)
-		return acceptorApp.takeLatencies()
+		latencies := acceptorApp.takeLatencies()
+		outboundReceived := initiatorApp.received.Load() - outboundBefore
+		t.Logf("flood=%v inbound accepted=%d received=%d; outbound accepted=%d errors=%d received_during_probe_load=%d received_after_drain=%d",
+			flood, inboundAccepted, len(latencies), outboundAccepted.Load(), outboundErrors.Load(), outboundDuringLoad, outboundReceived)
+		select {
+		case err := <-firstOutboundError:
+			t.Errorf("outbound flood send failed: %v", err)
+		default:
+		}
+		require.Zero(t, outboundErrors.Load(), "inbound responsiveness must not be bought by dropping outbound sends")
+		require.Equal(t, inboundAccepted, len(latencies), "all accepted inbound probes must reach FromApp")
+		require.Equal(t, outboundAccepted.Load(), outboundReceived, "all accepted flood messages must reach the peer")
+		require.Zero(t, acceptorApp.invalid.Load())
+		require.Zero(t, initiatorApp.invalid.Load())
+		if flood {
+			require.Positive(t, outboundDuringLoad, "outbound must make progress while inbound probes and flood senders are active")
+		}
+		return latencies
 	}
 
 	quiet := measure(false)

@@ -30,6 +30,10 @@ import (
 // The Session is the primary FIX abstraction for message communication.
 type session struct {
 	store MessageStore
+	// Schedules have whole-second precision. Publish their store metadata
+	// separately so an ordinary receive need not wait for a sending callback.
+	storeCreationSecond atomic.Int64
+	storeCreationKnown  atomic.Bool
 
 	log       Log
 	sessionID SessionID
@@ -42,6 +46,9 @@ type session struct {
 
 	// Mutex for access to toSend.
 	sendMutex sync.Mutex
+	// A receive-loop flush that could not take sendMutex is retried after
+	// its owner releases it. All sendMutex owners release through unlockSend.
+	sendFlushPending atomic.Bool
 	// Mutex to prevent messages being sent when resendRequest is active
 	// Must be locked before sendMutex to prevent a potential deadlock
 	resendMutex sync.RWMutex
@@ -354,11 +361,19 @@ func (s *session) queueForSend(msg *Message) error {
 		lockedAt = time.Now()
 	}
 	defer func() {
+		// With continuously queued senders, TryLock need never win the mutex.
+		// Fulfil a deferred flush while we already own it, even if this send
+		// was rejected. Writer admission remains nonblocking and FIFO.
+		if s.sendFlushPending.Load() && s.outboundLoggedOn.Load() && !s.retired &&
+			(s.outbound == nil || (!s.outbound.resetPending.Load() && !s.outbound.scheduledResetPending.Load())) {
+			s.observeQueueDepth()
+			s.sendQueued(false)
+		}
 		var held time.Duration
 		if !lockedAt.IsZero() {
 			held = time.Since(lockedAt)
 		}
-		s.sendMutex.Unlock()
+		s.unlockSend()
 		if !lockedAt.IsZero() {
 			s.observeSendStage("queue_send_lock_hold", "", held, true)
 		}
@@ -398,6 +413,28 @@ func (s *session) notifyMessageOut() {
 	}
 }
 
+// tryLockSend keeps a slow outbound callback from blocking the receive loop.
+// Register before retrying: the owner may have unlocked between the first
+// attempt and registration. Either this retry succeeds or an unlock wakes us.
+func (s *session) tryLockSend() bool {
+	if s.sendMutex.TryLock() {
+		return true
+	}
+	s.sendFlushPending.Store(true)
+	if s.sendMutex.TryLock() {
+		s.sendFlushPending.Store(false)
+		return true
+	}
+	return false
+}
+
+func (s *session) unlockSend() {
+	s.sendMutex.Unlock()
+	if s.sendFlushPending.Load() && s.sendFlushPending.Swap(false) {
+		s.notifyMessageOut()
+	}
+}
+
 // send will validate, persist, queue the message. If the session is logged on, send all messages in the queue.
 func (s *session) send(msg *Message) error {
 	return s.sendInReplyTo(msg, nil)
@@ -414,7 +451,7 @@ func (s *session) sendInReplyTo(msg *Message, inReplyTo *Message) error {
 	lockStartedAt := startSendStage()
 	s.sendMutex.Lock()
 	s.finishSendStage("send_mutex_wait", nil, lockStartedAt, true)
-	defer s.sendMutex.Unlock()
+	defer s.unlockSend()
 	if s.retired {
 		return errUnknownSession
 	}
@@ -443,13 +480,13 @@ func (s *session) dropAndReset() error {
 	s.resendMutex.Lock()
 	defer s.resendMutex.Unlock()
 	s.sendMutex.Lock()
-	defer s.sendMutex.Unlock()
+	defer s.unlockSend()
 	if s.retired {
 		return errUnknownSession
 	}
 
 	s.dropQueued()
-	if err := s.store.Reset(); err != nil {
+	if err := s.resetStore(); err != nil {
 		return err
 	}
 	if s.outbound != nil {
@@ -467,7 +504,7 @@ func (s *session) dropAndSendInReplyTo(msg *Message, inReplyTo *Message) error {
 	s.resendMutex.Lock()
 	defer s.resendMutex.Unlock()
 	s.sendMutex.Lock()
-	defer s.sendMutex.Unlock()
+	defer s.unlockSend()
 	if s.retired {
 		return errUnknownSession
 	}
@@ -502,7 +539,7 @@ func (s *session) retireDynamic() error {
 	s.sendMutex.Lock()
 	s.retired = true
 	s.dropQueued()
-	s.sendMutex.Unlock()
+	s.unlockSend()
 	s.resendMutex.Unlock()
 	unregisterSessionInstance(s)
 	return s.closeStore()
@@ -514,6 +551,34 @@ func (s *session) closeStore() error {
 		s.storeCloseErr = s.store.Close()
 	}
 	return s.storeCloseErr
+}
+
+// cacheStoreCreationTime runs under store lifecycle ownership, including after
+// a failed Reset/Refresh: persistent stores may update their in-memory metadata
+// before a later I/O failure. Unix seconds also represent the zero time safely.
+func (s *session) cacheStoreCreationTime() {
+	s.storeCreationSecond.Store(s.store.CreationTime().Unix())
+	s.storeCreationKnown.Store(true)
+}
+
+func (s *session) resetStore() error {
+	err := s.store.Reset()
+	s.cacheStoreCreationTime()
+	return err
+}
+
+func (s *session) storeInSessionTime(now time.Time) bool {
+	if s.storeCreationKnown.Load() && s.SessionTime.IsInSameRange(time.Unix(s.storeCreationSecond.Load(), 0), now) {
+		return true
+	}
+	// A lifecycle operation may have advanced the store since the snapshot
+	// was read. Recheck the actual time before deciding to reset the session.
+	s.sendMutex.Lock()
+	creationTime := s.store.CreationTime()
+	s.storeCreationSecond.Store(creationTime.Unix())
+	s.storeCreationKnown.Store(true)
+	s.unlockSend()
+	return s.SessionTime.IsInSameRange(creationTime, now)
 }
 
 func (s *session) prepMessageForSend(msg *Message, inReplyTo *Message) (msgBytes []byte, err error) {
@@ -542,7 +607,7 @@ func (s *session) prepMessageForSend(msg *Message, inReplyTo *Message) (msgBytes
 			}
 
 			if resetSeqNumFlag.Bool() {
-				if err = s.store.Reset(); err != nil {
+				if err = s.resetStore(); err != nil {
 					return
 				}
 
@@ -637,7 +702,7 @@ func (s *session) dropQueued() {
 
 func (s *session) EnqueueBytesAndSend(msg []byte) error {
 	s.sendMutex.Lock()
-	defer s.sendMutex.Unlock()
+	defer s.unlockSend()
 	if s.outbound != nil {
 		slot, err := s.reserveResendOutput()
 		if err != nil {
@@ -796,7 +861,7 @@ func (s *session) handleLogon(msg *Message) error {
 		if s.outbound != nil {
 			s.stageLogonReset()
 		} else {
-			if err := s.store.Reset(); err != nil {
+			if err := s.resetStore(); err != nil {
 				return err
 			}
 		}
@@ -819,7 +884,7 @@ func (s *session) handleLogon(msg *Message) error {
 			if err := msg.Body.GetField(tagHeartBtInt, &heartBtInt); err == nil {
 				s.sendMutex.Lock()
 				s.HeartBtInt = time.Duration(heartBtInt) * time.Second
-				s.sendMutex.Unlock()
+				s.unlockSend()
 			}
 		}
 
@@ -1163,7 +1228,7 @@ func (s *session) onDisconnect() {
 		close(s.messageOut)
 		s.messageOut = nil
 	}
-	s.sendMutex.Unlock()
+	s.unlockSend()
 	if s.ResetOnDisconnect && !s.preserveOnDisconnect {
 		if err := s.dropAndReset(); err != nil {
 			s.logError(err)
@@ -1208,7 +1273,7 @@ func (s *session) onAdmin(msg interface{}) {
 		s.outboundLoggedOn.Store(false)
 		s.messageOut = msg.messageOut
 		s.writeConnection = msg.writer
-		s.sendMutex.Unlock()
+		s.unlockSend()
 		s.readConnection = msg.reader
 		s.sentReset = false
 

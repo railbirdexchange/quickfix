@@ -1,0 +1,32 @@
+=== RUN   TestInboundIsNotStarvedByOutboundFlood
+    starvation_test.go:251: flood=false inbound accepted=1500 received=1500; outbound accepted=0 errors=0 received_during_probe_load=0 received_after_drain=0
+    starvation_test.go:251: flood=true inbound accepted=1500 received=1500; outbound accepted=3982 errors=0 received_during_probe_load=2982 received_after_drain=3982
+    starvation_test.go:134: senders 4, ToApp cost 1ms
+    starvation_test.go:134: inbound without flood: 1500 messages, p50 55µs, p99 155µs
+    starvation_test.go:134: inbound with flood:    1500 messages, p50 43µs, p99 74µs
+--- PASS: TestInboundIsNotStarvedByOutboundFlood (12.63s)
+=== RUN   TestBoundedInboundIsNotStarvedByOutboundFlood
+    starvation_test.go:138: bounded frame_bytes=1024 inbound_queue=32 outbound_queue=32 writer_queue=32 retained_messages=16384
+    starvation_test.go:251: flood=false inbound accepted=1500 received=1500; outbound accepted=0 errors=0 received_during_probe_load=0 received_after_drain=0
+    starvation_test.go:251: flood=true inbound accepted=1500 received=1500; outbound accepted=3977 errors=0 received_during_probe_load=2979 received_after_drain=3977
+    starvation_test.go:138: senders 4, ToApp cost 1ms
+    starvation_test.go:138: inbound without flood: 1500 messages, p50 48µs, p99 94µs
+    starvation_test.go:138: inbound with flood:    1500 messages, p50 51µs, p99 155µs
+--- PASS: TestBoundedInboundIsNotStarvedByOutboundFlood (13.00s)
+=== RUN   TestInboundIsNotStarvedByOutboundFlood
+    starvation_test.go:251: flood=false inbound accepted=1500 received=1500; outbound accepted=0 errors=0 received_during_probe_load=0 received_after_drain=0
+    starvation_test.go:251: flood=true inbound accepted=1500 received=1500; outbound accepted=3981 errors=0 received_during_probe_load=2982 received_after_drain=3981
+    starvation_test.go:134: senders 4, ToApp cost 1ms
+    starvation_test.go:134: inbound without flood: 1500 messages, p50 48µs, p99 92µs
+    starvation_test.go:134: inbound with flood:    1500 messages, p50 44µs, p99 83µs
+--- PASS: TestInboundIsNotStarvedByOutboundFlood (13.00s)
+=== RUN   TestBoundedInboundIsNotStarvedByOutboundFlood
+    starvation_test.go:138: bounded frame_bytes=1024 inbound_queue=32 outbound_queue=32 writer_queue=32 retained_messages=16384
+    starvation_test.go:251: flood=false inbound accepted=1500 received=1500; outbound accepted=0 errors=0 received_during_probe_load=0 received_after_drain=0
+    starvation_test.go:251: flood=true inbound accepted=1500 received=1500; outbound accepted=3983 errors=0 received_during_probe_load=2984 received_after_drain=3983
+    starvation_test.go:138: senders 4, ToApp cost 1ms
+    starvation_test.go:138: inbound without flood: 1500 messages, p50 53µs, p99 143µs
+    starvation_test.go:138: inbound with flood:    1500 messages, p50 47µs, p99 75µs
+--- PASS: TestBoundedInboundIsNotStarvedByOutboundFlood (13.00s)
+PASS
+ok  	github.com/quickfixgo/quickfix	52.242s
