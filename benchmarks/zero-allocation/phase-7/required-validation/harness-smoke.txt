@@ -1,9 +1,0 @@
-goos: darwin
-goarch: arm64
-pkg: github.com/quickfixgo/quickfix
-cpu: Apple M4 Pro
-BenchmarkSessionRequiredValidation/valid         	       1	      6625 ns/op	       0 B/op	       0 allocs/op
-BenchmarkSessionRequiredValidation/missing_side  	       1	      1917 ns/op	      64 B/op	       1 allocs/op
-BenchmarkSessionRequiredReject                   	       1	     28583 ns/op	      64 B/op	       1 allocs/op
-PASS
-ok  	github.com/quickfixgo/quickfix	0.956s

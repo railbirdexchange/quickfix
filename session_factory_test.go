@@ -515,9 +515,13 @@ func (f closeTrackingStoreFactory) Create(sessionID SessionID) (MessageStore, er
 	return closeTrackingStore{MessageStore: store, closed: f.closed}, nil
 }
 
-// Reserve identity before opening a store: a rejected duplicate must neither
-// recover nor close another store for an identity that already has an owner.
-func (s *SessionFactorySuite) TestDuplicateSessionDoesNotCreateStore() {
+// TestDuplicateSessionClosesStore is the RAIL-3056 regression guard: newSession
+// opens the message store before registerSession runs, so a duplicate SessionID
+// rejection must close the just-opened store or its resources (goroutines,
+// process-wide registrations for durable stores) leak. Confirms createSession
+// closes exactly the store it opened for the rejected attempt, and leaves the
+// surviving session's store open.
+func (s *SessionFactorySuite) TestDuplicateSessionClosesStore() {
 	s.sessionFactory.BuildInitiators = true
 	s.SessionSettings.Set(config.HeartBtInt, "34")
 	s.SessionSettings.Set(config.SocketConnectHost, "127.0.0.1")
@@ -535,11 +539,12 @@ func (s *SessionFactorySuite) TestDuplicateSessionDoesNotCreateStore() {
 	s.Nil(err)
 	s.Equal(0, closeCount, "successful createSession must not close its store")
 
-	// Reject before opening any replacement store.
+	// Second create builds a new store, then fails at registerSession with a
+	// duplicate SessionID. That just-opened store must be closed on the way out.
 	_, err = s.createSession(s.SessionID, factory, s.SessionSettings, s.LogFactory, s.App)
 	s.NotNil(err)
 	s.Equal("Duplicate SessionID", err.Error())
-	s.Equal(0, closeCount, "duplicate creation must not open or close a store")
+	s.Equal(1, closeCount, "duplicate-SessionID createSession must close the store it opened (RAIL-3056)")
 
 	UnregisterSession(s.SessionID)
 }

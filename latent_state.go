@@ -24,7 +24,7 @@ func (state latentState) IsLoggedOn() bool  { return false }
 func (state latentState) IsConnected() bool { return false }
 
 func (state latentState) FixMsgIn(session *session, msg *Message) (nextState sessionState) {
-	session.log.OnEventf("Invalid Session State: Unexpected Msg %v while in Latent state", logMessageArgument(msg))
+	session.log.OnEventf("Invalid Session State: Unexpected Msg %v while in Latent state", msg)
 	return state
 }
 
@@ -32,7 +32,7 @@ func (state latentState) Timeout(*session, internal.Event) (nextState sessionSta
 	return state
 }
 
-func (state latentState) ShutdownNow(*session) error { return nil }
+func (state latentState) ShutdownNow(*session) {}
 func (state latentState) Stop(*session) (nextState sessionState) {
 	return state
 }

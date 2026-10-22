@@ -1,2 +1,0 @@
-message_append.go: OK
-message_append_cached_test.go: OK

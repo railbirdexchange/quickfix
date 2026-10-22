@@ -16,8 +16,6 @@
 package quickfix
 
 import (
-	"bytes"
-	"strings"
 	"testing"
 
 	decimal "github.com/quagmt/udecimal"
@@ -84,73 +82,4 @@ func TestFIXUDecimalRead(t *testing.T) {
 			assert.True(t, test.expected.Equal(field.Decimal), "Expected %s got %s", test.expected, field.Decimal)
 		}
 	}
-}
-
-func TestFIXUDecimalReadCompatibility(t *testing.T) {
-	for _, input := range fixUDecimalReadFixtures() {
-		t.Run(input, func(t *testing.T) {
-			assertFIXUDecimalReadCompatibility(t, []byte(input))
-		})
-	}
-	assertFIXUDecimalReadCompatibility(t, nil)
-}
-
-func FuzzFIXUDecimalReadCompatibility(f *testing.F) {
-	for _, input := range fixUDecimalReadFixtures() {
-		f.Add([]byte(input))
-	}
-	f.Fuzz(func(t *testing.T, input []byte) {
-		assertFIXUDecimalReadCompatibility(t, input)
-	})
-}
-
-func fixUDecimalReadFixtures() []string {
-	return []string{
-		"0", "-0", "+0.000", "15", "15.000", "15.001", "-15.001", "+200.00",
-		"00015.00100", "-124.3456", "0.0000000000000000001",
-		"-1234567890123456789.1234567890123456789",
-		"340282366920938463463374607431768211455", // Largest uint128 coefficient.
-		"340282366920938463463374607431768211456", // Arbitrary-precision overflow.
-		"-340282366920938463463.374607431768211455",
-		strings.Repeat("9", 200), strings.Repeat("9", 201),
-		"", "+", "-", ".", "1.", ".1", "1.2.3", "1e3", " 1", "1 ", "blah",
-		"0.12345678901234567890", "1\x00", "1\x01", "\xff", "１２",
-	}
-}
-
-func assertFIXUDecimalReadCompatibility(t *testing.T, input []byte) {
-	t.Helper()
-
-	// Preserve the old parser's exact value, precision, error chain and error text.
-	expected, expectedError := decimal.Parse(string(input))
-	originalInput := bytes.Clone(input)
-	field := FIXUDecimal{Decimal: decimal.MustParse("987.654"), Scale: 7}
-	err := field.Read(input)
-	require.Equal(t, expected, field.Decimal)
-	require.Equal(t, expectedError, err)
-	require.Equal(t, uint8(7), field.Scale)
-	require.Equal(t, originalInput, input, "Read must not modify the borrowed input")
-	if expectedError != nil {
-		require.Equal(t, expectedError.Error(), err.Error())
-		require.True(t, field.IsZero(), "a failed read must clear the previous value")
-	}
-	for _, sentinel := range []error{decimal.ErrEmptyString, decimal.ErrMaxStrLen} {
-		if expectedError == sentinel {
-			require.Same(t, sentinel, err, "preserve direct sentinel comparisons")
-		}
-	}
-
-	// The caller may reuse its input slot immediately after Read returns.
-	for index := range input {
-		input[index] = 'x'
-	}
-	require.Equal(t, expected, field.Decimal)
-	if expectedError != nil {
-		require.Equal(t, expectedError.Error(), err.Error())
-	}
-
-	// The same field must also recover after an invalid or overflow input.
-	require.NoError(t, field.Read([]byte("1.25")))
-	require.Equal(t, decimal.MustParse("1.25"), field.Decimal)
-	require.Equal(t, uint8(7), field.Scale)
 }

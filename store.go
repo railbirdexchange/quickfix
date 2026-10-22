@@ -44,23 +44,6 @@ type MessageStore interface {
 	Close() error
 }
 
-// BorrowedMessageStore permits the session to pass its encoded output slot
-// directly to a store. The bytes are read-only and valid only until the call
-// returns, on either success or error. A store must copy any bytes it retains
-// before returning, including bytes queued for asynchronous persistence.
-// Sequence advancement, persistence and error behavior must match the existing
-// SaveMessageAndIncrNextSenderMsgSeqNum method.
-//
-// BorrowedStoreOwner must return the concrete receiver implementing this
-// contract. A decorator must explicitly implement its own owner and borrowed
-// save methods to opt in; inherited methods do not bypass its ordinary save
-// overrides. Stores without a comparable owner retain owned-copy delivery.
-type BorrowedMessageStore interface {
-	MessageStore
-	BorrowedStoreOwner() MessageStore
-	SaveMessageAndIncrNextSenderMsgSeqNumBorrowed(seqNum int, msg []byte) error
-}
-
 // The MessageStoreFactory interface is used by session to create a session specific message store.
 type MessageStoreFactory interface {
 	Create(sessionID SessionID) (MessageStore, error)

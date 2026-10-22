@@ -28,5 +28,5 @@ func (s pendingTimeout) Timeout(session *session, event internal.Event) (nextSta
 		return latentState{}
 	}
 
-	return session.timeoutState(s.sessionState)
+	return s
 }

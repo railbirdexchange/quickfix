@@ -1,1 +1,0 @@
-benchmarks/zero-allocation/phase-7/linux-read-to-write/quickfix-read-to-write-linux-arm64.test: go1.23.12

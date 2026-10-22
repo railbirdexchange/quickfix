@@ -1,3 +1,0 @@
-BenchmarkSessionRequiredReject 3711 64 1
-BenchmarkSessionRequiredValidation/missing_side 209.8 64 1
-BenchmarkSessionRequiredValidation/valid 647.1 0 0

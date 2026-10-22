@@ -1,9 +1,0 @@
-Warning: Permanently added '192.168.252.5' (ED25519) to the list of known hosts.
-removed '/tmp/quickfix-replay-capacity-338c3f03.SZp1jV/before.test'
-removed '/tmp/quickfix-replay-capacity-338c3f03.SZp1jV/after.test'
-removed '/tmp/quickfix-replay-capacity-338c3f03.SZp1jV/cached-length.test'
-removed '/tmp/quickfix-replay-capacity-338c3f03.SZp1jV/spec/FIX40.xml'
-removed '/tmp/quickfix-replay-capacity-338c3f03.SZp1jV/spec/FIX44.xml'
-rmdir: removing directory, '/tmp/quickfix-replay-capacity-338c3f03.SZp1jV/spec'
-rmdir: removing directory, '/tmp/quickfix-replay-capacity-338c3f03.SZp1jV'
-Fri Oct 16 15:41:35 UTC 2026

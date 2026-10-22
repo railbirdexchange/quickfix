@@ -129,13 +129,13 @@ func (f RepeatingGroup) Write() []TagValue {
 
 	for _, group := range f.groups {
 		tags := group.sortedTags()
-		group.rlock()
+		group.rwLock.RLock()
 		for _, tag := range tags {
-			if fields, ok := group.lookup(tag); ok {
+			if fields, ok := group.tagLookup[tag]; ok {
 				tvs = append(tvs, fields...)
 			}
 		}
-		group.runlock()
+		group.rwLock.RUnlock()
 	}
 
 	return tvs

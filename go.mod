@@ -1,14 +1,11 @@
 module github.com/quickfixgo/quickfix
 
-go 1.24.0
-
-toolchain go1.27.2
+go 1.23
 
 require (
 	github.com/mattn/go-sqlite3 v1.14.22
 	github.com/pires/go-proxyproto v0.7.0
 	github.com/pkg/errors v0.9.1
-	github.com/puzpuzpuz/xsync/v4 v4.5.0
 	github.com/quagmt/udecimal v1.8.0
 	github.com/shopspring/decimal v1.4.0
 	github.com/stretchr/testify v1.9.0

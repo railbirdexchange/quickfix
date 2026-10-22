@@ -1,4 +1,0 @@
-/usr/bin/sha256sum
-/usr/bin/timeout
-/usr/bin/systemd-detect-virt
-/usr/bin/taskset

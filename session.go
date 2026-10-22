@@ -20,7 +20,6 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/quickfixgo/quickfix/datadictionary"
@@ -30,10 +29,6 @@ import (
 // The Session is the primary FIX abstraction for message communication.
 type session struct {
 	store MessageStore
-	// Schedules have whole-second precision. Publish their store metadata
-	// separately so an ordinary receive need not wait for a sending callback.
-	storeCreationSecond atomic.Int64
-	storeCreationKnown  atomic.Bool
 
 	log       Log
 	sessionID SessionID
@@ -46,30 +41,19 @@ type session struct {
 
 	// Mutex for access to toSend.
 	sendMutex sync.Mutex
-	// A receive-loop flush that could not take sendMutex is retried after
-	// its owner releases it. All sendMutex owners release through unlockSend.
-	sendFlushPending atomic.Bool
 	// Mutex to prevent messages being sent when resendRequest is active
 	// Must be locked before sendMutex to prevent a potential deadlock
 	resendMutex sync.RWMutex
 
-	sessionEvent          chan internal.Event
-	messageEvent          chan bool
-	application           Application
-	builtMessageObserver  BuiltMessageObserver
-	builtMessagesBorrowed bool
+	sessionEvent chan internal.Event
+	messageEvent chan bool
+	application  Application
 	Validator
 	stateMachine
-	stateTimer                            *internal.EventTimer
-	peerTimer                             *internal.EventTimer
-	sentReset                             bool
-	stopOnce                              sync.Once
-	retired                               bool // Protected by sendMutex; only terminal dynamic retirement sets it.
-	reservation                           *sessionReservation
-	storeClosed                           bool // Construction/retirement owner only.
-	storeCloseErr                         error
-	runStop                               <-chan struct{}
-	logonTimeoutTimer, logoutTimeoutTimer *time.Timer
+	stateTimer *internal.EventTimer
+	peerTimer  *internal.EventTimer
+	sentReset  bool
+	stopOnce   sync.Once
 
 	targetDefaultApplVerID string
 
@@ -77,13 +61,6 @@ type session struct {
 	internal.SessionSettings
 	transportDataDictionary *datadictionary.DataDictionary
 	appDataDictionary       *datadictionary.DataDictionary
-	boundedIn               *boundedInboundSession
-	readConnection          *boundedReadConnection
-	outbound                *outboundRing
-	writeConnection         *outboundWriter
-	outboundLoggedOn        atomic.Bool // Published by the session owner; external senders must not read State.
-	preserveOnDisconnect    bool
-	controls                scopedControl
 
 	timestampPrecision      TimestampPrecision
 	lastCheckedResetSeqTime time.Time
@@ -103,22 +80,14 @@ type connect struct {
 	messageOut chan<- []byte
 	messageIn  <-chan fixIn
 	err        chan<- error
-	reader     *boundedReadConnection
-	writer     *outboundWriter
 }
 
-func (s *session) connectWithWriter(msgIn <-chan fixIn, reader *boundedReadConnection, writer *outboundWriter) error {
-	return s.connectWithIO(msgIn, nil, reader, writer)
-}
-
-func (s *session) connectWithIO(msgIn <-chan fixIn, msgOut chan<- []byte, reader *boundedReadConnection, writer *outboundWriter) error {
+func (s *session) connect(msgIn <-chan fixIn, msgOut chan<- []byte) error {
 	rep := make(chan error)
 	s.admin <- connect{
 		messageOut: msgOut,
 		messageIn:  msgIn,
 		err:        rep,
-		reader:     reader,
-		writer:     writer,
 	}
 
 	return <-rep
@@ -190,9 +159,6 @@ func (s *session) shouldSendReset() bool {
 	if s.sessionID.BeginString < BeginStringFIX41 {
 		return false
 	}
-	if s.outbound != nil && s.outbound.resetPending.Load() {
-		return true
-	}
 
 	return (s.ResetOnLogon || s.ResetOnDisconnect || s.ResetOnLogout) &&
 		s.store.NextTargetMsgSeqNum() == 1 && s.store.NextSenderMsgSeqNum() == 1
@@ -203,45 +169,40 @@ func (s *session) sendLogon() error {
 }
 
 func (s *session) sendLogonInReplyTo(setResetSeqNum bool, inReplyTo *Message) error {
-	logon, err := s.acquireControl("A")
-	if err != nil {
-		return err
-	}
-	defer s.releaseControl()
-	logon.Header.SetString(tagBeginString, s.sessionID.BeginString)
-	logon.Header.SetString(tagTargetCompID, s.sessionID.TargetCompID)
-	logon.Header.SetString(tagSenderCompID, s.sessionID.SenderCompID)
-	logon.Body.SetString(tagEncryptMethod, "0")
-	logon.Body.SetInt(tagHeartBtInt, int(s.HeartBtInt.Seconds()))
+	logon := NewMessage()
+	logon.Header.SetField(tagMsgType, FIXString("A"))
+	logon.Header.SetField(tagBeginString, FIXString(s.sessionID.BeginString))
+	logon.Header.SetField(tagTargetCompID, FIXString(s.sessionID.TargetCompID))
+	logon.Header.SetField(tagSenderCompID, FIXString(s.sessionID.SenderCompID))
+	logon.Body.SetField(tagEncryptMethod, FIXString("0"))
+	logon.Body.SetField(tagHeartBtInt, FIXInt(s.HeartBtInt.Seconds()))
 
 	if setResetSeqNum {
-		logon.Body.SetBool(tagResetSeqNumFlag, true)
+		logon.Body.SetField(tagResetSeqNumFlag, FIXBoolean(true))
 	}
 
 	if len(s.DefaultApplVerID) > 0 {
-		logon.Body.SetString(tagDefaultApplVerID, s.DefaultApplVerID)
+		logon.Body.SetField(tagDefaultApplVerID, FIXString(s.DefaultApplVerID))
 	}
 
 	// Evaluate tag 789.
 	if s.EnableNextExpectedMsgSeqNum {
 		if inReplyTo != nil {
-			if inReplyTo.Body.Has(tagNextExpectedMsgSeqNum) {
-				targetWantsNextSeqNumToBe, getErr := inReplyTo.Body.GetInt(tagNextExpectedMsgSeqNum)
-				if getErr == nil {
-					actualNextNum := s.logonSenderSequence()
-					// Is the 789 we received too high?
-					if targetWantsNextSeqNumToBe > actualNextNum {
-						// We cannot resend a sequence that was never sent.
-						return RejectLogon{fmt.Sprintf("Tag 789 (NextExpectedMsgSeqNum) is higher than expected. Expected %d, Received %d", actualNextNum, targetWantsNextSeqNumToBe)}
-					}
-					nextSeqNum := s.logonTargetSequence()
-					logon.Body.SetInt(tagNextExpectedMsgSeqNum, nextSeqNum+1)
+			targetWantsNextSeqNumToBe, getErr := inReplyTo.Body.GetInt(tagNextExpectedMsgSeqNum)
+			if getErr == nil {
+				actualNextNum := s.store.NextSenderMsgSeqNum()
+				// // Is the 789 we received too high ??
+				if targetWantsNextSeqNumToBe > actualNextNum {
+					// we can't resend what we never sent! something unrecoverable has happened.
+					return RejectLogon{fmt.Sprintf("Tag 789 (NextExpectedMsgSeqNum) is higher than expected. Expected %d, Received %d", actualNextNum, targetWantsNextSeqNumToBe)}
 				}
+				nextSeqNum := s.store.NextTargetMsgSeqNum()
+				logon.Body.SetField(tagNextExpectedMsgSeqNum, FIXInt(nextSeqNum+1))
 			}
 		} else {
 			// We are sending a logon.
-			nextseqnum := s.logonTargetSequence()
-			logon.Body.SetInt(tagNextExpectedMsgSeqNum, nextseqnum+1)
+			nextseqnum := s.store.NextTargetMsgSeqNum()
+			logon.Body.SetField(tagNextExpectedMsgSeqNum, FIXInt(nextseqnum+1))
 		}
 	}
 
@@ -252,51 +213,42 @@ func (s *session) sendLogonInReplyTo(setResetSeqNum bool, inReplyTo *Message) er
 	return nil
 }
 
-func (s *session) generateSequenceReset(beginSeqNo int, endSeqNo int, inReplyTo *Message) (err error) {
-	sequenceReset, err := s.acquireControl("4")
-	if err != nil {
-		return err
-	}
-	defer s.releaseControl()
-	if s.outbound != nil {
-		s.fillOutboundHeader(sequenceReset, inReplyTo)
-	} else {
-		s.fillDefaultHeader(sequenceReset, inReplyTo)
-	}
-	sequenceReset.Header.SetInt(tagMsgSeqNum, beginSeqNo)
-	sequenceReset.Header.SetBool(tagPossDupFlag, true)
-	sequenceReset.Body.SetInt(tagNewSeqNo, endSeqNo)
-	sequenceReset.Body.SetBool(tagGapFillFlag, true)
-	if origSendingTime, present := sequenceReset.Header.getBytesIfPresent(tagSendingTime); present {
-		setControlBytes(&sequenceReset.Header.FieldMap, tagOrigSendingTime, origSendingTime)
+func (s *session) generateSequenceReset(beginSeqNo int, endSeqNo int, inReplyTo Message) (err error) {
+	sequenceReset := NewMessage()
+	s.fillDefaultHeader(sequenceReset, &inReplyTo)
+
+	sequenceReset.Header.SetField(tagMsgType, FIXString("4"))
+	sequenceReset.Header.SetField(tagMsgSeqNum, FIXInt(beginSeqNo))
+	sequenceReset.Header.SetField(tagPossDupFlag, FIXBoolean(true))
+	sequenceReset.Body.SetField(tagNewSeqNo, FIXInt(endSeqNo))
+	sequenceReset.Body.SetField(tagGapFillFlag, FIXBoolean(true))
+
+	var origSendingTime FIXString
+	if err := sequenceReset.Header.GetField(tagSendingTime, &origSendingTime); err == nil {
+		sequenceReset.Header.SetField(tagOrigSendingTime, origSendingTime)
 	}
 
-	sequenceReset, err = s.toAdmin(sequenceReset)
-	if err != nil {
-		return err
-	}
+	s.application.ToAdmin(sequenceReset, s.sessionID)
 
-	if err = s.enqueueControl(sequenceReset); err != nil {
-		return
-	}
-	s.logSequenceEvent(eventSentSequenceReset, endSeqNo, 0)
+	msgBytes := sequenceReset.build()
+
+	s.EnqueueBytesAndSend(msgBytes)
+	s.log.OnEventf("Sent SequenceReset TO: %v", endSeqNo)
 
 	return
 }
 
-func (s *session) buildLogout(reason string) (*Message, error) {
-	logout, err := s.acquireControl("5")
-	if err != nil {
-		return nil, err
-	}
-	logout.Header.SetString(tagBeginString, s.sessionID.BeginString)
-	logout.Header.SetString(tagTargetCompID, s.sessionID.TargetCompID)
-	logout.Header.SetString(tagSenderCompID, s.sessionID.SenderCompID)
+func (s *session) buildLogout(reason string) *Message {
+	logout := NewMessage()
+	logout.Header.SetField(tagMsgType, FIXString("5"))
+	logout.Header.SetField(tagBeginString, FIXString(s.sessionID.BeginString))
+	logout.Header.SetField(tagTargetCompID, FIXString(s.sessionID.TargetCompID))
+	logout.Header.SetField(tagSenderCompID, FIXString(s.sessionID.SenderCompID))
 	if reason != "" {
-		logout.Body.SetString(tagText, reason)
+		logout.Body.SetField(tagText, FIXString(reason))
 	}
 
-	return logout, nil
+	return logout
 }
 
 func (s *session) sendLogout(reason string) error {
@@ -304,37 +256,11 @@ func (s *session) sendLogout(reason string) error {
 }
 
 func (s *session) sendLogoutInReplyTo(reason string, inReplyTo *Message) error {
-	logout, err := s.buildLogout(reason)
-	if err != nil {
-		return err
-	}
-	defer s.releaseControl()
+	logout := s.buildLogout(reason)
 	return s.sendInReplyTo(logout, inReplyTo)
 }
 
-func (s *session) dropAndSendLogoutInReplyTo(reason string, inReplyTo *Message) error {
-	logout, err := s.buildLogout(reason)
-	if err != nil {
-		return err
-	}
-	defer s.releaseControl()
-	return s.dropAndSendInReplyTo(logout, inReplyTo)
-}
-
 func (s *session) resend(msg *Message) bool {
-	if s.outbound != nil {
-		msg.outboundBorrowed = applicationBorrowsMessages(s.application)
-		msg.setOutboundBool(&msg.Header.FieldMap, outboundPossDup, tagPossDupFlag, true)
-		if original, found := msg.Header.getBytesIfPresent(tagSendingTime); found {
-			msg.setOutboundBytes(&msg.Header.FieldMap, outboundOriginalTimestamp, tagOrigSendingTime, original)
-		}
-		precision := s.timestampPrecision
-		if s.sessionID.BeginString < BeginStringFIX42 {
-			precision = Seconds
-		}
-		msg.setOutboundTime(time.Now().UTC(), precision)
-		return s.application.ToApp(msg, s.sessionID) == nil
-	}
 	msg.Header.SetField(tagPossDupFlag, FIXBoolean(true))
 
 	var origSendingTime FIXString
@@ -354,48 +280,14 @@ func (s *session) queueForSend(msg *Message) error {
 	s.resendMutex.RLock()
 	defer s.resendMutex.RUnlock()
 
-	lockStartedAt := startSendStage()
+	lockStartedAt := time.Now()
 	s.sendMutex.Lock()
-	var lockedAt time.Time
-	if !lockStartedAt.IsZero() {
-		lockedAt = time.Now()
-	}
+	lockedAt := time.Now()
+	s.observeSendStage("queue_send_lock_wait", "", lockedAt.Sub(lockStartedAt), true)
 	defer func() {
-		var held time.Duration
-		if !lockedAt.IsZero() {
-			held = time.Since(lockedAt)
-		}
-		s.unlockSend()
-		if !lockedAt.IsZero() {
-			s.observeSendStage("queue_send_lock_hold", "", held, true)
-		}
+		s.observeSendStage("queue_send_lock_hold", "", time.Since(lockedAt), true)
+		s.sendMutex.Unlock()
 	}()
-	defer func() {
-		// With continuously queued senders, TryLock need never win the mutex.
-		// Fulfil a deferred flush while we already own it, even if this send
-		// was rejected. A separate defer above releases ownership even when
-		// an observer or logger panics during this nonblocking FIFO flush.
-		if s.sendFlushPending.Load() && s.outboundLoggedOn.Load() && !s.retired &&
-			(s.outbound == nil || (!s.outbound.resetPending.Load() && !s.outbound.scheduledResetPending.Load())) {
-			s.observeQueueDepth()
-			s.sendQueued(false)
-		}
-	}()
-	if !lockedAt.IsZero() {
-		s.observeSendStage("queue_send_lock_wait", "", lockedAt.Sub(lockStartedAt), true)
-	}
-	if s.retired {
-		return errUnknownSession
-	}
-	if s.outbound != nil {
-		slot, err := s.prepareOutbound(msg, nil, false)
-		if err != nil {
-			return err
-		}
-		s.outbound.enqueue(slot)
-		s.notifyMessageOut()
-		return nil
-	}
 
 	msgBytes, err := s.prepMessageForSend(msg, nil)
 	if err != nil {
@@ -416,28 +308,6 @@ func (s *session) notifyMessageOut() {
 	}
 }
 
-// tryLockSend keeps a slow outbound callback from blocking the receive loop.
-// Register before retrying: the owner may have unlocked between the first
-// attempt and registration. Either this retry succeeds or an unlock wakes us.
-func (s *session) tryLockSend() bool {
-	if s.sendMutex.TryLock() {
-		return true
-	}
-	s.sendFlushPending.Store(true)
-	if s.sendMutex.TryLock() {
-		s.sendFlushPending.Store(false)
-		return true
-	}
-	return false
-}
-
-func (s *session) unlockSend() {
-	s.sendMutex.Unlock()
-	if s.sendFlushPending.Load() && s.sendFlushPending.Swap(false) {
-		s.notifyMessageOut()
-	}
-}
-
 // send will validate, persist, queue the message. If the session is logged on, send all messages in the queue.
 func (s *session) send(msg *Message) error {
 	return s.sendInReplyTo(msg, nil)
@@ -451,21 +321,10 @@ func (s *session) sendInReplyTo(msg *Message, inReplyTo *Message) error {
 	s.resendMutex.RLock()
 	defer s.resendMutex.RUnlock()
 
-	lockStartedAt := startSendStage()
+	lockStartedAt := time.Now()
 	s.sendMutex.Lock()
-	s.finishSendStage("send_mutex_wait", nil, lockStartedAt, true)
-	defer s.unlockSend()
-	if s.retired {
-		return errUnknownSession
-	}
-	if s.outbound != nil {
-		slot, err := s.prepareOutbound(msg, inReplyTo, false)
-		if err != nil {
-			return err
-		}
-		s.outbound.enqueue(slot)
-		return s.flushOutbound(true)
-	}
+	s.observeSendStage("send_mutex_wait", "", time.Since(lockStartedAt), true)
+	defer s.sendMutex.Unlock()
 
 	msgBytes, err := s.prepMessageForSend(msg, inReplyTo)
 	if err != nil {
@@ -480,23 +339,11 @@ func (s *session) sendInReplyTo(msg *Message, inReplyTo *Message) error {
 
 // dropAndReset will drop the send queue and reset the message store.
 func (s *session) dropAndReset() error {
-	s.resendMutex.Lock()
-	defer s.resendMutex.Unlock()
 	s.sendMutex.Lock()
-	defer s.unlockSend()
-	if s.retired {
-		return errUnknownSession
-	}
+	defer s.sendMutex.Unlock()
 
 	s.dropQueued()
-	if err := s.resetStore(); err != nil {
-		return err
-	}
-	if s.outbound != nil {
-		s.outbound.resetPending.Store(false)
-		s.outbound.scheduledResetPending.Store(false)
-	}
-	return nil
+	return s.store.Reset()
 }
 
 // dropAndSend will validate and persist the message, then drops the send queue and sends the message.
@@ -504,22 +351,8 @@ func (s *session) dropAndSend(msg *Message) error {
 	return s.dropAndSendInReplyTo(msg, nil)
 }
 func (s *session) dropAndSendInReplyTo(msg *Message, inReplyTo *Message) error {
-	s.resendMutex.Lock()
-	defer s.resendMutex.Unlock()
 	s.sendMutex.Lock()
-	defer s.unlockSend()
-	if s.retired {
-		return errUnknownSession
-	}
-	if s.outbound != nil {
-		slot, err := s.prepareOutbound(msg, inReplyTo, true)
-		if err != nil {
-			return err
-		}
-		s.dropQueued()
-		s.outbound.enqueue(slot)
-		return s.flushOutbound(true)
-	}
+	defer s.sendMutex.Unlock()
 
 	msgBytes, err := s.prepMessageForSend(msg, inReplyTo)
 	if err != nil {
@@ -531,57 +364,6 @@ func (s *session) dropAndSendInReplyTo(msg *Message, inReplyTo *Message) error {
 	s.sendQueued(true)
 
 	return nil
-}
-
-// retireDynamic runs only after the dynamic session loop has returned, or before
-// an unstarted session has transferred to it. Socket ownership has already joined.
-// Mark terminal before dropping routing so callers holding an earlier lookup
-// cannot persist into a closed store. Close runs without engine locks.
-func (s *session) retireDynamic() error {
-	s.resendMutex.Lock()
-	s.sendMutex.Lock()
-	s.retired = true
-	s.dropQueued()
-	s.unlockSend()
-	s.resendMutex.Unlock()
-	unregisterSessionInstance(s)
-	return s.closeStore()
-}
-
-func (s *session) closeStore() error {
-	if !s.storeClosed && s.store != nil {
-		s.storeClosed = true
-		s.storeCloseErr = s.store.Close()
-	}
-	return s.storeCloseErr
-}
-
-// cacheStoreCreationTime runs under store lifecycle ownership, including after
-// a failed Reset/Refresh: persistent stores may update their in-memory metadata
-// before a later I/O failure. Unix seconds also represent the zero time safely.
-func (s *session) cacheStoreCreationTime() {
-	s.storeCreationSecond.Store(s.store.CreationTime().Unix())
-	s.storeCreationKnown.Store(true)
-}
-
-func (s *session) resetStore() error {
-	err := s.store.Reset()
-	s.cacheStoreCreationTime()
-	return err
-}
-
-func (s *session) storeInSessionTime(now time.Time) bool {
-	if s.storeCreationKnown.Load() && s.SessionTime.IsInSameRange(time.Unix(s.storeCreationSecond.Load(), 0), now) {
-		return true
-	}
-	// A lifecycle operation may have advanced the store since the snapshot
-	// was read. Recheck the actual time before deciding to reset the session.
-	s.sendMutex.Lock()
-	creationTime := s.store.CreationTime()
-	s.storeCreationSecond.Store(creationTime.Unix())
-	s.storeCreationKnown.Store(true)
-	s.unlockSend()
-	return s.SessionTime.IsInSameRange(creationTime, now)
 }
 
 func (s *session) prepMessageForSend(msg *Message, inReplyTo *Message) (msgBytes []byte, err error) {
@@ -596,10 +378,7 @@ func (s *session) prepMessageForSend(msg *Message, inReplyTo *Message) (msgBytes
 
 	if isAdminMessageType(msgType) {
 		toAdminStartedAt := time.Now()
-		msg, err = s.toAdmin(msg)
-		if err != nil {
-			return
-		}
+		s.application.ToAdmin(msg, s.sessionID)
 		s.observeSendStage("to_admin", string(msgType), time.Since(toAdminStartedAt), true)
 		if bytes.Equal(msgType, msgTypeLogon) {
 			var resetSeqNumFlag FIXBoolean
@@ -610,7 +389,7 @@ func (s *session) prepMessageForSend(msg *Message, inReplyTo *Message) (msgBytes
 			}
 
 			if resetSeqNumFlag.Bool() {
-				if err = s.resetStore(); err != nil {
+				if err = s.store.Reset(); err != nil {
 					return
 				}
 
@@ -642,33 +421,10 @@ func (s *session) prepMessageForSend(msg *Message, inReplyTo *Message) (msgBytes
 	return
 }
 
-// Resolve the optional hook during setup. Repeating an interface assertion on
-// the send path can allocate Go's probabilistically rebuilt type-assert cache,
-// including when the application does not implement the observer.
-func (s *session) setApplication(application Application) {
-	s.application = application
-	borrowed, scoped := application.(borrowedApplication)
-	if scoped {
-		application = borrowed.Application
-	}
-	s.builtMessageObserver, _ = application.(BuiltMessageObserver)
-	s.builtMessagesBorrowed = scoped
-}
-
 func (s *session) notifyMessageBuilt(msg *Message, msgBytes []byte) {
-	observer := s.builtMessageObserver
-	if observer == nil {
-		return
+	if observer, ok := s.application.(BuiltMessageObserver); ok {
+		observer.OnMessageBuilt(s.sessionID, msg, msgBytes)
 	}
-	if s.builtMessagesBorrowed {
-		scope := beginBorrowedOutboundCopy(msg)
-		defer scope.release()
-	} else if s.outbound != nil {
-		// The writer reuses bounded wire slots after completion. An ordinary
-		// observer retains independent bytes, matching the pre-slot API.
-		msgBytes = bytes.Clone(msgBytes)
-	}
-	observer.OnMessageBuilt(s.sessionID, msg, msgBytes[:len(msgBytes):len(msgBytes)])
 }
 
 func (s *session) persist(seqNum int, msgBytes []byte) error {
@@ -680,10 +436,6 @@ func (s *session) persist(seqNum int, msgBytes []byte) error {
 }
 
 func (s *session) sendQueued(blockUntilSent bool) {
-	if s.outbound != nil {
-		s.flushOutbound(blockUntilSent)
-		return
-	}
 	for i, msgBytes := range s.toSend {
 		if !s.sendBytes(msgBytes, blockUntilSent) {
 			s.toSend = s.toSend[i:]
@@ -696,33 +448,15 @@ func (s *session) sendQueued(blockUntilSent bool) {
 }
 
 func (s *session) dropQueued() {
-	if s.outbound != nil {
-		s.outbound.dropPending()
-		return
-	}
 	s.toSend = s.toSend[:0]
 }
 
-func (s *session) EnqueueBytesAndSend(msg []byte) error {
+func (s *session) EnqueueBytesAndSend(msg []byte) {
 	s.sendMutex.Lock()
-	defer s.unlockSend()
-	if s.outbound != nil {
-		slot, err := s.reserveResendOutput()
-		if err != nil {
-			return err
-		}
-		if len(msg) > cap(slot.wire) {
-			slot.release()
-			return ErrBufferTooSmall
-		}
-		slot.wire = append(slot.wire[:0], msg...)
-		s.outbound.enqueue(slot)
-		return s.flushOutbound(true)
-	}
+	defer s.sendMutex.Unlock()
 
 	s.toSend = append(s.toSend, msg)
 	s.sendQueued(true)
-	return nil
 }
 
 func (s *session) sendBytes(msg []byte, blockUntilSent bool) bool {
@@ -754,16 +488,9 @@ func (s *session) sendBytes(msg []byte, blockUntilSent bool) bool {
 }
 
 func (s *session) observeQueueDepth() {
-	if queueDepthObserverState.Load() == nil {
-		return
-	}
-	pending := len(s.toSend)
-	if s.outbound != nil {
-		pending = s.outbound.count
-	}
 	observeQueueDepth(QueueDepthEvent{
 		SessionID: s.sessionID,
-		ToSend:    pending,
+		ToSend:    len(s.toSend),
 		MessageIn: len(s.messageIn),
 	})
 }
@@ -779,12 +506,16 @@ func (s *session) observeSendStage(stage, msgType string, duration time.Duration
 }
 
 func (s *session) doTargetTooHigh(reject targetTooHigh) (nextState resendState, err error) {
-	s.logSequenceEvent(eventSequenceTooHigh, reject.ExpectedTarget, reject.ReceivedTarget)
+	s.log.OnEventf("MsgSeqNum too high, expecting %v but received %v", reject.ExpectedTarget, reject.ReceivedTarget)
 	return s.sendResendRequest(reject.ExpectedTarget, reject.ReceivedTarget-1)
 }
 
 func (s *session) sendResendRequest(beginSeq, endSeq int) (nextState resendState, err error) {
 	nextState.resendRangeEnd = endSeq
+
+	resend := NewMessage()
+	resend.Header.SetBytes(tagMsgType, msgTypeResendRequest)
+	resend.Body.SetField(tagBeginSeqNo, FIXInt(beginSeq))
 
 	var endSeqNo int
 	if s.ResendRequestChunkSize != 0 {
@@ -802,17 +533,12 @@ func (s *session) sendResendRequest(beginSeq, endSeq int) (nextState resendState
 			endSeqNo = 0
 		}
 	}
-	resend, err := s.acquireControl("2")
-	if err != nil {
-		return nextState, err
-	}
-	defer s.releaseControl()
-	resend.Body.SetInt(tagBeginSeqNo, beginSeq)
-	resend.Body.SetInt(tagEndSeqNo, endSeqNo)
+	resend.Body.SetField(tagEndSeqNo, FIXInt(endSeqNo))
+
 	if err = s.send(resend); err != nil {
 		return
 	}
-	s.logSequenceEvent(eventSentResendRequest, beginSeq, endSeqNo)
+	s.log.OnEventf("Sent ResendRequest FROM: %v TO: %v", beginSeq, endSeqNo)
 
 	return
 }
@@ -829,15 +555,15 @@ func (s *session) handleLogon(msg *Message) error {
 		s.targetDefaultApplVerID = string(targetApplVerID)
 	}
 
-	resetStore := s.outbound != nil && s.outbound.scheduledResetPending.Load()
+	resetStore := false
 	if s.InitiateLogon {
 		s.log.OnEvent("Received logon response")
 	} else {
 		s.log.OnEvent("Received logon request")
-		resetStore = resetStore || s.ResetOnLogon
+		resetStore = s.ResetOnLogon
 
 		if s.RefreshOnLogon {
-			if err := s.refreshStore(); err != nil {
+			if err := s.store.Refresh(); err != nil {
 				return err
 			}
 		}
@@ -861,12 +587,8 @@ func (s *session) handleLogon(msg *Message) error {
 	}
 
 	if resetStore {
-		if s.outbound != nil {
-			s.stageLogonReset()
-		} else {
-			if err := s.resetStore(); err != nil {
-				return err
-			}
+		if err := s.store.Reset(); err != nil {
+			return err
 		}
 	}
 
@@ -875,25 +597,17 @@ func (s *session) handleLogon(msg *Message) error {
 	if err := s.verifyIgnoreSeqNumTooHigh(msg); err != nil {
 		return err
 	}
-	if resetStore && s.InitiateLogon && s.outbound != nil {
-		if err := s.finishLogonReset(); err != nil {
-			return err
-		}
-	}
 
 	if !s.InitiateLogon {
 		if !s.HeartBtIntOverride {
 			var heartBtInt FIXInt
 			if err := msg.Body.GetField(tagHeartBtInt, &heartBtInt); err == nil {
-				s.sendMutex.Lock()
 				s.HeartBtInt = time.Duration(heartBtInt) * time.Second
-				s.unlockSend()
 			}
 		}
 
 		s.log.OnEvent("Responding to logon request")
-		scheduledReset := s.outbound != nil && s.outbound.scheduledResetPending.Load()
-		if err := s.sendLogonInReplyTo(resetSeqNumFlag.Bool() || scheduledReset, msg); err != nil {
+		if err := s.sendLogonInReplyTo(resetSeqNumFlag.Bool(), msg); err != nil {
 			return err
 		}
 	}
@@ -908,7 +622,7 @@ func (s *session) handleLogon(msg *Message) error {
 		if getErr == nil {
 			if targetWantsNextSeqNumToBe != nextSenderMsgNumAtLogonReceived {
 				if !s.DisableMessagePersist {
-					seqResetErr := s.generateSequenceReset(targetWantsNextSeqNumToBe, nextSenderMsgNumAtLogonReceived+1, msg)
+					seqResetErr := s.generateSequenceReset(targetWantsNextSeqNumToBe, nextSenderMsgNumAtLogonReceived+1, *msg)
 					if seqResetErr != nil {
 						return seqResetErr
 					}
@@ -936,25 +650,8 @@ func (s *session) initiateLogoutInReplyTo(reason string, inReplyTo *Message) (er
 		return
 	}
 	s.log.OnEvent("Inititated logout request")
-	if s.logoutTimeoutTimer != nil {
-		s.logoutTimeoutTimer.Stop()
-	}
-	s.logoutTimeoutTimer = s.scheduleTimeout(s.LogoutTimeout, internal.LogoutTimeout)
+	time.AfterFunc(s.LogoutTimeout, func() { s.sessionEvent <- internal.LogoutTimeout })
 	return
-}
-
-func (s *session) scheduleTimeout(delay time.Duration, event internal.Event) *time.Timer {
-	// Capture only this run's channels, never the session or a later run's stop
-	// channel. A callback already firing must be able to leave after run exits.
-	events, stop := s.sessionEvent, s.runStop
-	return time.AfterFunc(delay, func() { deliverSessionTimeout(events, stop, event) })
-}
-
-func deliverSessionTimeout(events chan<- internal.Event, stop <-chan struct{}, event internal.Event) {
-	select {
-	case events <- event:
-	case <-stop:
-	}
 }
 
 func (s *session) verify(msg *Message) MessageRejectError {
@@ -979,7 +676,7 @@ func (s *session) verifySelect(msg *Message, checkTooHigh bool, checkTooLow bool
 	}
 
 	switch s.stateMachine.State.(type) {
-	case resendState, *resendState:
+	case resendState:
 		//Don't check staleness of a replay
 	default:
 		if reject := s.checkSendingTime(msg); reject != nil {
@@ -1016,15 +713,11 @@ func (s *session) verifyMsgAgainstAppImpl(msg *Message) MessageRejectError {
 }
 
 func (s *session) fromCallback(msg *Message) MessageRejectError {
-	if !applicationBorrowsMessages(s.application) {
-		// Do not publish an engine slot reference with the owned message. The
-		// inbound dispatcher retains ownership until protocol handling finishes.
-		msg.inbound = nil
-	}
 	msgType, err := msg.Header.GetBytes(tagMsgType)
 	if err != nil {
 		return err
 	}
+
 	if isAdminMessageType(msgType) {
 		return s.application.FromAdmin(msg, s.sessionID)
 	}
@@ -1042,14 +735,8 @@ func (s *session) checkTargetTooLow(msg *Message) MessageRejectError {
 		return err
 	}
 
-	expected := s.store.NextTargetMsgSeqNum()
-	if s.outbound != nil && s.outbound.resetPending.Load() {
-		if messageType, present := msg.Header.getBytesIfPresent(tagMsgType); present && bytes.Equal(messageType, msgTypeLogon) {
-			expected = 1
-		}
-	}
-	if seqNum < expected {
-		return s.sequenceTooLow(seqNum, expected)
+	if seqNum < s.store.NextTargetMsgSeqNum() {
+		return targetTooLow{ReceivedTarget: seqNum, ExpectedTarget: s.store.NextTargetMsgSeqNum()}
 	}
 
 	return nil
@@ -1066,7 +753,7 @@ func (s *session) checkTargetTooHigh(msg *Message) MessageRejectError {
 	}
 
 	if seqNum > s.store.NextTargetMsgSeqNum() {
-		return s.sequenceTooHigh(seqNum, s.store.NextTargetMsgSeqNum())
+		return targetTooHigh{ReceivedTarget: seqNum, ExpectedTarget: s.store.NextTargetMsgSeqNum()}
 	}
 
 	return nil
@@ -1125,15 +812,12 @@ func (s *session) checkBeginString(msg *Message) MessageRejectError {
 }
 
 func (s *session) drainMessageIn() {
-	s.logSequenceEvent(eventDrainingInbound, len(s.messageIn), 0)
+	s.log.OnEventf("Draining %d messages from inbound channel...", len(s.messageIn))
 	for {
 		select {
-		case message, ok := <-s.messageIn:
+		case _, ok := <-s.messageIn:
 			if !ok {
 				return
-			}
-			if message.slot != nil {
-				message.slot.release()
 			}
 		default:
 			return
@@ -1142,102 +826,71 @@ func (s *session) drainMessageIn() {
 }
 
 func (s *session) doReject(msg *Message, rej MessageRejectError) error {
-	reply, err := s.acquireControl("3")
-	if err != nil {
-		return err
-	}
-	defer s.releaseControl()
-	reverseControlRoute(msg, reply)
+	reply := msg.reverseRoute()
 
 	if s.sessionID.BeginString >= BeginStringFIX42 {
 
 		if rej.IsBusinessReject() {
-			reply.Header.SetString(tagMsgType, "j")
-			reply.Body.SetInt(tagBusinessRejectReason, rej.RejectReason())
+			reply.Header.SetField(tagMsgType, FIXString("j"))
+			reply.Body.SetField(tagBusinessRejectReason, FIXInt(rej.RejectReason()))
 			if refID := rej.BusinessRejectRefID(); refID != "" {
-				reply.Body.SetString(tagBusinessRejectRefID, refID)
+				reply.Body.SetField(tagBusinessRejectRefID, FIXString(refID))
 			}
 		} else {
+			reply.Header.SetField(tagMsgType, FIXString("3"))
 			switch {
 			default:
-				reply.Body.SetInt(tagSessionRejectReason, rej.RejectReason())
+				reply.Body.SetField(tagSessionRejectReason, FIXInt(rej.RejectReason()))
 			case rej.RejectReason() > rejectReasonInvalidMsgType && s.sessionID.BeginString == BeginStringFIX42:
 				// Fix42 knows up to invalid msg type.
 			}
 
-			if refTagID, present := rej.RefTagID(); present {
-				reply.Body.SetInt(tagRefTagID, int(refTagID))
+			if refTagID := rej.RefTagID(); refTagID != nil {
+				reply.Body.SetField(tagRefTagID, FIXInt(*refTagID))
 			}
 		}
-		reply.Body.SetString(tagText, rej.Error())
+		reply.Body.SetField(tagText, FIXString(rej.Error()))
 
-		if msgType, present := msg.Header.getBytesIfPresent(tagMsgType); present {
-			setControlBytes(&reply.Body.FieldMap, tagRefMsgType, msgType)
+		var msgType FIXString
+		if err := msg.Header.GetField(tagMsgType, &msgType); err == nil {
+			reply.Body.SetField(tagRefMsgType, msgType)
 		}
 	} else {
-		if refTagID, present := rej.RefTagID(); present {
-			if err := s.setControlRejectText(reply, rej.Error(), refTagID); err != nil {
-				return err
-			}
+		reply.Header.SetField(tagMsgType, FIXString("3"))
+
+		if refTagID := rej.RefTagID(); refTagID != nil {
+			reply.Body.SetField(tagText, FIXString(fmt.Sprintf("%s (%d)", rej.Error(), *refTagID)))
 		} else {
-			reply.Body.SetString(tagText, rej.Error())
+			reply.Body.SetField(tagText, FIXString(rej.Error()))
 		}
 	}
 
-	if msg.Header.Has(tagMsgSeqNum) {
-		if seqNum, reject := msg.Header.GetInt(tagMsgSeqNum); reject == nil {
-			reply.Body.SetInt(tagRefSeqNum, seqNum)
-		}
+	seqNum := new(FIXInt)
+	if err := msg.Header.GetField(tagMsgSeqNum, seqNum); err == nil {
+		reply.Body.SetField(tagRefSeqNum, seqNum)
 	}
 
-	s.logControlReject(rej.Error())
+	s.log.OnEventf("Message Rejected: %v", rej.Error())
 	return s.sendInReplyTo(reply, msg)
 }
 
 type fixIn struct {
 	bytes       *bytes.Buffer
 	receiveTime time.Time
-	slot        *inboundSlot
-	// With a slot, readError marks a consumed malformed frame to log and drop.
-	// Without a slot, it is a terminal reader error.
-	readError error
 }
 
 func (s *session) onDisconnect() {
-	s.outboundLoggedOn.Store(false)
 	s.log.OnEvent("Disconnected")
-	if s.readConnection != nil {
-		// Stop reads and blocked channel sends, then reclaim every transferred
-		// slot before another connection can use this session's ring.
-		s.readConnection.stopAndDrain(s.messageIn)
-		s.readConnection = nil
-	}
-	if s.boundedIn != nil {
-		s.boundedIn.ring.clearStash()
-	}
-	s.sendMutex.Lock()
-	if s.writeConnection != nil {
-		if err := s.writeConnection.finish(); err != nil {
-			s.preserveOnDisconnect = true
-			s.logError(err)
-		}
-		s.writeConnection = nil
-	}
-	if s.outbound != nil {
-		s.outbound.dropPending()
-		s.outbound.resetPending.Store(false)
-	}
-	if s.messageOut != nil {
-		close(s.messageOut)
-		s.messageOut = nil
-	}
-	s.unlockSend()
-	if s.ResetOnDisconnect && !s.preserveOnDisconnect {
+	if s.ResetOnDisconnect {
 		if err := s.dropAndReset(); err != nil {
 			s.logError(err)
 		}
 	}
-	s.preserveOnDisconnect = false
+
+	if s.messageOut != nil {
+		close(s.messageOut)
+		s.messageOut = nil
+	}
 
 	// s.messageIn is buffered so we need to drain it before disconnection
 	s.drainMessageIn()
@@ -1272,21 +925,10 @@ func (s *session) onAdmin(msg interface{}) {
 		}
 
 		s.messageIn = msg.messageIn
-		s.sendMutex.Lock()
-		s.outboundLoggedOn.Store(false)
 		s.messageOut = msg.messageOut
-		s.writeConnection = msg.writer
-		s.unlockSend()
-		s.readConnection = msg.reader
 		s.sentReset = false
 
 		s.Connect(s)
-		if msg.reader != nil && !s.IsConnected() {
-			// Initiator refresh/reset/logon preparation can fail before Connect
-			// installs a connected state. Reclaim the accepted controller even
-			// though a latent-to-latent transition would not run teardown.
-			s.onDisconnect()
-		}
 
 	case stopReq:
 		s.Stop(s)
@@ -1300,9 +942,8 @@ func (s *session) onAdmin(msg interface{}) {
 }
 
 func (s *session) run() {
-	var stopChan = make(chan struct{})
-	s.runStop = stopChan
 	s.Start(s)
+	var stopChan = make(chan struct{})
 	s.stateTimer = internal.NewEventTimer(func() {
 		select {
 		// Deadlock in write to chan s.sessionEvent after s.Stopped()==true and end of loop session.go:766 because no reader of chan s.sessionEvent.
@@ -1330,12 +971,6 @@ func (s *session) run() {
 
 	defer func() {
 		close(stopChan)
-		if s.logonTimeoutTimer != nil {
-			s.logonTimeoutTimer.Stop()
-		}
-		if s.logoutTimeoutTimer != nil {
-			s.logoutTimeoutTimer.Stop()
-		}
 		s.stateTimer.Stop()
 		s.peerTimer.Stop()
 		ticker.Stop()

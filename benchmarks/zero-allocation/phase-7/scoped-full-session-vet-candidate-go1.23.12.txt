@@ -1,3 +1,0 @@
-# github.com/quickfixgo/quickfix
-# [github.com/quickfixgo/quickfix]
-./message_arena_test.go:323:85: result of (*github.com/quickfixgo/quickfix.Message).String call not used

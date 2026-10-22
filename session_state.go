@@ -29,10 +29,6 @@ type stateMachine struct {
 }
 
 func (sm *stateMachine) Start(s *session) {
-	s.sendMutex.Lock()
-	s.cacheStoreCreationTime()
-	s.unlockSend()
-	s.outboundLoggedOn.Store(false)
 	sm.pendingStop = false
 	sm.stopped = false
 
@@ -48,38 +44,28 @@ func (sm *stateMachine) Connect(session *session) {
 	}
 
 	if session.RefreshOnLogon {
-		if err := session.refreshStore(); err != nil {
+		if err := session.store.Refresh(); err != nil {
 			session.logError(err)
 			return
 		}
 	}
 
-	if session.ResetOnLogon || (session.outbound != nil && session.outbound.scheduledResetPending.Load()) {
-		if session.outbound != nil {
-			session.stageLogonReset()
-		} else {
-			if err := session.resetStore(); err != nil {
-				session.logError(err)
-				return
-			}
+	if session.ResetOnLogon {
+		if err := session.store.Reset(); err != nil {
+			session.logError(err)
+			return
 		}
 	}
 
 	session.log.OnEvent("Sending logon request")
 	if err := session.sendLogon(); err != nil {
-		if isOutboundCapacityError(err) {
-			session.preserveOnDisconnect = true
-		}
 		session.logError(err)
 		return
 	}
 
 	sm.setState(session, logonState{})
 	// Fire logon timeout event after the pre-configured delay period.
-	if session.logonTimeoutTimer != nil {
-		session.logonTimeoutTimer.Stop()
-	}
-	session.logonTimeoutTimer = session.scheduleTimeout(session.LogonTimeout, internal.LogonTimeout)
+	time.AfterFunc(session.LogonTimeout, func() { session.sessionEvent <- internal.LogonTimeout })
 }
 
 func (sm *stateMachine) Stop(session *session) {
@@ -98,64 +84,19 @@ func (sm *stateMachine) Disconnected(session *session) {
 }
 
 func (sm *stateMachine) Incoming(session *session, m fixIn) {
-	owned := m.slot != nil
-	if m.slot != nil {
-		defer func() {
-			// Raw slots can be released by reader cancellation independently.
-			// Only the session owner ends the active parsed-message scope.
-			session.boundedIn.parsed.Reset()
-			if owned {
-				m.slot.release()
-			}
-		}()
-	}
-	if m.readError != nil && m.slot == nil {
-		sm.setState(session, session.failBoundedInbound(m.readError))
-		return
-	}
-	boundedParseError := m.readError
-	var parsedMessage *Message
-	if m.slot != nil && sm.IsConnected() {
-		m.slot.receiveTime = m.receiveTime
-		session.logIncomingFrame(m.slot.frame)
-		if boundedParseError == nil {
-			parsedMessage, boundedParseError = session.parseInboundSlot(m.slot)
-		}
-		if isInboundCapacityError(boundedParseError) {
-			sm.setState(session, session.failBoundedInbound(boundedParseError))
-			return
-		}
-	}
-	var sessionTime time.Time
-	if session.SessionTime != nil {
-		sessionTime = time.Now()
-	}
-	// An unrestricted schedule ignores the clock, but still needs the same
-	// lifecycle transitions and notifications in CheckSessionTime.
-	sm.CheckSessionTime(session, sessionTime)
+	sm.CheckSessionTime(session, time.Now())
 	if !sm.IsConnected() {
 		return
 	}
 
-	if m.slot != nil {
-		if boundedParseError != nil {
-			session.log.OnEventf("Msg Parse Error: %v", boundedParseError.Error())
-		} else {
-			nextState := sm.State.FixMsgIn(session, parsedMessage)
-			// Capture transfer before setState can discard a retained message
-			// during teardown. Never inspect a slot after returning ownership.
-			owned = !m.slot.retained
-			sm.setState(session, nextState)
-		}
+	session.log.OnIncoming(m.bytes.Bytes())
+
+	msg := NewMessage()
+	if err := ParseMessageWithDataDictionary(msg, m.bytes, session.transportDataDictionary, session.appDataDictionary); err != nil {
+		session.log.OnEventf("Msg Parse Error: %v, %q", err.Error(), m.bytes)
 	} else {
-		session.log.OnIncoming(m.bytes.Bytes())
-		msg := NewMessage()
-		if err := ParseMessageWithDataDictionary(msg, m.bytes, session.transportDataDictionary, session.appDataDictionary); err != nil {
-			session.log.OnEventf("Msg Parse Error: %v, %q", err.Error(), m.bytes)
-		} else {
-			msg.ReceiveTime = m.receiveTime
-			sm.fixMsgIn(session, msg)
-		}
+		msg.ReceiveTime = m.receiveTime
+		sm.fixMsgIn(session, msg)
 	}
 
 	session.peerTimer.Reset(time.Duration(float64(1.2) * float64(session.HeartBtInt)))
@@ -168,12 +109,10 @@ func (sm *stateMachine) fixMsgIn(session *session, m *Message) {
 func (sm *stateMachine) SendAppMessages(session *session) {
 	sm.CheckSessionTime(session, time.Now())
 
-	lockStartedAt := startSendStage()
-	if !session.tryLockSend() {
-		return
-	}
-	defer session.unlockSend()
-	session.finishSendStage("loop_send_lock_wait", nil, lockStartedAt, true)
+	lockStartedAt := time.Now()
+	session.sendMutex.Lock()
+	session.observeSendStage("loop_send_lock_wait", "", time.Since(lockStartedAt), true)
+	defer session.sendMutex.Unlock()
 	session.observeQueueDepth()
 
 	if session.IsLoggedOn() {
@@ -194,12 +133,7 @@ func (sm *stateMachine) CheckSessionTime(session *session, now time.Time) {
 			session.log.OnEvent("Not in session")
 		}
 
-		if err := sm.State.ShutdownNow(session); isOutboundCapacityError(err) {
-			session.preserveOnDisconnect = true
-			if session.outbound != nil {
-				session.outbound.scheduledResetPending.Store(true)
-			}
-		}
+		sm.State.ShutdownNow(session)
 		sm.setState(session, notSessionTime{})
 
 		if sm.notifyOnInSessionTime == nil {
@@ -213,25 +147,10 @@ func (sm *stateMachine) CheckSessionTime(session *session, now time.Time) {
 		sm.notifyInSessionTime()
 		sm.setState(session, latentState{})
 	}
-	if session.SessionTime == nil {
-		return
-	}
-	if session.outbound != nil && session.outbound.scheduledResetPending.Load() {
-		// Failed output admission must not turn into an unconditional reset
-		// on the next timer tick. The next Logon stages this reset instead.
-		return
-	}
 
-	if !session.storeInSessionTime(now) {
+	if !session.SessionTime.IsInSameRange(session.store.CreationTime(), now) {
 		session.log.OnEvent("Session reset")
-		if err := sm.State.ShutdownNow(session); isOutboundCapacityError(err) {
-			session.preserveOnDisconnect = true
-			if session.outbound != nil {
-				session.outbound.scheduledResetPending.Store(true)
-			}
-			sm.setState(session, latentState{})
-			return
-		}
+		sm.State.ShutdownNow(session)
 		if err := session.dropAndReset(); err != nil {
 			session.logError(err)
 		}
@@ -256,12 +175,7 @@ func (sm *stateMachine) CheckResetTime(session *session, now time.Time) {
 
 	// If we have crossed the reset time boundary in between checks or we are at the reset time, we send the reset
 	if session.lastCheckedResetSeqTime.Before(resetSeqTimeToday) && !now.Before(resetSeqTimeToday) {
-		if err := session.sendLogonInReplyTo(true, nil); err != nil {
-			session.logError(err)
-			if isOutboundCapacityError(err) {
-				return
-			}
-		}
+		session.sendLogonInReplyTo(true, nil)
 	}
 
 	// Update the last checked reset seq time to now
@@ -269,16 +183,6 @@ func (sm *stateMachine) CheckResetTime(session *session, now time.Time) {
 }
 
 func (sm *stateMachine) setState(session *session, nextState sessionState) {
-	loggedOn := nextState.IsLoggedOn()
-	if !loggedOn {
-		// Stop external senders from flushing application traffic before any
-		// logout/disconnect callbacks or teardown. The state interface itself
-		// remains owned by the processing goroutine.
-		session.outboundLoggedOn.Store(false)
-	}
-	if session.boundedIn != nil && isResendRecovery(sm.State) && !isResendRecovery(nextState) {
-		session.boundedIn.ring.clearStash()
-	}
 	if !nextState.IsConnected() {
 		if sm.IsConnected() {
 			sm.handleDisconnectState(session)
@@ -291,11 +195,6 @@ func (sm *stateMachine) setState(session *session, nextState sessionState) {
 	}
 
 	sm.State = nextState
-	if loggedOn && !session.outboundLoggedOn.Load() {
-		// OnLogon runs inside handleLogon before this transition. Its messages
-		// must remain queued until negotiation has actually finished.
-		session.outboundLoggedOn.Store(true)
-	}
 }
 
 func (sm *stateMachine) notifyInSessionTime() {
@@ -306,7 +205,6 @@ func (sm *stateMachine) notifyInSessionTime() {
 }
 
 func (sm *stateMachine) handleDisconnectState(s *session) {
-	s.outboundLoggedOn.Store(false)
 	doOnLogout := s.IsLoggedOn()
 
 	switch s.State.(type) {
@@ -338,9 +236,6 @@ func (sm *stateMachine) IsSessionTime() bool {
 }
 
 func handleStateError(s *session, err error) sessionState {
-	if isOutboundCapacityError(err) {
-		s.preserveOnDisconnect = true
-	}
 	s.logError(err)
 	return latentState{}
 }
@@ -365,7 +260,7 @@ type sessionState interface {
 	IsSessionTime() bool
 
 	// ShutdownNow terminates the session state immediately.
-	ShutdownNow(*session) error
+	ShutdownNow(*session)
 
 	// Stop triggers a clean stop.
 	Stop(*session) (nextState sessionState)
@@ -385,18 +280,16 @@ func (connected) IsSessionTime() bool { return true }
 
 type connectedNotLoggedOn struct{ connected }
 
-func (connectedNotLoggedOn) IsLoggedOn() bool           { return false }
-func (connectedNotLoggedOn) ShutdownNow(*session) error { return nil }
+func (connectedNotLoggedOn) IsLoggedOn() bool     { return false }
+func (connectedNotLoggedOn) ShutdownNow(*session) {}
 
 type loggedOn struct{ connected }
 
 func (loggedOn) IsLoggedOn() bool { return true }
-func (loggedOn) ShutdownNow(s *session) error {
+func (loggedOn) ShutdownNow(s *session) {
 	if err := s.sendLogout(""); err != nil {
 		s.logError(err)
-		return err
 	}
-	return nil
 }
 
 func (loggedOn) Stop(s *session) (nextState sessionState) {

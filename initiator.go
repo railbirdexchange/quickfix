@@ -177,11 +177,10 @@ func (i *Initiator) handleConnection(session *session, tlsConfig *tls.Config, di
 			}
 		}()
 
-		var disconnected <-chan struct{}
+		var disconnected chan interface{}
 		var msgIn chan fixIn
+		var msgOut chan []byte
 		var outboundBufferSize int
-		var readerControl *boundedReadConnection
-		var writerControl *outboundWriter
 
 		address := session.SocketConnectAddress[connectionAttempt%len(session.SocketConnectAddress)]
 		session.log.OnEventf("Connecting to: %v", address)
@@ -214,25 +213,21 @@ func (i *Initiator) handleConnection(session *session, tlsConfig *tls.Config, di
 			goto reconnect
 		}
 		msgIn = make(chan fixIn, session.InChanCapacity)
-		readerControl, err = startBoundedRead(netConn, newParser(bufio.NewReader(netConn)), session.boundedIn, msgIn, nil, time.Time{})
-		if err != nil {
-			session.log.OnEvent(err.Error())
-			_ = netConn.Close()
-			goto reconnect
-		}
-		writerControl = newOutboundWriter(netConn, min(outboundBufferSize, len(session.outbound.pending)), session.outbound.writeTimeout, session.messageEvent)
-		go writerControl.run()
-		if err := session.connectWithWriter(msgIn, readerControl, writerControl); err != nil {
-			if readerControl != nil {
-				readerControl.stopAndDrain(msgIn)
-				_ = netConn.Close()
-			}
-			_ = writerControl.finish()
+		msgOut = make(chan []byte, outboundBufferSize)
+		if err := session.connect(msgIn, msgOut); err != nil {
 			session.log.OnEventf("Failed to initiate: %v", err)
 			goto reconnect
 		}
 
-		disconnected = writerControl.done
+		go readLoop(newParser(bufio.NewReader(netConn)), msgIn, session.log)
+		disconnected = make(chan interface{})
+		go func() {
+			writeLoop(netConn, msgOut, session.log)
+			if err := netConn.Close(); err != nil {
+				session.log.OnEvent(err.Error())
+			}
+			close(disconnected)
+		}()
 
 		// This ensures we properly cleanup the goroutine and context used for
 		// dial cancelation after successful connection.

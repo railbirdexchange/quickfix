@@ -1,9 +1,0 @@
-Focus expression matched no samples
-File: quickfix-linux-arm64.test
-Type: cpu
-Time: Oct 16, 2026 at 11:01am (EDT)
-Duration: 14.32s, Total samples = 14.18s (99.01%)
-Active filters:
-   focus=validateFIX|validateFields|validateWalk
-Showing nodes accounting for 0, 0% of 14.18s total
-      flat  flat%   sum%        cum   cum%
