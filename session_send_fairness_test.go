@@ -233,3 +233,66 @@ func TestSessionSendFairnessBlockedWriterWaitsForCompletionWake(t *testing.T) {
 	require.ErrorIs(t, err, io.EOF)
 	require.Equal(t, 4, store.NextSenderMsgSeqNum())
 }
+
+type sessionSendFairnessPanicLog struct {
+	Log
+	failure error
+	calls   int
+}
+
+func (log *sessionSendFairnessPanicLog) OnOutgoing([]byte) {
+	log.calls++
+	panic(log.failure)
+}
+
+func TestSessionSendFairnessCooperativeFlushPanicReleasesLock(t *testing.T) {
+	for _, fixture := range []struct {
+		name            string
+		bounded, logger bool
+	}{
+		{name: "legacy_queue_observer"},
+		{name: "bounded_queue_observer", bounded: true},
+		{name: "legacy_outgoing_logger", logger: true},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			current, _, _, _, _ := newSessionSendFairnessFixture(t, fixture.bounded)
+			previousObserver := queueDepthObserverState.Load()
+			defer queueDepthObserverState.Store(previousObserver)
+			SetQueueDepthObserver(nil)
+			failure := errors.New("cooperative flush callback panicked")
+			var event QueueDepthEvent
+			calls := 0
+			var logger *sessionSendFairnessPanicLog
+			if fixture.logger {
+				original := current.log
+				defer func() { current.log = original }()
+				logger = &sessionSendFairnessPanicLog{Log: original, failure: failure}
+				current.log = logger
+			} else {
+				SetQueueDepthObserver(func(observed QueueDepthEvent) {
+					calls++
+					event = observed
+					panic(failure)
+				})
+			}
+			// Another session-loop flush already failed to acquire sendMutex.
+			// Force its deferred work without adding unrelated goroutine timing.
+			current.sendFlushPending.Store(true)
+			require.PanicsWithValue(t, failure, func() {
+				_ = current.queueForSend(scopedOutboundLifecycleOrder("accepted-before-panic"))
+			})
+			acquired := current.sendMutex.TryLock()
+			// If the regression returns, this goroutine still owns the lock
+			// abandoned by panic. Release it before failing so teardown can join.
+			current.unlockSend()
+			require.True(t, acquired, "a cooperative-flush panic stranded sendMutex after caller recovery")
+			if fixture.logger {
+				require.Equal(t, 1, logger.calls)
+			} else {
+				require.Equal(t, 1, calls)
+				require.Equal(t, current.sessionID, event.SessionID)
+				require.Equal(t, 1, event.ToSend, "observer must panic while flushing accepted queued output")
+			}
+		})
+	}
+}

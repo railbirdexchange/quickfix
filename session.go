@@ -361,14 +361,6 @@ func (s *session) queueForSend(msg *Message) error {
 		lockedAt = time.Now()
 	}
 	defer func() {
-		// With continuously queued senders, TryLock need never win the mutex.
-		// Fulfil a deferred flush while we already own it, even if this send
-		// was rejected. Writer admission remains nonblocking and FIFO.
-		if s.sendFlushPending.Load() && s.outboundLoggedOn.Load() && !s.retired &&
-			(s.outbound == nil || (!s.outbound.resetPending.Load() && !s.outbound.scheduledResetPending.Load())) {
-			s.observeQueueDepth()
-			s.sendQueued(false)
-		}
 		var held time.Duration
 		if !lockedAt.IsZero() {
 			held = time.Since(lockedAt)
@@ -376,6 +368,17 @@ func (s *session) queueForSend(msg *Message) error {
 		s.unlockSend()
 		if !lockedAt.IsZero() {
 			s.observeSendStage("queue_send_lock_hold", "", held, true)
+		}
+	}()
+	defer func() {
+		// With continuously queued senders, TryLock need never win the mutex.
+		// Fulfil a deferred flush while we already own it, even if this send
+		// was rejected. A separate defer above releases ownership even when
+		// an observer or logger panics during this nonblocking FIFO flush.
+		if s.sendFlushPending.Load() && s.outboundLoggedOn.Load() && !s.retired &&
+			(s.outbound == nil || (!s.outbound.resetPending.Load() && !s.outbound.scheduledResetPending.Load())) {
+			s.observeQueueDepth()
+			s.sendQueued(false)
 		}
 	}()
 	if !lockedAt.IsZero() {
