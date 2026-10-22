@@ -32,7 +32,7 @@ func (s logonState) FixMsgIn(session *session, msg *Message) (nextState sessionS
 	}
 
 	if !bytes.Equal(msgType, msgTypeLogon) {
-		session.log.OnEventf("Invalid Session State: Received Msg %s while waiting for Logon", msg)
+		session.log.OnEventf("Invalid Session State: Received Msg %s while waiting for Logon", logMessageArgument(msg))
 		return latentState{}
 	}
 
@@ -43,20 +43,27 @@ func (s logonState) FixMsgIn(session *session, msg *Message) (nextState sessionS
 
 		case targetTooLow:
 			return shutdownWithReason(session, msg, false, err.Error())
+		case *targetTooLow:
+			return shutdownWithReason(session, msg, false, err.Error())
 
 		case targetTooHigh:
-			var tooHighErr error
-			if nextState, tooHighErr = session.doTargetTooHigh(err); tooHighErr != nil {
-				return shutdownWithReason(session, msg, false, tooHighErr.Error())
-			}
-
-			return
+			return s.recoverTooHigh(session, msg, err)
+		case *targetTooHigh:
+			return s.recoverTooHigh(session, msg, *err)
 
 		default:
 			return handleStateError(session, err)
 		}
 	}
 	return inSession{}
+}
+
+func (s logonState) recoverTooHigh(session *session, msg *Message, reject targetTooHigh) sessionState {
+	recovery, err := session.doTargetTooHigh(reject)
+	if err != nil {
+		return shutdownWithReason(session, msg, false, err.Error())
+	}
+	return session.recoveryState(recovery)
 }
 
 func (s logonState) Timeout(session *session, e internal.Event) (nextState sessionState) {
@@ -74,9 +81,11 @@ func (s logonState) Stop(_ *session) (nextState sessionState) {
 
 func shutdownWithReason(session *session, msg *Message, incrNextTargetMsgSeqNum bool, reason string) (nextState sessionState) {
 	session.log.OnEvent(reason)
-	logout := session.buildLogout(reason)
 
-	if err := session.dropAndSendInReplyTo(logout, msg); err != nil {
+	if err := session.dropAndSendLogoutInReplyTo(reason, msg); err != nil {
+		if isOutboundCapacityError(err) {
+			return handleStateError(session, err)
+		}
 		session.logError(err)
 	}
 

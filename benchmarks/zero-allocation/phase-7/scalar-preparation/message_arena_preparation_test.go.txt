@@ -1,0 +1,79 @@
+package quickfix
+
+import (
+	"bytes"
+	"testing"
+)
+
+func TestMessageArenaRejectedAliasLeavesStagingUntouched(t *testing.T) {
+	message := newArenaTestMessage(t, 128, 6)
+	message.Body.SetString(11, "existing")
+	message.Body.SetString(55, "borrowed-source")
+	if err := message.constructionError(); err != nil {
+		t.Fatal(err)
+	}
+	arena := message.arena
+	for index := range arena.staging {
+		arena.staging[index] = 0xa5
+	}
+	beforeStaging := bytes.Clone(arena.staging)
+	beforeWire, beforeValues := bytes.Clone(arena.bytes), bytes.Clone(arena.values)
+	beforeUsed, beforeCount := arena.used, arena.fieldCount
+	borrowed, reject := message.Body.GetBytes(55)
+	if reject != nil {
+		t.Fatal(reject)
+	}
+	// Existing wire fields plus generated9/10 fill all six slots. The new
+	// scalar must fail before copying its overlapping input into staging.
+	message.Body.SetBytes(44, borrowed)
+	if err := message.constructionError(); err != ErrFieldCapacity {
+		t.Fatalf("capacity result: %v", err)
+	}
+	message.Body.SetInt(11, 123)
+	if !bytes.Equal(beforeStaging, arena.staging) || !bytes.Equal(beforeWire, arena.bytes) || !bytes.Equal(beforeValues, arena.values) {
+		t.Fatal("rejected or latched scalar changed an arena byte plane")
+	}
+	if arena.used != beforeUsed || arena.fieldCount != beforeCount || message.Body.Has(44) {
+		t.Fatal("rejected scalar changed field accounting")
+	}
+	assertArenaValue(t, &message.Body.FieldMap, 11, "existing")
+}
+
+func TestMessageArenaPreparedScalarReplacesGroupAndReinserts(t *testing.T) {
+	message := newArenaTestMessage(t, 512, 12)
+	group := NewRepeatingGroup(453, GroupTemplate{GroupElement(448)})
+	group.Add().SetString(448, "first")
+	group.Add().SetString(448, "second")
+	message.Body.SetGroup(group)
+	message.Body.SetString(55, "SOURCE")
+	message.Body.SetInt(453, 7)
+	if err := message.constructionError(); err != nil {
+		t.Fatal(err)
+	}
+	if message.arena.fieldCount != 4 || message.arena.wireFields != 4 {
+		t.Fatalf("group-to-scalar accounting: fields=%d wire=%d", message.arena.fieldCount, message.arena.wireFields)
+	}
+	legacy := NewMessage()
+	legacy.Header.SetString(tagBeginString, "FIX.4.4")
+	legacy.Header.SetString(tagMsgType, "D")
+	legacy.Body.SetString(55, "SOURCE")
+	legacy.Body.SetInt(453, 7)
+	if got, want := arenaTestWire(t, message), arenaTestWire(t, legacy); !bytes.Equal(got, want) {
+		t.Fatalf("group replacement differs: got %q want %q", got, want)
+	}
+	for range 8 {
+		message.Body.Remove(453)
+		borrowed, reject := message.Body.GetBytes(55)
+		if reject != nil {
+			t.Fatal(reject)
+		}
+		message.Body.SetBytes(453, borrowed[1:])
+		legacy.Body.SetString(453, "OURCE")
+		if got, want := arenaTestWire(t, message), arenaTestWire(t, legacy); !bytes.Equal(got, want) {
+			t.Fatalf("scalar reinsertion differs: got %q want %q", got, want)
+		}
+		if message.arena.fieldCount != 4 || message.arena.wireFields != 4 {
+			t.Fatal("scalar reinsertion changed field accounting")
+		}
+	}
+}

@@ -1,0 +1,41 @@
+=== RUN   TestTimestampValidationExactAllocations
+=== RUN   TestTimestampValidationExactAllocations/seconds
+    validation_timestamp_allocations_test.go:25: validations=1000 mallocs=0 bytes=0
+=== RUN   TestTimestampValidationExactAllocations/nanos
+    validation_timestamp_allocations_test.go:25: validations=1000 mallocs=0 bytes=0
+=== RUN   TestTimestampValidationExactAllocations/comma
+    validation_timestamp_allocations_test.go:25: validations=1000 mallocs=0 bytes=0
+=== RUN   TestTimestampValidationExactAllocations/signed_fraction
+    validation_timestamp_allocations_test.go:25: validations=1000 mallocs=0 bytes=0
+=== RUN   TestTimestampValidationExactAllocations/negative_zero
+    validation_timestamp_allocations_test.go:25: validations=1000 mallocs=0 bytes=0
+=== RUN   TestTimestampValidationExactAllocations/invalid_calendar
+    validation_timestamp_allocations_test.go:25: validations=1000 mallocs=0 bytes=0
+=== RUN   TestTimestampValidationExactAllocations/invalid_fraction
+    validation_timestamp_allocations_test.go:25: validations=1000 mallocs=0 bytes=0
+=== RUN   TestTimestampValidationExactAllocations/invalid_length
+    validation_timestamp_allocations_test.go:25: validations=1000 mallocs=0 bytes=0
+--- PASS: TestTimestampValidationExactAllocations (0.00s)
+    --- PASS: TestTimestampValidationExactAllocations/seconds (0.00s)
+    --- PASS: TestTimestampValidationExactAllocations/nanos (0.00s)
+    --- PASS: TestTimestampValidationExactAllocations/comma (0.00s)
+    --- PASS: TestTimestampValidationExactAllocations/signed_fraction (0.00s)
+    --- PASS: TestTimestampValidationExactAllocations/negative_zero (0.00s)
+    --- PASS: TestTimestampValidationExactAllocations/invalid_calendar (0.00s)
+    --- PASS: TestTimestampValidationExactAllocations/invalid_fraction (0.00s)
+    --- PASS: TestTimestampValidationExactAllocations/invalid_length (0.00s)
+=== RUN   TestSessionTimestampRejectExactAllocations
+    validation_timestamp_allocations_test.go:54: completed_rejects=100 mallocs=0 bytes=0
+--- PASS: TestSessionTimestampRejectExactAllocations (0.05s)
+=== RUN   TestTimestampValidationSignedFractions
+--- PASS: TestTimestampValidationSignedFractions (0.00s)
+=== RUN   TestTimestampValidationCalendarAndLengths
+--- PASS: TestTimestampValidationCalendarAndLengths (0.01s)
+=== RUN   TestTimestampValidationEveryByteMutation
+--- PASS: TestTimestampValidationEveryByteMutation (0.01s)
+=== RUN   TestTimestampValidationSessionReject
+--- PASS: TestTimestampValidationSessionReject (0.04s)
+=== RUN   TestFIXUTCTimestampReadLegacyParity
+--- PASS: TestFIXUTCTimestampReadLegacyParity (0.01s)
+PASS
+ok  	github.com/quickfixgo/quickfix	0.869s

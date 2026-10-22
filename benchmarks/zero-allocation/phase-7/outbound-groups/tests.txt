@@ -1,0 +1,83 @@
+=== RUN   TestGroupValuesCompletedSessionExactAllocations
+    group_values_session_allocations_test.go:30: completed_batches=100 orders_per_batch=32 total_mallocs_delta=0 total_alloc_bytes_delta=0
+--- PASS: TestGroupValuesCompletedSessionExactAllocations (0.36s)
+=== RUN   TestGroupValuesCompletedSession
+--- PASS: TestGroupValuesCompletedSession (1.00s)
+=== RUN   TestGroupValuesWireParityAndNestedBinary
+--- PASS: TestGroupValuesWireParityAndNestedBinary (0.00s)
+=== RUN   TestGroupValuesOwnInputAndAliasSnapshot
+--- PASS: TestGroupValuesOwnInputAndAliasSnapshot (0.00s)
+=== RUN   TestGroupValuesReplacementRemoveClear
+--- PASS: TestGroupValuesReplacementRemoveClear (0.00s)
+=== RUN   TestGroupValuesCapacityAndInvalidInputAreAtomic
+=== RUN   TestGroupValuesCapacityAndInvalidInputAreAtomic/field_limit
+=== RUN   TestGroupValuesCapacityAndInvalidInputAreAtomic/frame_limit
+--- PASS: TestGroupValuesCapacityAndInvalidInputAreAtomic (0.00s)
+    --- PASS: TestGroupValuesCapacityAndInvalidInputAreAtomic/field_limit (0.00s)
+    --- PASS: TestGroupValuesCapacityAndInvalidInputAreAtomic/frame_limit (0.00s)
+=== RUN   TestGroupValuesShallowCopyDetaches
+--- PASS: TestGroupValuesShallowCopyDetaches (0.00s)
+=== RUN   TestGroupValuesGetGroupRetainsOwnedSnapshot
+--- PASS: TestGroupValuesGetGroupRetainsOwnedSnapshot (0.00s)
+=== RUN   TestGroupValuesWarmedLifecycleZeroAllocations
+--- PASS: TestGroupValuesWarmedLifecycleZeroAllocations (0.00s)
+=== RUN   TestMessageArenaScalarWireParity
+--- PASS: TestMessageArenaScalarWireParity (0.00s)
+=== RUN   TestMessageArenaSetBytesAliasing
+=== RUN   TestMessageArenaSetBytesAliasing/growth_moves_source
+=== RUN   TestMessageArenaSetBytesAliasing/shrink_moves_source
+=== RUN   TestMessageArenaSetBytesAliasing/same_field_subslice
+=== RUN   TestMessageArenaSetBytesAliasing/same_field_full
+=== RUN   TestMessageArenaSetBytesAliasing/earlier_source
+=== RUN   TestMessageArenaSetBytesAliasing/external_alias_keeps_separate_wire
+=== RUN   TestMessageArenaSetBytesAliasing/mutable_owned_value_keeps_separate_wire
+=== RUN   TestMessageArenaSetBytesAliasing/overlap_from_wire_plane
+--- PASS: TestMessageArenaSetBytesAliasing (0.00s)
+    --- PASS: TestMessageArenaSetBytesAliasing/growth_moves_source (0.00s)
+    --- PASS: TestMessageArenaSetBytesAliasing/shrink_moves_source (0.00s)
+    --- PASS: TestMessageArenaSetBytesAliasing/same_field_subslice (0.00s)
+    --- PASS: TestMessageArenaSetBytesAliasing/same_field_full (0.00s)
+    --- PASS: TestMessageArenaSetBytesAliasing/earlier_source (0.00s)
+    --- PASS: TestMessageArenaSetBytesAliasing/external_alias_keeps_separate_wire (0.00s)
+    --- PASS: TestMessageArenaSetBytesAliasing/mutable_owned_value_keeps_separate_wire (0.00s)
+    --- PASS: TestMessageArenaSetBytesAliasing/overlap_from_wire_plane (0.00s)
+=== RUN   TestMessageArenaPublicReparseDetaches
+--- PASS: TestMessageArenaPublicReparseDetaches (0.00s)
+=== RUN   TestMessageArenaAttachRefusesOversizedInputWithoutMutation
+--- PASS: TestMessageArenaAttachRefusesOversizedInputWithoutMutation (0.00s)
+=== RUN   TestMessageArenaCannotChangeLimitsAfterAttachment
+--- PASS: TestMessageArenaCannotChangeLimitsAfterAttachment (0.00s)
+=== RUN   TestMessageArenaPublicSectionReplacementDetachesSurvivors
+=== RUN   TestMessageArenaPublicSectionReplacementDetachesSurvivors/remove
+=== RUN   TestMessageArenaPublicSectionReplacementDetachesSurvivors/clear
+=== RUN   TestMessageArenaPublicSectionReplacementDetachesSurvivors/scalar
+=== RUN   TestMessageArenaPublicSectionReplacementDetachesSurvivors/reattach
+--- PASS: TestMessageArenaPublicSectionReplacementDetachesSurvivors (0.00s)
+    --- PASS: TestMessageArenaPublicSectionReplacementDetachesSurvivors/remove (0.00s)
+    --- PASS: TestMessageArenaPublicSectionReplacementDetachesSurvivors/clear (0.00s)
+    --- PASS: TestMessageArenaPublicSectionReplacementDetachesSurvivors/scalar (0.00s)
+    --- PASS: TestMessageArenaPublicSectionReplacementDetachesSurvivors/reattach (0.00s)
+=== RUN   TestMessageArenaErrorSurvivesUnrelatedDetachment
+=== RUN   TestMessageArenaErrorSurvivesUnrelatedDetachment/init
+=== RUN   TestMessageArenaErrorSurvivesUnrelatedDetachment/copy
+=== RUN   TestMessageArenaErrorSurvivesUnrelatedDetachment/assignment
+--- PASS: TestMessageArenaErrorSurvivesUnrelatedDetachment (0.00s)
+    --- PASS: TestMessageArenaErrorSurvivesUnrelatedDetachment/init (0.00s)
+    --- PASS: TestMessageArenaErrorSurvivesUnrelatedDetachment/copy (0.00s)
+    --- PASS: TestMessageArenaErrorSurvivesUnrelatedDetachment/assignment (0.00s)
+=== RUN   TestMessageArenaCustomWriterCanReplaceDestination
+--- PASS: TestMessageArenaCustomWriterCanReplaceDestination (0.00s)
+=== RUN   TestMessageArenaCapacityIsAtomicAndLatched
+--- PASS: TestMessageArenaCapacityIsAtomicAndLatched (0.00s)
+=== RUN   TestMessageArenaWholeFrameAndFieldBudget
+--- PASS: TestMessageArenaWholeFrameAndFieldBudget (0.00s)
+=== RUN   TestMessageArenaRemoveClearAndChurn
+--- PASS: TestMessageArenaRemoveClearAndChurn (0.00s)
+=== RUN   TestMessageArenaCopyAndValueCopyDetach
+--- PASS: TestMessageArenaCopyAndValueCopyDetach (0.00s)
+=== RUN   TestMessageArenaExistingGroupsSurviveMovesAndCopies
+--- PASS: TestMessageArenaExistingGroupsSurviveMovesAndCopies (0.00s)
+=== RUN   TestMessageArenaScalarMutationsAllocateZero
+--- PASS: TestMessageArenaScalarMutationsAllocateZero (0.00s)
+PASS
+ok  	github.com/quickfixgo/quickfix	2.067s

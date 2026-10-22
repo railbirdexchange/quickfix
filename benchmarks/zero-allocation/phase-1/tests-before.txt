@@ -1,0 +1,75 @@
+ok  	github.com/quickfixgo/quickfix	6.809s
+?   	github.com/quickfixgo/quickfix/cmd/generate-fix	[no test files]
+?   	github.com/quickfixgo/quickfix/cmd/generate-fix/internal	[no test files]
+?   	github.com/quickfixgo/quickfix/config	[no test files]
+ok  	github.com/quickfixgo/quickfix/datadictionary	1.295s
+ok  	github.com/quickfixgo/quickfix/internal	0.921s
+?   	github.com/quickfixgo/quickfix/internal/testsuite	[no test files]
+ok  	github.com/quickfixgo/quickfix/log/composite	1.895s
+ok  	github.com/quickfixgo/quickfix/log/file	1.074s
+2026/10/15 17:52:05 MONGODB_TEST_CXN environment arg is not provided, skipping...
+2026/10/15 17:52:05 MONGODB_TEST_CXN environment arg is not provided, skipping...
+--- FAIL: TestMongoLogTestSuite (0.00s)
+    --- FAIL: TestMongoLogTestSuite/TestMongoLog (0.00s)
+        panic.go:262: test panicked: runtime error: invalid memory address or nil pointer dereference
+            goroutine 36 [running]:
+            runtime/debug.Stack()
+            	/Users/a.alamer/sdk/go1.25.3/src/runtime/debug/stack.go:26 +0x64
+            github.com/stretchr/testify/suite.failOnPanic(0x14000266fc0, {0x104e35a00, 0x1053345b0})
+            	/Users/a.alamer/go/pkg/mod/github.com/stretchr/testify@v1.9.0/suite/suite.go:89 +0x38
+            github.com/stretchr/testify/suite.recoverAndFailOnPanic(0x14000266fc0)
+            	/Users/a.alamer/go/pkg/mod/github.com/stretchr/testify@v1.9.0/suite/suite.go:83 +0x40
+            panic({0x104e35a00?, 0x1053345b0?})
+            	/Users/a.alamer/sdk/go1.25.3/src/runtime/panic.go:783 +0x120
+            github.com/quickfixgo/quickfix/log/mongo.(*MongoLogTestSuite).TearDownTest(0x14000127c70)
+            	/Users/a.alamer/factory/worktrees/quickfix-zero-alloc-codec/log/mongo/mongo_log_test.go:113 +0x28
+            github.com/stretchr/testify/suite.Run.func1.1()
+            	/Users/a.alamer/go/pkg/mod/github.com/stretchr/testify@v1.9.0/suite/suite.go:184 +0x1ec
+            runtime.Goexit()
+            	/Users/a.alamer/sdk/go1.25.3/src/runtime/panic.go:615 +0x60
+            testing.(*common).SkipNow(0x14000266fc0)
+            	/Users/a.alamer/sdk/go1.25.3/src/testing/testing.go:1250 +0x44
+            github.com/quickfixgo/quickfix/log/mongo.(*MongoLogTestSuite).SetupTest(0x14000127c70)
+            	/Users/a.alamer/factory/worktrees/quickfix-zero-alloc-codec/log/mongo/mongo_log_test.go:43 +0xa8
+            github.com/stretchr/testify/suite.Run.func1(0x14000266fc0)
+            	/Users/a.alamer/go/pkg/mod/github.com/stretchr/testify@v1.9.0/suite/suite.go:192 +0x154
+            testing.tRunner(0x14000266fc0, 0x140001e03f0)
+            	/Users/a.alamer/sdk/go1.25.3/src/testing/testing.go:1934 +0xc8
+            created by testing.(*T).Run in goroutine 35
+            	/Users/a.alamer/sdk/go1.25.3/src/testing/testing.go:1997 +0x364
+    --- FAIL: TestMongoLogTestSuite/TestMongoLogNoSession (0.00s)
+        panic.go:262: test panicked: runtime error: invalid memory address or nil pointer dereference
+            goroutine 37 [running]:
+            runtime/debug.Stack()
+            	/Users/a.alamer/sdk/go1.25.3/src/runtime/debug/stack.go:26 +0x64
+            github.com/stretchr/testify/suite.failOnPanic(0x14000267340, {0x104e35a00, 0x1053345b0})
+            	/Users/a.alamer/go/pkg/mod/github.com/stretchr/testify@v1.9.0/suite/suite.go:89 +0x38
+            github.com/stretchr/testify/suite.recoverAndFailOnPanic(0x14000267340)
+            	/Users/a.alamer/go/pkg/mod/github.com/stretchr/testify@v1.9.0/suite/suite.go:83 +0x40
+            panic({0x104e35a00?, 0x1053345b0?})
+            	/Users/a.alamer/sdk/go1.25.3/src/runtime/panic.go:783 +0x120
+            github.com/quickfixgo/quickfix/log/mongo.(*MongoLogTestSuite).TearDownTest(0x14000127c70)
+            	/Users/a.alamer/factory/worktrees/quickfix-zero-alloc-codec/log/mongo/mongo_log_test.go:113 +0x28
+            github.com/stretchr/testify/suite.Run.func1.1()
+            	/Users/a.alamer/go/pkg/mod/github.com/stretchr/testify@v1.9.0/suite/suite.go:184 +0x1ec
+            runtime.Goexit()
+            	/Users/a.alamer/sdk/go1.25.3/src/runtime/panic.go:615 +0x60
+            testing.(*common).SkipNow(0x14000267340)
+            	/Users/a.alamer/sdk/go1.25.3/src/testing/testing.go:1250 +0x44
+            github.com/quickfixgo/quickfix/log/mongo.(*MongoLogTestSuite).SetupTest(0x14000127c70)
+            	/Users/a.alamer/factory/worktrees/quickfix-zero-alloc-codec/log/mongo/mongo_log_test.go:43 +0xa8
+            github.com/stretchr/testify/suite.Run.func1(0x14000267340)
+            	/Users/a.alamer/go/pkg/mod/github.com/stretchr/testify@v1.9.0/suite/suite.go:192 +0x154
+            testing.tRunner(0x14000267340, 0x140001e0480)
+            	/Users/a.alamer/sdk/go1.25.3/src/testing/testing.go:1934 +0xc8
+            created by testing.(*T).Run in goroutine 35
+            	/Users/a.alamer/sdk/go1.25.3/src/testing/testing.go:1997 +0x364
+FAIL
+FAIL	github.com/quickfixgo/quickfix/log/mongo	0.643s
+?   	github.com/quickfixgo/quickfix/log/screen	[no test files]
+ok  	github.com/quickfixgo/quickfix/log/sql	1.848s
+ok  	github.com/quickfixgo/quickfix/store/file	1.916s
+ok  	github.com/quickfixgo/quickfix/store/memory	0.795s
+ok  	github.com/quickfixgo/quickfix/store/mongo	1.786s
+ok  	github.com/quickfixgo/quickfix/store/sql	1.794s
+FAIL

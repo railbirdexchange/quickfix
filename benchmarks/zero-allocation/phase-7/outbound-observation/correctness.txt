@@ -1,0 +1,2 @@
+ok  	github.com/quickfixgo/quickfix	38.442s
+ok  	github.com/quickfixgo/quickfix/datadictionary	(cached)

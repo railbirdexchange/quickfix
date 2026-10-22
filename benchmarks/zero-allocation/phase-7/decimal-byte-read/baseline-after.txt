@@ -1,0 +1,56 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+cpu: Apple M4 Pro
+BenchmarkAllocationBaseline/decimal/read_short         	104987649	        11.47 ns/op	 784.64 MB/s	       0 B/op	       0 allocs/op
+BenchmarkAllocationBaseline/decimal/read_short         	100000000	        11.64 ns/op	 773.09 MB/s	       0 B/op	       0 allocs/op
+BenchmarkAllocationBaseline/decimal/read_short         	100000000	        11.31 ns/op	 795.53 MB/s	       0 B/op	       0 allocs/op
+BenchmarkAllocationBaseline/decimal/read_short         	100000000	        11.22 ns/op	 802.41 MB/s	       0 B/op	       0 allocs/op
+BenchmarkAllocationBaseline/decimal/read_short         	100000000	        11.38 ns/op	 791.02 MB/s	       0 B/op	       0 allocs/op
+BenchmarkAllocationBaseline/decimal/read_signed_fraction         	43799481	        27.87 ns/op	1435.27 MB/s	       0 B/op	       0 allocs/op
+BenchmarkAllocationBaseline/decimal/read_signed_fraction         	42210109	        27.98 ns/op	1429.52 MB/s	       0 B/op	       0 allocs/op
+BenchmarkAllocationBaseline/decimal/read_signed_fraction         	43305860	        27.80 ns/op	1438.66 MB/s	       0 B/op	       0 allocs/op
+BenchmarkAllocationBaseline/decimal/read_signed_fraction         	43796953	        28.08 ns/op	1424.75 MB/s	       0 B/op	       0 allocs/op
+BenchmarkAllocationBaseline/decimal/read_signed_fraction         	41984648	        28.64 ns/op	1396.68 MB/s	       0 B/op	       0 allocs/op
+BenchmarkAllocationBaseline/decimal/read_max_uint128             	22019526	        55.35 ns/op	 704.56 MB/s	       0 B/op	       0 allocs/op
+BenchmarkAllocationBaseline/decimal/read_max_uint128             	21724207	        54.67 ns/op	 713.33 MB/s	       0 B/op	       0 allocs/op
+BenchmarkAllocationBaseline/decimal/read_max_uint128             	22175424	        54.55 ns/op	 714.91 MB/s	       0 B/op	       0 allocs/op
+BenchmarkAllocationBaseline/decimal/read_max_uint128             	22334756	        54.32 ns/op	 717.90 MB/s	       0 B/op	       0 allocs/op
+BenchmarkAllocationBaseline/decimal/read_max_uint128             	22706289	        54.20 ns/op	 719.59 MB/s	       0 B/op	       0 allocs/op
+BenchmarkAllocationBaseline/decimal/read_overflow                	 3834642	       314.5 ns/op	 124.02 MB/s	     168 B/op	       5 allocs/op
+BenchmarkAllocationBaseline/decimal/read_overflow                	 3663493	       320.6 ns/op	 121.65 MB/s	     168 B/op	       5 allocs/op
+BenchmarkAllocationBaseline/decimal/read_overflow                	 3647851	       325.4 ns/op	 119.85 MB/s	     168 B/op	       5 allocs/op
+BenchmarkAllocationBaseline/decimal/read_overflow                	 3836484	       315.9 ns/op	 123.46 MB/s	     168 B/op	       5 allocs/op
+BenchmarkAllocationBaseline/decimal/read_overflow                	 3779932	       321.7 ns/op	 121.24 MB/s	     168 B/op	       5 allocs/op
+BenchmarkAllocationBaseline/parse/reused_message_without_dictionary         	 3151068	       388.8 ns/op	 264.93 MB/s	       0 B/op	       0 allocs/op
+BenchmarkAllocationBaseline/parse/reused_message_without_dictionary         	 3041373	       390.1 ns/op	 264.03 MB/s	       0 B/op	       0 allocs/op
+BenchmarkAllocationBaseline/parse/reused_message_without_dictionary         	 3121856	       395.7 ns/op	 260.30 MB/s	       0 B/op	       0 allocs/op
+BenchmarkAllocationBaseline/parse/reused_message_without_dictionary         	 3011557	       401.1 ns/op	 256.78 MB/s	       0 B/op	       0 allocs/op
+BenchmarkAllocationBaseline/parse/reused_message_without_dictionary         	 3080787	       402.4 ns/op	 255.99 MB/s	       0 B/op	       0 allocs/op
+BenchmarkAllocationBaseline/parse/reused_message_with_dictionary            	 2589555	       458.5 ns/op	 224.66 MB/s	       0 B/op	       0 allocs/op
+BenchmarkAllocationBaseline/parse/reused_message_with_dictionary            	 2665212	       444.0 ns/op	 232.00 MB/s	       0 B/op	       0 allocs/op
+BenchmarkAllocationBaseline/parse/reused_message_with_dictionary            	 2646578	       459.1 ns/op	 224.33 MB/s	       0 B/op	       0 allocs/op
+BenchmarkAllocationBaseline/parse/reused_message_with_dictionary            	 2650664	       450.0 ns/op	 228.91 MB/s	       0 B/op	       0 allocs/op
+BenchmarkAllocationBaseline/parse/reused_message_with_dictionary            	 2639778	       452.2 ns/op	 227.78 MB/s	       0 B/op	       0 allocs/op
+BenchmarkAllocationBaseline/parse/reused_message_with_repeating_group       	 1387664	       851.9 ns/op	 273.52 MB/s	       0 B/op	       0 allocs/op
+BenchmarkAllocationBaseline/parse/reused_message_with_repeating_group       	 1382890	       850.5 ns/op	 273.95 MB/s	       0 B/op	       0 allocs/op
+BenchmarkAllocationBaseline/parse/reused_message_with_repeating_group       	 1400937	       834.9 ns/op	 279.09 MB/s	       0 B/op	       0 allocs/op
+BenchmarkAllocationBaseline/parse/reused_message_with_repeating_group       	 1418932	       830.7 ns/op	 280.50 MB/s	       0 B/op	       0 allocs/op
+BenchmarkAllocationBaseline/parse/reused_message_with_repeating_group       	 1418499	       876.2 ns/op	 265.91 MB/s	       0 B/op	       0 allocs/op
+BenchmarkAllocationBaseline/validate/valid_new_order_single                 	 1753798	       679.5 ns/op	       0 B/op	       0 allocs/op
+BenchmarkAllocationBaseline/validate/valid_new_order_single                 	 1775060	       684.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkAllocationBaseline/validate/valid_new_order_single                 	 1759099	       683.5 ns/op	       0 B/op	       0 allocs/op
+BenchmarkAllocationBaseline/validate/valid_new_order_single                 	 1761492	       676.9 ns/op	       0 B/op	       0 allocs/op
+BenchmarkAllocationBaseline/validate/valid_new_order_single                 	 1763332	       676.3 ns/op	       0 B/op	       0 allocs/op
+BenchmarkAllocationBaseline/build/new_order_single                          	 1490786	       785.6 ns/op	 131.10 MB/s	     152 B/op	       6 allocs/op
+BenchmarkAllocationBaseline/build/new_order_single                          	 1565072	       757.2 ns/op	 136.03 MB/s	     152 B/op	       6 allocs/op
+BenchmarkAllocationBaseline/build/new_order_single                          	 1537933	       771.6 ns/op	 133.48 MB/s	     152 B/op	       6 allocs/op
+BenchmarkAllocationBaseline/build/new_order_single                          	 1574901	       761.3 ns/op	 135.30 MB/s	     152 B/op	       6 allocs/op
+BenchmarkAllocationBaseline/build/new_order_single                          	 1507399	       771.0 ns/op	 133.59 MB/s	     152 B/op	       6 allocs/op
+BenchmarkAllocationBaseline/frame/read_steady_state                         	10664869	       111.1 ns/op	 927.05 MB/s	     160 B/op	       2 allocs/op
+BenchmarkAllocationBaseline/frame/read_steady_state                         	10942306	       110.8 ns/op	 929.51 MB/s	     160 B/op	       2 allocs/op
+BenchmarkAllocationBaseline/frame/read_steady_state                         	11079802	       109.4 ns/op	 941.51 MB/s	     160 B/op	       2 allocs/op
+BenchmarkAllocationBaseline/frame/read_steady_state                         	11245509	       109.0 ns/op	 944.92 MB/s	     160 B/op	       2 allocs/op
+BenchmarkAllocationBaseline/frame/read_steady_state                         	11184387	       109.5 ns/op	 941.02 MB/s	     160 B/op	       2 allocs/op
+PASS
+ok  	github.com/quickfixgo/quickfix	79.059s

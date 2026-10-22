@@ -1,5 +1,7 @@
 run:
   timeout: 10m
+  # Match the source minimum and the existing Go 1.24 lint runner.
+  go: '1.24'
   # deprecated config - 
   # skip-dirs:
   #   - gen

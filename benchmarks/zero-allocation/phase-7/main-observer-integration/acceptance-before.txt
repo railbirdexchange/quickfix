@@ -1,0 +1,35 @@
+starting test server
+<at>
+<test name='definitions/server/fix41/2d_GarbledMessage.def' result='failure' >
+  <message>
+    Connection reset by peer @ io_fillbuf - fd:11 
+    <line>18</line>
+  </message>
+</test>
+<test name='definitions/server/fix41/2m_BodyLengthValueNotCorrect.def' result='failure' >
+  <message>
+    Connection reset by peer @ io_fillbuf - fd:13 
+    <line>13</line>
+  </message>
+</test>
+<test name='definitions/server/fix41/2t_FirstThreeFieldsOutOfOrder.def' result='failure' >
+  <message>
+    Connection reset by peer @ io_fillbuf - fd:15 
+    <line>10</line>
+  </message>
+</test>
+<test name='definitions/server/fix41/3b_InvalidChecksum.def' result='failure' >
+  <message>
+    Broken pipe
+    <line>12</line>
+  </message>
+</test>
+<test name='definitions/server/fix41/3c_GarbledMessage.def' result='failure' >
+  <message>
+    Connection reset by peer @ io_fillbuf - fd:19 
+    <line>18</line>
+  </message>
+</test>
+
+<results total='5' failures='5'/>
+</at>

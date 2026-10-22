@@ -1,0 +1,22 @@
+?   	github.com/quickfixgo/quickfix/cmd/generate-fix	[no test files]
+?   	github.com/quickfixgo/quickfix/cmd/generate-fix/internal	[no test files]
+?   	github.com/quickfixgo/quickfix/config	[no test files]
+?   	github.com/quickfixgo/quickfix/internal/testsuite	[no test files]
+?   	github.com/quickfixgo/quickfix/log/screen	[no test files]
+--- FAIL: TestBoundedConnectionSlowConsumerAndReconnect (0.00s)
+    bounded_connection_test.go:199: returning another raw slot reset active session scratch
+--- FAIL: TestScopedInboundReaderCancellationDoesNotResetActiveScratch (0.00s)
+    bounded_connection_test.go:235: cancelling and releasing the reader-owned slot changed active session scratch
+FAIL
+FAIL	github.com/quickfixgo/quickfix	7.488s
+ok  	github.com/quickfixgo/quickfix/datadictionary	1.791s
+ok  	github.com/quickfixgo/quickfix/internal	0.470s
+ok  	github.com/quickfixgo/quickfix/log/composite	1.073s
+ok  	github.com/quickfixgo/quickfix/log/file	0.636s
+ok  	github.com/quickfixgo/quickfix/log/mongo	1.614s [no tests to run]
+ok  	github.com/quickfixgo/quickfix/log/sql	1.067s
+ok  	github.com/quickfixgo/quickfix/store/file	1.568s
+ok  	github.com/quickfixgo/quickfix/store/memory	1.400s
+ok  	github.com/quickfixgo/quickfix/store/mongo	1.691s
+ok  	github.com/quickfixgo/quickfix/store/sql	1.700s
+FAIL

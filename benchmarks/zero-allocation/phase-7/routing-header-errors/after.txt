@@ -1,0 +1,46 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+cpu: Apple M4 Pro
+BenchmarkMessageRouterAllocation/fix44   	26996650	        42.57 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageRouterAllocation/fix44   	28087230	        42.89 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageRouterAllocation/fix44   	28577068	        42.84 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageRouterAllocation/fix44   	27387360	        43.54 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageRouterAllocation/fix44   	26854974	        43.89 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageRouterAllocation/fixt_explicit         	21063702	        57.11 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageRouterAllocation/fixt_explicit         	21081309	        57.24 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageRouterAllocation/fixt_explicit         	21402391	        56.60 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageRouterAllocation/fixt_explicit         	20424488	        56.55 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageRouterAllocation/fixt_explicit         	21337394	        56.94 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageRouterAllocation/fixt_default          	11754722	       102.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageRouterAllocation/fixt_default          	11664972	       102.2 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageRouterAllocation/fixt_default          	11850325	       101.4 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageRouterAllocation/fixt_default          	11993438	       101.6 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageRouterAllocation/fixt_default          	11919562	       101.5 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageRouterAllocation/fix44_multibyte_type  	32295648	        38.04 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageRouterAllocation/fix44_multibyte_type  	30557547	        37.43 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageRouterAllocation/fix44_multibyte_type  	32029929	        37.53 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageRouterAllocation/fix44_multibyte_type  	32856795	        37.40 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageRouterAllocation/fix44_multibyte_type  	31227669	        37.62 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageRouterAllocation/fixt_custom_long_keys 	22856707	        51.67 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageRouterAllocation/fixt_custom_long_keys 	23846151	        50.81 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageRouterAllocation/fixt_custom_long_keys 	23791939	        51.48 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageRouterAllocation/fixt_custom_long_keys 	23333251	        51.78 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageRouterAllocation/fixt_custom_long_keys 	23575058	        51.48 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageRouterAllocation/fixt_default_custom   	11969557	       100.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageRouterAllocation/fixt_default_custom   	12011540	       100.3 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageRouterAllocation/fixt_default_custom   	11716027	        99.54 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageRouterAllocation/fixt_default_custom   	12039045	       100.9 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageRouterAllocation/fixt_default_custom   	12112850	        99.71 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageRouterMissingBeginString/owned         	33030855	        34.37 ns/op	      72 B/op	       2 allocs/op
+BenchmarkMessageRouterMissingBeginString/owned         	35318874	        34.08 ns/op	      72 B/op	       2 allocs/op
+BenchmarkMessageRouterMissingBeginString/owned         	34702892	        34.07 ns/op	      72 B/op	       2 allocs/op
+BenchmarkMessageRouterMissingBeginString/owned         	34486102	        34.28 ns/op	      72 B/op	       2 allocs/op
+BenchmarkMessageRouterMissingBeginString/owned         	34909683	        34.75 ns/op	      72 B/op	       2 allocs/op
+BenchmarkMessageRouterMissingBeginString/prepared      	87167067	        12.97 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageRouterMissingBeginString/prepared      	91614710	        12.95 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageRouterMissingBeginString/prepared      	89145872	        12.91 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageRouterMissingBeginString/prepared      	91411737	        12.90 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMessageRouterMissingBeginString/prepared      	94016875	        12.95 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/quickfixgo/quickfix	50.425s

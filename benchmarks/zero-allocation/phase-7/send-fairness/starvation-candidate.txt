@@ -1,0 +1,9 @@
+=== RUN   TestInboundIsNotStarvedByOutboundFlood
+    starvation_test.go:218: flood=false inbound accepted=1500 received=1500; outbound accepted=0 errors=0 received_during_probe_load=0 received_after_drain=0
+    starvation_test.go:218: flood=true inbound accepted=1500 received=1500; outbound accepted=3971 errors=0 received_during_probe_load=2976 received_after_drain=3971
+    starvation_test.go:238: senders 4, ToApp cost 1ms
+    starvation_test.go:239: inbound without flood: 1500 messages, p50 59µs, p99 116µs
+    starvation_test.go:240: inbound with flood:    1500 messages, p50 54µs, p99 112µs
+--- PASS: TestInboundIsNotStarvedByOutboundFlood (12.52s)
+PASS
+ok  	github.com/quickfixgo/quickfix	12.791s

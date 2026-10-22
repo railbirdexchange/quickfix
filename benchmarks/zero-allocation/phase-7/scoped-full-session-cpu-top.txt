@@ -1,0 +1,48 @@
+File: scoped-profile.test
+Type: cpu
+Time: 2026-10-16 01:17:36 EDT
+Duration: 15.66s, Total samples = 9.18s (58.62%)
+Showing nodes accounting for 8.97s, 97.71% of 9.18s total
+Dropped 79 nodes (cum <= 0.05s)
+Showing top 40 nodes out of 57
+      flat  flat%   sum%        cum   cum%
+     6.49s 70.70% 70.70%      6.49s 70.70%  syscall.syscall
+     2.34s 25.49% 96.19%      2.34s 25.49%  runtime.kevent
+     0.11s  1.20% 97.39%      0.11s  1.20%  runtime.pthread_cond_signal
+     0.02s  0.22% 97.60%      2.36s 25.71%  runtime.netpoll
+     0.01s  0.11% 97.71%      5.31s 57.84%  internal/poll.(*FD).Write
+         0     0% 97.71%      0.06s  0.65%  github.com/quickfixgo/quickfix.(*boundedFullApplication).FromApp
+         0     0% 97.71%      0.06s  0.65%  github.com/quickfixgo/quickfix.(*boundedFullApplication).handleOrder
+         0     0% 97.71%      0.06s  0.65%  github.com/quickfixgo/quickfix.(*boundedFullApplication).handleReport
+         0     0% 97.71%      1.06s 11.55%  github.com/quickfixgo/quickfix.(*boundedFullSession).acknowledge
+         0     0% 97.71%      0.44s  4.79%  github.com/quickfixgo/quickfix.(*boundedFullSession).readMessage
+         0     0% 97.71%      0.44s  4.79%  github.com/quickfixgo/quickfix.(*boundedFullSession).readReport
+         0     0% 97.71%      1.87s 20.37%  github.com/quickfixgo/quickfix.(*boundedFullSession).sendOrder (inline)
+         0     0% 97.71%      1.87s 20.37%  github.com/quickfixgo/quickfix.(*boundedFullSession).sendOrderWithID
+         0     0% 97.71%      2.31s 25.16%  github.com/quickfixgo/quickfix.(*boundedFullSession).unacknowledgedBatch
+         0     0% 97.71%      2.93s 31.92%  github.com/quickfixgo/quickfix.(*boundedFullSession).writePrepared
+         0     0% 97.71%      0.75s  8.17%  github.com/quickfixgo/quickfix.(*boundedReadConnection).read
+         0     0% 97.71%      2.39s 26.03%  github.com/quickfixgo/quickfix.(*outboundWriter).run
+         0     0% 97.71%      2.39s 26.03%  github.com/quickfixgo/quickfix.(*outboundWriter).write
+         0     0% 97.71%      1.17s 12.75%  github.com/quickfixgo/quickfix.(*parser).ReadMessageInto
+         0     0% 97.71%      1.17s 12.75%  github.com/quickfixgo/quickfix.(*parser).findIndex (inline)
+         0     0% 97.71%      1.17s 12.75%  github.com/quickfixgo/quickfix.(*parser).findIndexAfterOffset
+         0     0% 97.71%      1.17s 12.75%  github.com/quickfixgo/quickfix.(*parser).findStart
+         0     0% 97.71%      1.17s 12.75%  github.com/quickfixgo/quickfix.(*parser).readMore
+         0     0% 97.71%      1.17s 12.75%  github.com/quickfixgo/quickfix.(*parser).readMoreBounded
+         0     0% 97.71%      0.10s  1.09%  github.com/quickfixgo/quickfix.(*session).fromCallback
+         0     0% 97.71%      0.05s  0.54%  github.com/quickfixgo/quickfix.(*session).prepareOutbound
+         0     0% 97.71%      0.05s  0.54%  github.com/quickfixgo/quickfix.(*session).queueForSend
+         0     0% 97.71%      0.16s  1.74%  github.com/quickfixgo/quickfix.(*session).run
+         0     0% 97.71%      0.12s  1.31%  github.com/quickfixgo/quickfix.(*session).verify (inline)
+         0     0% 97.71%      0.12s  1.31%  github.com/quickfixgo/quickfix.(*session).verifyMsgAgainstAppImpl
+         0     0% 97.71%      0.12s  1.31%  github.com/quickfixgo/quickfix.(*session).verifySelect
+         0     0% 97.71%      0.14s  1.53%  github.com/quickfixgo/quickfix.(*stateMachine).Incoming
+         0     0% 97.71%      3.39s 36.93%  github.com/quickfixgo/quickfix.BenchmarkOrdinaryFullSessionRoundTrip.func1
+         0     0% 97.71%      0.05s  0.54%  github.com/quickfixgo/quickfix.SendToTarget
+         0     0% 97.71%      0.12s  1.31%  github.com/quickfixgo/quickfix.inSession.FixMsgIn
+         0     0% 97.71%      3.33s 36.27%  github.com/quickfixgo/quickfix.measureOrdinaryFullSessionRoundTrip
+         0     0% 97.71%      0.16s  1.74%  github.com/quickfixgo/quickfix.newBoundedFullSession.func1
+         0     0% 97.71%      1.19s 12.96%  internal/poll.(*FD).Read
+         0     0% 97.71%      6.49s 70.70%  internal/poll.ignoringEINTRIO (inline)
+         0     0% 97.71%      1.17s 12.75%  net.(*conn).Read

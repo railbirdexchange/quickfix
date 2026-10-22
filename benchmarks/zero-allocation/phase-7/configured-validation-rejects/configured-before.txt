@@ -1,0 +1,76 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+cpu: Apple M4 Pro
+BenchmarkConfiguredValidationReject/valid         	 1946828	       616.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkConfiguredValidationReject/valid         	 1963791	       619.4 ns/op	       0 B/op	       0 allocs/op
+BenchmarkConfiguredValidationReject/valid         	 1952094	       623.5 ns/op	       0 B/op	       0 allocs/op
+BenchmarkConfiguredValidationReject/valid         	 1962470	       618.2 ns/op	       0 B/op	       0 allocs/op
+BenchmarkConfiguredValidationReject/valid         	 1967169	       612.2 ns/op	       0 B/op	       0 allocs/op
+BenchmarkConfiguredValidationReject/format        	 3684512	       333.1 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/format        	 3588013	       333.0 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/format        	 3555196	       335.4 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/format        	 3684205	       332.9 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/format        	 3603223	       334.1 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/enum          	 3979089	       301.6 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/enum          	 3986152	       302.7 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/enum          	 3920743	       299.8 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/enum          	 4008676	       301.0 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/enum          	 3959557	       303.4 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/empty         	14012347	        85.97 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/empty         	13652239	        86.42 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/empty         	13580120	        87.47 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/empty         	13539566	        87.10 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/empty         	14044408	        87.45 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/duplicate     	 2162443	       547.5 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/duplicate     	 2147185	       544.2 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/duplicate     	 2181596	       552.4 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/duplicate     	 2167341	       540.2 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/duplicate     	 2221302	       544.2 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/group_count   	 1891239	       637.0 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/group_count   	 1879150	       639.1 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/group_count   	 1869619	       631.7 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/group_count   	 1891915	       631.3 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/group_count   	 1890447	       637.5 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/order         	10432374	       114.3 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/order         	10168916	       115.8 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/order         	10072028	       112.8 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/order         	10105305	       115.8 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/order         	10525730	       112.7 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/not_defined   	 1937361	       614.2 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/not_defined   	 1944067	       617.8 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/not_defined   	 1922710	       620.8 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/not_defined   	 1953823	       622.7 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/not_defined   	 1940546	       618.6 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/required_group         	 2933050	       419.4 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/required_group         	 2780342	       365.9 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/required_group         	 2842975	       406.1 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/required_group         	 2837368	       412.3 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/required_group         	 2859468	       430.7 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/unknown_tag            	 3452064	       345.7 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/unknown_tag            	 3461622	       338.9 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/unknown_tag            	 3572190	       338.7 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/unknown_tag            	 3473614	       339.7 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/unknown_tag            	 3465912	       346.0 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationReject/invalid_timestamp      	 5766728	       207.7 ns/op	     112 B/op	       3 allocs/op
+BenchmarkConfiguredValidationReject/invalid_timestamp      	 5732414	       212.4 ns/op	     112 B/op	       3 allocs/op
+BenchmarkConfiguredValidationReject/invalid_timestamp      	 5692110	       204.8 ns/op	     112 B/op	       3 allocs/op
+BenchmarkConfiguredValidationReject/invalid_timestamp      	 5745015	       207.7 ns/op	     112 B/op	       3 allocs/op
+BenchmarkConfiguredValidationReject/invalid_timestamp      	 5547943	       209.6 ns/op	     112 B/op	       3 allocs/op
+BenchmarkConfiguredCompletedReject/enum                    	  337032	      3608 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredCompletedReject/enum                    	  330166	      3730 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredCompletedReject/enum                    	  320040	      3627 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredCompletedReject/enum                    	  324496	      3683 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredCompletedReject/enum                    	  324942	      3685 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredCompletedReject/group_count             	  294724	      4024 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredCompletedReject/group_count             	  303652	      4049 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredCompletedReject/group_count             	  304597	      4078 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredCompletedReject/group_count             	  297744	      4011 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredCompletedReject/group_count             	  299656	      4074 ns/op	      64 B/op	       1 allocs/op
+BenchmarkConfiguredValidationSetup                         	   43657	     27267 ns/op	   45016 B/op	     281 allocs/op
+BenchmarkConfiguredValidationSetup                         	   45159	     27340 ns/op	   45016 B/op	     281 allocs/op
+BenchmarkConfiguredValidationSetup                         	   43948	     27220 ns/op	   45016 B/op	     281 allocs/op
+BenchmarkConfiguredValidationSetup                         	   43506	     26965 ns/op	   45016 B/op	     281 allocs/op
+BenchmarkConfiguredValidationSetup                         	   43291	     26800 ns/op	   45016 B/op	     281 allocs/op
+PASS
+ok  	github.com/quickfixgo/quickfix	110.816s

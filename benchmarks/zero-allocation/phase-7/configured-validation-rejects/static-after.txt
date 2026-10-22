@@ -1,0 +1,31 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+cpu: Apple M4 Pro
+BenchmarkStaticRejectConstructor/invalid_message_type         	469990071	         2.476 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectConstructor/invalid_message_type         	480560893	         2.462 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectConstructor/invalid_message_type         	486995692	         2.484 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectConstructor/invalid_message_type         	481272565	         2.472 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectConstructor/invalid_message_type         	488738481	         2.475 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectConstructor/unsupported_message_type     	487672798	         2.363 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectConstructor/unsupported_message_type     	512529933	         2.390 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectConstructor/unsupported_message_type     	511571734	         2.369 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectConstructor/unsupported_message_type     	501841653	         2.377 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectConstructor/unsupported_message_type     	510322514	         2.379 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectConstructor/value_incorrect_no_tag       	500168545	         2.425 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectConstructor/value_incorrect_no_tag       	497680513	         2.426 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectConstructor/value_incorrect_no_tag       	491024062	         2.406 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectConstructor/value_incorrect_no_tag       	489435084	         2.400 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectConstructor/value_incorrect_no_tag       	507363553	         2.420 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectInvalidMessageType/validation            	53459557	        22.52 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectInvalidMessageType/validation            	51041566	        23.90 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectInvalidMessageType/validation            	52594381	        22.72 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectInvalidMessageType/validation            	51715593	        22.92 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectInvalidMessageType/validation            	49182512	        22.73 ns/op	       0 B/op	       0 allocs/op
+BenchmarkStaticRejectInvalidMessageType/validation_and_owned_type_read         	24902400	        48.04 ns/op	      16 B/op	       1 allocs/op
+BenchmarkStaticRejectInvalidMessageType/validation_and_owned_type_read         	22991128	        47.54 ns/op	      16 B/op	       1 allocs/op
+BenchmarkStaticRejectInvalidMessageType/validation_and_owned_type_read         	24780524	        48.66 ns/op	      16 B/op	       1 allocs/op
+BenchmarkStaticRejectInvalidMessageType/validation_and_owned_type_read         	24094087	        48.36 ns/op	      16 B/op	       1 allocs/op
+BenchmarkStaticRejectInvalidMessageType/validation_and_owned_type_read         	24325268	        51.73 ns/op	      16 B/op	       1 allocs/op
+PASS
+ok  	github.com/quickfixgo/quickfix	34.818s

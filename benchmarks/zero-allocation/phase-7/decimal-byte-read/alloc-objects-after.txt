@@ -1,0 +1,17 @@
+File: quickfix-after.test
+Type: alloc_objects
+Time: 2026-10-17 18:26:45 EDT
+Active filters:
+   focus=FIXDecimal.*Read|readDecimalQuantity
+Showing nodes accounting for 250011, 99.26% of 251868 total
+Dropped 94 nodes (cum <= 1259)
+      flat  flat%   sum%        cum   cum%
+    150007 59.56% 59.56%     150007 59.56%  math/big.NewInt (inline)
+    100003 39.70% 99.26%     250011 99.26%  github.com/quickfixgo/quickfix.readDecimalQuantity
+         1 0.0004% 99.26%     150008 59.56%  github.com/quickfixgo/quickfix.FieldMap.Get
+         0     0% 99.26%     150007 59.56%  github.com/quickfixgo/quickfix.(*FIXDecimal).Read
+         0     0% 99.26%     250033 99.27%  github.com/quickfixgo/quickfix.BenchmarkFIXDecimalOwnedRead.func1.2
+         0     0% 99.26%     150007 59.56%  github.com/quickfixgo/quickfix.FieldMap.GetField
+         0     0% 99.26%     150007 59.56%  github.com/shopspring/decimal.New (inline)
+         0     0% 99.26%     250016 99.26%  testing.(*B).launch
+         0     0% 99.26%     251155 99.72%  testing.(*B).runN

@@ -18,6 +18,7 @@ package quickfix
 import (
 	"bytes"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -55,7 +56,15 @@ func (t tagSort) Less(i, j int) bool { return t.compare(t.tags[i], t.tags[j]) }
 type FieldMap struct {
 	tagLookup map[Tag]field
 	tagSort
-	rwLock *sync.RWMutex
+	rwLock       *sync.RWMutex
+	fixed        *fixedFieldMap
+	scoped       bool
+	reusable     bool
+	arena        *messageArena
+	arenaSection int
+	metadata     *fieldMetadata
+	// constructionErr preserves a failed section through cold arena detachment.
+	constructionErr error
 }
 
 // ascending tags.
@@ -66,6 +75,13 @@ func (m *FieldMap) init() {
 }
 
 func (m *FieldMap) initWithOrdering(ordering tagOrder) {
+	if m.arena != nil {
+		m.detachArena()
+		m.tags = nil
+	}
+	m.fixed = nil
+	m.reusable = false
+	m.constructionErr = nil
 	m.rwLock = &sync.RWMutex{}
 	m.tagLookup = make(map[Tag]field)
 	m.compare = ordering
@@ -73,13 +89,11 @@ func (m *FieldMap) initWithOrdering(ordering tagOrder) {
 
 // Tags returns all of the Field Tags in this FieldMap.
 func (m FieldMap) Tags() []Tag {
-	m.rwLock.RLock()
-	defer m.rwLock.RUnlock()
+	m.rlock()
+	defer m.runlock()
 
-	tags := make([]Tag, 0, len(m.tagLookup))
-	for t := range m.tagLookup {
-		tags = append(tags, t)
-	}
+	tags := make([]Tag, 0, m.fieldCount())
+	m.eachField(func(tag Tag, _ field) { tags = append(tags, tag) })
 
 	return tags
 }
@@ -91,21 +105,21 @@ func (m FieldMap) Get(parser Field) MessageRejectError {
 
 // Has returns true if the Tag is present in this FieldMap.
 func (m FieldMap) Has(tag Tag) bool {
-	m.rwLock.RLock()
-	defer m.rwLock.RUnlock()
+	m.rlock()
+	defer m.runlock()
 
-	_, ok := m.tagLookup[tag]
+	_, ok := m.lookup(tag)
 	return ok
 }
 
 // GetField parses of a field with Tag tag. Returned reject may indicate the field is not present, or the field value is invalid.
 func (m FieldMap) GetField(tag Tag, parser FieldValueReader) MessageRejectError {
-	m.rwLock.RLock()
-	defer m.rwLock.RUnlock()
+	m.rlock()
+	defer m.runlock()
 
-	f, ok := m.tagLookup[tag]
+	f, ok := m.lookup(tag)
 	if !ok {
-		return ConditionallyRequiredFieldMissing(tag)
+		return m.missingFieldReject(tag)
 	}
 
 	if err := parser.Read(f[0].value); err != nil {
@@ -117,9 +131,9 @@ func (m FieldMap) GetField(tag Tag, parser FieldValueReader) MessageRejectError 
 
 // GetField parses of a field with Tag tag. Returned reject may indicate the field is not present, or the field value is invalid.
 func (m FieldMap) getFieldNoLock(tag Tag, parser FieldValueReader) MessageRejectError {
-	f, ok := m.tagLookup[tag]
+	f, ok := m.lookup(tag)
 	if !ok {
-		return ConditionallyRequiredFieldMissing(tag)
+		return m.missingFieldReject(tag)
 	}
 
 	if err := parser.Read(f[0].value); err != nil {
@@ -129,24 +143,41 @@ func (m FieldMap) getFieldNoLock(tag Tag, parser FieldValueReader) MessageReject
 	return nil
 }
 
-// GetBytes is a zero-copy GetField wrapper for []bytes fields.
+// GetBytes is a zero-copy GetField wrapper for []bytes fields. Values from a
+// MessageSlot or BorrowApplication callback follow that explicit borrowed
+// lifetime. Ordinary Application delivery retains its owned field bytes.
+// Borrowed outgoing arena values expire on mutation of the same Message.
+// Values supplied to SetBytes retain their external caller-owned alias.
 func (m FieldMap) GetBytes(tag Tag) ([]byte, MessageRejectError) {
-	m.rwLock.RLock()
-	defer m.rwLock.RUnlock()
+	m.rlock()
+	defer m.runlock()
 
-	f, ok := m.tagLookup[tag]
+	f, ok := m.lookup(tag)
 	if !ok {
-		return nil, ConditionallyRequiredFieldMissing(tag)
+		return nil, m.missingFieldReject(tag)
 	}
 
 	return f[0].value, nil
 }
 
+// getBytesIfPresent reads an optional field without constructing a missing-field
+// reject. The returned bytes have the same lifetime as GetBytes results.
+func (m FieldMap) getBytesIfPresent(tag Tag) ([]byte, bool) {
+	m.rlock()
+	defer m.runlock()
+
+	f, ok := m.lookup(tag)
+	if !ok {
+		return nil, false
+	}
+	return f[0].value, true
+}
+
 // getBytesNoLock is a lock free zero-copy GetField wrapper for []bytes fields.
 func (m FieldMap) getBytesNoLock(tag Tag) ([]byte, MessageRejectError) {
-	f, ok := m.tagLookup[tag]
+	f, ok := m.lookup(tag)
 	if !ok {
-		return nil, ConditionallyRequiredFieldMissing(tag)
+		return nil, m.missingFieldReject(tag)
 	}
 
 	return f[0].value, nil
@@ -193,8 +224,8 @@ func (m FieldMap) getIntNoLock(tag Tag) (int, MessageRejectError) {
 
 // GetTime is a GetField wrapper for utc timestamp fields.
 func (m FieldMap) GetTime(tag Tag) (t time.Time, err MessageRejectError) {
-	m.rwLock.RLock()
-	defer m.rwLock.RUnlock()
+	m.rlock()
+	defer m.runlock()
 
 	bytes, err := m.GetBytes(tag)
 	if err != nil {
@@ -209,32 +240,34 @@ func (m FieldMap) GetTime(tag Tag) (t time.Time, err MessageRejectError) {
 	return val.Time, err
 }
 
-// GetString is a GetField wrapper for string fields.
+// GetString returns an owned string for the field.
 func (m FieldMap) GetString(tag Tag) (string, MessageRejectError) {
-	var val FIXString
-	if err := m.GetField(tag, &val); err != nil {
-		return "", err
-	}
-	return string(val), nil
+	m.rlock()
+	defer m.runlock()
+	return m.getStringNoLock(tag)
 }
 
-// GetString is a GetField wrapper for string fields.
+// getStringNoLock copies the value while the caller owns or locks the map.
 func (m FieldMap) getStringNoLock(tag Tag) (string, MessageRejectError) {
-	var val FIXString
-	if err := m.getFieldNoLock(tag, &val); err != nil {
-		return "", err
+	field, ok := m.lookup(tag)
+	if !ok {
+		return "", m.missingFieldReject(tag)
 	}
-	return string(val), nil
+	return m.metadata.ownedString(tag, field[0].value), nil
 }
 
-// GetGroup is a Get function specific to Group Fields.
+// GetGroup is a Get function specific to Group Fields. Reading from a session
+// callback allocates owned group bytes that survive callback return.
 func (m FieldMap) GetGroup(parser FieldGroupReader) MessageRejectError {
-	m.rwLock.RLock()
-	defer m.rwLock.RUnlock()
+	m.rlock()
+	defer m.runlock()
 
-	f, ok := m.tagLookup[parser.Tag()]
+	f, ok := m.lookup(parser.Tag())
 	if !ok {
-		return ConditionallyRequiredFieldMissing(parser.Tag())
+		return m.missingFieldReject(parser.Tag())
+	}
+	if m.scoped || m.reusable {
+		f = cloneOwnedField(f)
 	}
 
 	if _, err := parser.Read(f); err != nil {
@@ -252,8 +285,18 @@ func (m *FieldMap) SetField(tag Tag, field FieldValueWriter) *FieldMap {
 	return m.SetBytes(tag, field.Write())
 }
 
-// SetBytes sets bytes.
+// SetBytes sets bytes. Repeatedly sent caller messages use fixed construction
+// storage and report capacity errors at send/append. Standalone maps allocate;
+// strict parse maps panic on exhaustion, and callback maps detach to owned data.
 func (m *FieldMap) SetBytes(tag Tag, value []byte) *FieldMap {
+	arena := m.mutableArena()
+	if m.constructionErr != nil {
+		return m
+	}
+	if arena != nil {
+		arena.setBytes(m, tag, value)
+		return m
+	}
 	f := m.getOrCreate(tag)
 	initField(f, tag, value)
 	return m
@@ -261,72 +304,180 @@ func (m *FieldMap) SetBytes(tag Tag, value []byte) *FieldMap {
 
 // SetBool is a SetField wrapper for bool fields.
 func (m *FieldMap) SetBool(tag Tag, value bool) *FieldMap {
+	arena := m.mutableArena()
+	if m.constructionErr != nil {
+		return m
+	}
+	if arena != nil {
+		text := "N"
+		if value {
+			text = "Y"
+		}
+		arena.setScalar(m, tag, nil, text, nil, true)
+		return m
+	}
 	return m.SetField(tag, FIXBoolean(value))
 }
 
 // SetInt is a SetField wrapper for int fields.
 func (m *FieldMap) SetInt(tag Tag, value int) *FieldMap {
+	arena := m.mutableArena()
+	if m.constructionErr != nil {
+		return m
+	}
+	if arena != nil {
+		var buffer [24]byte
+		arena.setScalar(m, tag, strconv.AppendInt(buffer[:0], int64(value), 10), "", nil, true)
+		return m
+	}
 	v := FIXInt(value)
 	return m.SetBytes(tag, v.Write())
 }
 
 // SetString is a SetField wrapper for string fields.
 func (m *FieldMap) SetString(tag Tag, value string) *FieldMap {
+	arena := m.mutableArena()
+	if m.constructionErr != nil {
+		return m
+	}
+	if arena != nil {
+		arena.setScalar(m, tag, nil, value, nil, true)
+		return m
+	}
 	return m.SetBytes(tag, []byte(value))
 }
 
 // Remove removes a tag from field map.
 func (m *FieldMap) Remove(tag Tag) {
-	m.rwLock.Lock()
-	defer m.rwLock.Unlock()
+	if arena := m.mutableArena(); arena != nil {
+		arena.remove(m, tag)
+		return
+	}
+	if m.fixed != nil {
+		m.fixedRemove(tag)
+		return
+	}
+	m.lock()
+	defer m.unlock()
 
 	delete(m.tagLookup, tag)
 }
 
 // Clear purges all fields from field map.
 func (m *FieldMap) Clear() {
-	m.rwLock.Lock()
-	defer m.rwLock.Unlock()
-
-	m.tags = m.tags[0:0]
-	for k := range m.tagLookup {
-		delete(m.tagLookup, k)
+	if arena := m.mutableArena(); arena != nil {
+		arena.clear(m)
+		return
 	}
+	m.lock()
+	defer m.unlock()
+	m.clearNoLock()
 }
 
 func (m *FieldMap) clearNoLock() {
+	if arena := m.mutableArena(); arena != nil {
+		arena.clear(m)
+		return
+	}
+	m.constructionErr = nil
+	if m.fixed != nil {
+		m.fixedClear()
+		return
+	}
 	m.tags = m.tags[0:0]
 	for k := range m.tagLookup {
 		delete(m.tagLookup, k)
 	}
 }
 
-// CopyInto overwrites the given FieldMap with this one.
+// CopyInto overwrites the given FieldMap with this one. Copying from a session
+// callback allocates owned field and group bytes that survive callback return.
 func (m *FieldMap) CopyInto(to *FieldMap) {
-	m.rwLock.RLock()
-	defer m.rwLock.RUnlock()
+	if m == to {
+		return
+	}
+	if err := m.constructionError(); err != nil {
+		panic(err)
+	}
+	to.detachArena()
+	to.constructionErr = nil
+	m.rlock()
+	defer m.runlock()
+	if to.fixed != nil && to.scoped {
+		// A scoped destination may be a value copy of the session fields. An
+		// allocating copy must not clear that shared backing through the copy.
+		to.initWithOrdering(to.compare)
+		to.scoped = true
+	}
+	to.metadata = m.metadata
+	if to.fixed != nil {
+		if m.fixed == to.fixed {
+			if !m.scoped && !m.reusable {
+				return
+			}
+			// A copied FieldMap value still shares the session backing. Detach
+			// the distinct destination rather than clearing the source's fields.
+			to.initWithOrdering(m.compare)
+		} else if m.fieldCount() > cap(to.fixed.tags) {
+			panic(ErrFieldCapacity)
+		}
+	}
+	if to.fixed != nil {
+		to.fixedClear()
+		m.eachField(func(tag Tag, values field) {
+			if m.scoped || m.reusable {
+				to.put(tag, cloneOwnedField(values))
+			} else {
+				to.fixedGetOrCreate(tag)[0] = values[0]
+			}
+		})
+		to.compare = m.compare
+		return
+	}
 
 	to.tagLookup = make(map[Tag]field)
-	for tag, f := range m.tagLookup {
+	m.eachField(func(tag Tag, f field) {
+		if m.scoped || m.reusable {
+			to.tagLookup[tag] = cloneOwnedField(f)
+			return
+		}
 		clone := make(field, 1)
 		clone[0] = f[0]
 		to.tagLookup[tag] = clone
-	}
-	to.tags = make([]Tag, len(m.tags))
-	copy(to.tags, m.tags)
+	})
+	to.tags = make([]Tag, len(m.fieldTags()))
+	copy(to.tags, m.fieldTags())
 	to.compare = m.compare
 }
 
-func (m *FieldMap) add(f field) {
-	t := fieldTag(f)
-	if _, ok := m.tagLookup[t]; !ok {
-		m.tags = append(m.tags, t)
+func cloneOwnedField(values field) field {
+	cloned := make(field, len(values))
+	for index, value := range values {
+		cloned[index] = TagValue{tag: value.tag, value: bytes.Clone(value.value), bytes: bytes.Clone(value.bytes)}
 	}
+	return cloned
+}
 
-	m.tagLookup[t] = f
+// detachScopedFields is only used by allocating setters. The fixed parser must
+// continue to use put directly so exhaustion never changes its storage model.
+func (m *FieldMap) detachScopedFields() {
+	var detached FieldMap
+	detached.initWithOrdering(m.compare)
+	m.CopyInto(&detached)
+	detached.scoped = true
+	*m = detached
+}
+
+func (m *FieldMap) add(f field) {
+	if !m.put(fieldTag(f), f) {
+		panic(ErrFieldCapacity)
+	}
 }
 
 func (m *FieldMap) getOrCreate(tag Tag) field {
+	if m.fixed != nil {
+		return m.fixedGetOrCreate(tag)
+	}
 	m.rwLock.Lock()
 	defer m.rwLock.Unlock()
 
@@ -343,41 +494,63 @@ func (m *FieldMap) getOrCreate(tag Tag) field {
 
 // Set is a setter for fields.
 func (m *FieldMap) Set(field FieldWriter) *FieldMap {
-	f := m.getOrCreate(field.Tag())
-	initField(f, field.Tag(), field.Write())
-	return m
+	tag := field.Tag()
+	value := field.Write()
+	return m.SetBytes(tag, value)
 }
 
 // SetGroup is a setter specific to group fields.
 func (m *FieldMap) SetGroup(field FieldGroupWriter) *FieldMap {
-	m.rwLock.Lock()
-	defer m.rwLock.Unlock()
-
-	_, ok := m.tagLookup[field.Tag()]
-	if !ok {
-		m.tags = append(m.tags, field.Tag())
+	// Custom Write may call public initialization/copy APIs on its destination.
+	// Resolve the current storage only after that compatibility callback returns.
+	tag, values := field.Tag(), field.Write()
+	arena := m.mutableArena()
+	if m.constructionErr != nil {
+		return m
 	}
-	m.tagLookup[field.Tag()] = field.Write()
+	if arena != nil {
+		arena.setGroup(m, tag, values)
+		return m
+	}
+	if m.fixed != nil {
+		if _, found := m.lookup(tag); !found && m.fieldCount() == cap(m.fixed.tags) {
+			if !m.scoped {
+				panic(ErrFieldCapacity)
+			}
+			m.detachScopedFields()
+		}
+	}
+	m.lock()
+	defer m.unlock()
+	if !m.put(tag, values) {
+		panic(ErrFieldCapacity)
+	}
 	return m
 }
 
 func (m *FieldMap) sortedTags() []Tag {
+	if m.fixed != nil {
+		return m.fixedSortedTags()
+	}
 	sort.Sort(m)
 	return m.tags
 }
 
 func (m FieldMap) write(buffer *bytes.Buffer) {
-	m.rwLock.Lock()
-	defer m.rwLock.Unlock()
+	m.lock()
+	defer m.unlock()
 
 	for _, tag := range m.sortedTags() {
-		if f, ok := m.tagLookup[tag]; ok {
+		if f, ok := m.lookup(tag); ok {
 			writeField(f, buffer)
 		}
 	}
 }
 
 func (m FieldMap) total() int {
+	if m.fixed != nil {
+		return m.fixed.total()
+	}
 	m.rwLock.RLock()
 	defer m.rwLock.RUnlock()
 
@@ -396,6 +569,9 @@ func (m FieldMap) total() int {
 }
 
 func (m FieldMap) length() int {
+	if m.fixed != nil {
+		return m.fixed.length()
+	}
 	m.rwLock.RLock()
 	defer m.rwLock.RUnlock()
 

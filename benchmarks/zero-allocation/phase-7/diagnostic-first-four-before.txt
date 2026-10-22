@@ -1,0 +1,26 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+cpu: Apple M4 Pro
+BenchmarkBoundedFullSession/ordinary         	   40522	     29320 ns/op	  10.57 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedFullSession/ordinary         	   40842	     28684 ns/op	  10.81 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedFullSession/ordinary         	   41684	     29541 ns/op	  10.49 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedFullSession/ordinary         	   40011	     28981 ns/op	  10.70 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedFullSession/ordinary         	   40603	     29197 ns/op	  10.62 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedFullSession/groups           	   38786	     30403 ns/op	  13.75 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedFullSession/groups           	   37404	     32033 ns/op	  13.05 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedFullSession/groups           	   38649	     30964 ns/op	  13.50 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedFullSession/groups           	   39258	     30361 ns/op	  13.77 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedFullSession/groups           	   38062	     31287 ns/op	  13.36 MB/s	       0 B/op	       0 allocs/op
+BenchmarkBoundedFullSession/outbound_resend  	    8383	    145968 ns/op	   5.71 MB/s	     360 B/op	       6 allocs/op
+BenchmarkBoundedFullSession/outbound_resend  	    8293	    145005 ns/op	   5.74 MB/s	     360 B/op	       6 allocs/op
+BenchmarkBoundedFullSession/outbound_resend  	    8364	    144871 ns/op	   5.75 MB/s	     360 B/op	       6 allocs/op
+BenchmarkBoundedFullSession/outbound_resend  	    8280	    144625 ns/op	   5.76 MB/s	     360 B/op	       6 allocs/op
+BenchmarkBoundedFullSession/outbound_resend  	    8520	    139275 ns/op	   5.98 MB/s	     360 B/op	       6 allocs/op
+BenchmarkBoundedFullSession/inbound_gap      	    8066	    148139 ns/op	   6.81 MB/s	    1552 B/op	      29 allocs/op
+BenchmarkBoundedFullSession/inbound_gap      	    8244	    147495 ns/op	   6.84 MB/s	    1552 B/op	      29 allocs/op
+BenchmarkBoundedFullSession/inbound_gap      	    8145	    145975 ns/op	   6.91 MB/s	    1552 B/op	      29 allocs/op
+BenchmarkBoundedFullSession/inbound_gap      	    7942	    146821 ns/op	   6.87 MB/s	    1552 B/op	      29 allocs/op
+BenchmarkBoundedFullSession/inbound_gap      	    8127	    147778 ns/op	   6.83 MB/s	    1552 B/op	      29 allocs/op
+PASS
+ok  	github.com/quickfixgo/quickfix	110.417s

@@ -1,0 +1,3 @@
+ok  	github.com/quickfixgo/quickfix	44.347s
+ok  	github.com/quickfixgo/quickfix/internal	1.613s
+?   	github.com/quickfixgo/quickfix/internal/testsuite	[no test files]

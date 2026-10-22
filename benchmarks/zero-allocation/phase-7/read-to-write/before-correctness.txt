@@ -1,0 +1,18 @@
+=== RUN   TestOrdinaryReadToWritePartialFramesExcludeAdminAndOtherRequests
+--- PASS: TestOrdinaryReadToWritePartialFramesExcludeAdminAndOtherRequests (0.00s)
+=== RUN   TestOrdinaryReadToWriteRejectsFailedWrites
+=== RUN   TestOrdinaryReadToWriteRejectsFailedWrites/no_progress
+=== RUN   TestOrdinaryReadToWriteRejectsFailedWrites/partial_with_error
+=== RUN   TestOrdinaryReadToWriteRejectsFailedWrites/all_bytes_with_error
+--- PASS: TestOrdinaryReadToWriteRejectsFailedWrites (0.00s)
+    --- PASS: TestOrdinaryReadToWriteRejectsFailedWrites/no_progress (0.00s)
+    --- PASS: TestOrdinaryReadToWriteRejectsFailedWrites/partial_with_error (0.00s)
+    --- PASS: TestOrdinaryReadToWriteRejectsFailedWrites/all_bytes_with_error (0.00s)
+=== RUN   TestOrdinaryReadToWriteIncludesWriterWaitAndQualifiesSlotReturn
+=== RUN   TestOrdinaryReadToWriteIncludesWriterWaitAndQualifiesSlotReturn/before_write
+=== RUN   TestOrdinaryReadToWriteIncludesWriterWaitAndQualifiesSlotReturn/after_write_before_slot_return
+--- PASS: TestOrdinaryReadToWriteIncludesWriterWaitAndQualifiesSlotReturn (1.13s)
+    --- PASS: TestOrdinaryReadToWriteIncludesWriterWaitAndQualifiesSlotReturn/before_write (0.13s)
+    --- PASS: TestOrdinaryReadToWriteIncludesWriterWaitAndQualifiesSlotReturn/after_write_before_slot_return (1.00s)
+PASS
+ok  	github.com/quickfixgo/quickfix	1.617s

@@ -1,0 +1,46 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+cpu: Apple M4 Pro
+BenchmarkHeartbeatStringRead/legacy/message_type         	61323303	        19.71 ns/op	      16 B/op	       1 allocs/op
+BenchmarkHeartbeatStringRead/legacy/message_type         	62400468	        19.73 ns/op	      16 B/op	       1 allocs/op
+BenchmarkHeartbeatStringRead/legacy/message_type         	59763932	        19.91 ns/op	      16 B/op	       1 allocs/op
+BenchmarkHeartbeatStringRead/legacy/message_type         	63285715	        19.78 ns/op	      16 B/op	       1 allocs/op
+BenchmarkHeartbeatStringRead/legacy/message_type         	60339663	        19.68 ns/op	      16 B/op	       1 allocs/op
+BenchmarkHeartbeatStringRead/legacy/sender               	50160846	        23.76 ns/op	      24 B/op	       2 allocs/op
+BenchmarkHeartbeatStringRead/legacy/sender               	51273012	        23.95 ns/op	      24 B/op	       2 allocs/op
+BenchmarkHeartbeatStringRead/legacy/sender               	51299407	        24.37 ns/op	      24 B/op	       2 allocs/op
+BenchmarkHeartbeatStringRead/legacy/sender               	46524100	        24.44 ns/op	      24 B/op	       2 allocs/op
+BenchmarkHeartbeatStringRead/legacy/sender               	50753728	        23.91 ns/op	      24 B/op	       2 allocs/op
+BenchmarkHeartbeatStringRead/legacy/target               	47329419	        25.70 ns/op	      32 B/op	       2 allocs/op
+BenchmarkHeartbeatStringRead/legacy/target               	47923719	        25.38 ns/op	      32 B/op	       2 allocs/op
+BenchmarkHeartbeatStringRead/legacy/target               	49370779	        25.77 ns/op	      32 B/op	       2 allocs/op
+BenchmarkHeartbeatStringRead/legacy/target               	47728740	        25.70 ns/op	      32 B/op	       2 allocs/op
+BenchmarkHeartbeatStringRead/legacy/target               	46074618	        25.61 ns/op	      32 B/op	       2 allocs/op
+BenchmarkHeartbeatStringRead/fixed/message_type          	62084752	        19.62 ns/op	      16 B/op	       1 allocs/op
+BenchmarkHeartbeatStringRead/fixed/message_type          	64499944	        19.49 ns/op	      16 B/op	       1 allocs/op
+BenchmarkHeartbeatStringRead/fixed/message_type          	63679338	        19.46 ns/op	      16 B/op	       1 allocs/op
+BenchmarkHeartbeatStringRead/fixed/message_type          	59436835	        19.75 ns/op	      16 B/op	       1 allocs/op
+BenchmarkHeartbeatStringRead/fixed/message_type          	60315524	        19.31 ns/op	      16 B/op	       1 allocs/op
+BenchmarkHeartbeatStringRead/fixed/sender                	50640032	        23.71 ns/op	      24 B/op	       2 allocs/op
+BenchmarkHeartbeatStringRead/fixed/sender                	51463030	        23.48 ns/op	      24 B/op	       2 allocs/op
+BenchmarkHeartbeatStringRead/fixed/sender                	51354291	        23.45 ns/op	      24 B/op	       2 allocs/op
+BenchmarkHeartbeatStringRead/fixed/sender                	51386820	        23.65 ns/op	      24 B/op	       2 allocs/op
+BenchmarkHeartbeatStringRead/fixed/sender                	47998400	        23.63 ns/op	      24 B/op	       2 allocs/op
+BenchmarkHeartbeatStringRead/fixed/target                	48275250	        25.08 ns/op	      32 B/op	       2 allocs/op
+BenchmarkHeartbeatStringRead/fixed/target                	47478213	        25.02 ns/op	      32 B/op	       2 allocs/op
+BenchmarkHeartbeatStringRead/fixed/target                	46994245	        25.10 ns/op	      32 B/op	       2 allocs/op
+BenchmarkHeartbeatStringRead/fixed/target                	46698966	        25.24 ns/op	      32 B/op	       2 allocs/op
+BenchmarkHeartbeatStringRead/fixed/target                	47014113	        25.01 ns/op	      32 B/op	       2 allocs/op
+BenchmarkHeartbeatObservedStringReads/observer_only      	  641384	      1893 ns/op	       8 B/op	       1 allocs/op
+BenchmarkHeartbeatObservedStringReads/observer_only      	  630226	      1907 ns/op	       8 B/op	       1 allocs/op
+BenchmarkHeartbeatObservedStringReads/observer_only      	  648175	      1934 ns/op	       8 B/op	       1 allocs/op
+BenchmarkHeartbeatObservedStringReads/observer_only      	  623835	      1916 ns/op	       8 B/op	       1 allocs/op
+BenchmarkHeartbeatObservedStringReads/observer_only      	  637482	      1899 ns/op	       8 B/op	       1 allocs/op
+BenchmarkHeartbeatObservedStringReads/three_callback_reads         	  616858	      1972 ns/op	      56 B/op	       4 allocs/op
+BenchmarkHeartbeatObservedStringReads/three_callback_reads         	  619270	      1951 ns/op	      56 B/op	       4 allocs/op
+BenchmarkHeartbeatObservedStringReads/three_callback_reads         	  620455	      1935 ns/op	      56 B/op	       4 allocs/op
+BenchmarkHeartbeatObservedStringReads/three_callback_reads         	  611293	      1942 ns/op	      56 B/op	       4 allocs/op
+BenchmarkHeartbeatObservedStringReads/three_callback_reads         	  560216	      1976 ns/op	      56 B/op	       4 allocs/op
+PASS
+ok  	github.com/quickfixgo/quickfix	49.841s

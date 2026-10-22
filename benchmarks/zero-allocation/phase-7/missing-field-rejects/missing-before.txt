@@ -1,0 +1,51 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/quickfixgo/quickfix
+cpu: Apple M4 Pro
+BenchmarkMissingFieldReject/legacy/GetString         	10250623	       103.0 ns/op	     120 B/op	       3 allocs/op
+BenchmarkMissingFieldReject/legacy/GetString         	11371725	       102.9 ns/op	     120 B/op	       3 allocs/op
+BenchmarkMissingFieldReject/legacy/GetString         	11869562	       103.6 ns/op	     120 B/op	       3 allocs/op
+BenchmarkMissingFieldReject/legacy/GetString         	11879222	       105.8 ns/op	     120 B/op	       3 allocs/op
+BenchmarkMissingFieldReject/legacy/GetString         	11311932	       103.6 ns/op	     120 B/op	       3 allocs/op
+BenchmarkMissingFieldReject/fixed/GetString          	11361372	       103.1 ns/op	     120 B/op	       3 allocs/op
+BenchmarkMissingFieldReject/fixed/GetString          	11788610	       102.5 ns/op	     120 B/op	       3 allocs/op
+BenchmarkMissingFieldReject/fixed/GetString          	11393440	       105.2 ns/op	     120 B/op	       3 allocs/op
+BenchmarkMissingFieldReject/fixed/GetString          	11201466	       104.0 ns/op	     120 B/op	       3 allocs/op
+BenchmarkMissingFieldReject/fixed/GetString          	11841861	       104.9 ns/op	     120 B/op	       3 allocs/op
+BenchmarkMissingFieldReject/tag41/unrendered         	12390442	        95.13 ns/op	     120 B/op	       3 allocs/op
+BenchmarkMissingFieldReject/tag41/unrendered         	12669603	        95.35 ns/op	     120 B/op	       3 allocs/op
+BenchmarkMissingFieldReject/tag41/unrendered         	12060644	        96.52 ns/op	     120 B/op	       3 allocs/op
+BenchmarkMissingFieldReject/tag41/unrendered         	12835785	        96.19 ns/op	     120 B/op	       3 allocs/op
+BenchmarkMissingFieldReject/tag41/unrendered         	12321471	        97.26 ns/op	     120 B/op	       3 allocs/op
+BenchmarkMissingFieldReject/tag41/render_once        	12050349	        97.85 ns/op	     120 B/op	       3 allocs/op
+BenchmarkMissingFieldReject/tag41/render_once        	12039363	        98.50 ns/op	     120 B/op	       3 allocs/op
+BenchmarkMissingFieldReject/tag41/render_once        	12481504	        97.49 ns/op	     120 B/op	       3 allocs/op
+BenchmarkMissingFieldReject/tag41/render_once        	12538070	        96.61 ns/op	     120 B/op	       3 allocs/op
+BenchmarkMissingFieldReject/tag41/render_once        	12496755	        98.26 ns/op	     120 B/op	       3 allocs/op
+BenchmarkMissingFieldReject/tag41/render_twice       	12055555	        99.11 ns/op	     120 B/op	       3 allocs/op
+BenchmarkMissingFieldReject/tag41/render_twice       	12485720	        99.36 ns/op	     120 B/op	       3 allocs/op
+BenchmarkMissingFieldReject/tag41/render_twice       	11879114	       100.4 ns/op	     120 B/op	       3 allocs/op
+BenchmarkMissingFieldReject/tag41/render_twice       	11998894	        99.64 ns/op	     120 B/op	       3 allocs/op
+BenchmarkMissingFieldReject/tag41/render_twice       	12129078	       101.1 ns/op	     120 B/op	       3 allocs/op
+BenchmarkMissingFieldReject/tag526/unrendered        	11812480	        99.38 ns/op	     128 B/op	       4 allocs/op
+BenchmarkMissingFieldReject/tag526/unrendered        	12431202	        97.01 ns/op	     128 B/op	       4 allocs/op
+BenchmarkMissingFieldReject/tag526/unrendered        	12525649	        98.23 ns/op	     128 B/op	       4 allocs/op
+BenchmarkMissingFieldReject/tag526/unrendered        	12034965	        97.21 ns/op	     128 B/op	       4 allocs/op
+BenchmarkMissingFieldReject/tag526/unrendered        	12149719	        96.92 ns/op	     128 B/op	       4 allocs/op
+BenchmarkMissingFieldReject/tag526/render_once       	11608006	       101.2 ns/op	     128 B/op	       4 allocs/op
+BenchmarkMissingFieldReject/tag526/render_once       	11593189	       102.6 ns/op	     128 B/op	       4 allocs/op
+BenchmarkMissingFieldReject/tag526/render_once       	11918649	       102.7 ns/op	     128 B/op	       4 allocs/op
+BenchmarkMissingFieldReject/tag526/render_once       	12011685	        99.87 ns/op	     128 B/op	       4 allocs/op
+BenchmarkMissingFieldReject/tag526/render_once       	11960425	       102.8 ns/op	     128 B/op	       4 allocs/op
+BenchmarkMissingFieldReject/tag526/render_twice      	11588893	       103.6 ns/op	     128 B/op	       4 allocs/op
+BenchmarkMissingFieldReject/tag526/render_twice      	11735290	       103.0 ns/op	     128 B/op	       4 allocs/op
+BenchmarkMissingFieldReject/tag526/render_twice      	11476819	       103.2 ns/op	     128 B/op	       4 allocs/op
+BenchmarkMissingFieldReject/tag526/render_twice      	11871926	       103.6 ns/op	     128 B/op	       4 allocs/op
+BenchmarkMissingFieldReject/tag526/render_twice      	11630019	       104.1 ns/op	     128 B/op	       4 allocs/op
+BenchmarkHeartbeatMissingFieldReads                  	  622963	      1882 ns/op	     368 B/op	      10 allocs/op
+BenchmarkHeartbeatMissingFieldReads                  	  645681	      1879 ns/op	     368 B/op	      10 allocs/op
+BenchmarkHeartbeatMissingFieldReads                  	  643534	      1862 ns/op	     368 B/op	      10 allocs/op
+BenchmarkHeartbeatMissingFieldReads                  	  620304	      1860 ns/op	     368 B/op	      10 allocs/op
+BenchmarkHeartbeatMissingFieldReads                  	  662427	      1860 ns/op	     368 B/op	      10 allocs/op
+PASS
+ok  	github.com/quickfixgo/quickfix	58.485s

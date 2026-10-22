@@ -1,0 +1,15 @@
+Total: 27.91MB
+ROUTINE ======================== github.com/quickfixgo/quickfix.(*session).notifyMessageBuilt in /Users/a.alamer/factory/worktrees/quickfix-generic-session-registry/session.go
+       48B        48B (flat, cum) 0.00016% of Total
+         .          .    583:func (s *session) notifyMessageBuilt(msg *Message, msgBytes []byte) {
+         .          .    584:	application := s.application
+         .          .    585:	borrowed, scoped := application.(borrowedApplication)
+         .          .    586:	if scoped {
+         .          .    587:		application = borrowed.Application
+         .          .    588:	}
+       48B        48B    589:	observer, ok := application.(BuiltMessageObserver)
+         .          .    590:	if !ok {
+         .          .    591:		return
+         .          .    592:	}
+         .          .    593:	if scoped {
+         .          .    594:		scope := beginBorrowedOutboundCopy(msg)
