@@ -207,6 +207,19 @@ func (state inSession) handleResendRequest(session *session, msg *Message) (next
 		endSeqNo = expectedSeqNum - 1
 	}
 
+	if _, ok := session.store.(ContextMessageStore); ok && session.connectionContext != nil {
+		// Record request acceptance before yielding to later inbound messages.
+		if session.checkTargetTooLow(msg) == nil && session.checkTargetTooHigh(msg) == nil {
+			if err := session.store.IncrNextTargetMsgSeqNum(); err != nil {
+				return handleStateError(session, err)
+			}
+		}
+		var reply Message
+		msg.CopyInto(&reply)
+		session.startReplay(replayRequest{begin: int(beginSeqNo), end: endSeqNo, reply: reply})
+		return state
+	}
+
 	if err := state.resendMessages(session, int(beginSeqNo), endSeqNo, *msg); err != nil {
 		return handleStateError(session, err)
 	}
@@ -239,6 +252,9 @@ func (state inSession) resendMessages(session *session, beginSeqNo, endSeqNo int
 	nextSeqNum := seqNum
 	msg := NewMessage()
 	err := session.store.IterateMessages(beginSeqNo, endSeqNo, func(msgBytes []byte) error {
+		if session.connectionContext != nil && session.connectionContext.Err() != nil {
+			return session.connectionContext.Err()
+		}
 		err := ParseMessageWithDataDictionary(msg, bytes.NewBuffer(msgBytes), session.transportDataDictionary, session.appDataDictionary)
 		if err != nil {
 			session.log.OnEventf("Resend Msg Parse Error: %v, %v", err.Error(), bytes.NewBuffer(msgBytes).String())
@@ -270,6 +286,9 @@ func (state inSession) resendMessages(session *session, beginSeqNo, endSeqNo int
 
 		seqNum = sentMessageSeqNum + 1
 		nextSeqNum = seqNum
+		if session.connectionContext != nil {
+			return session.connectionContext.Err()
+		}
 		return nil
 	})
 	if err != nil {
@@ -277,6 +296,9 @@ func (state inSession) resendMessages(session *session, beginSeqNo, endSeqNo int
 		return err
 	}
 
+	if session.connectionContext != nil && session.connectionContext.Err() != nil {
+		return session.connectionContext.Err()
+	}
 	if seqNum != nextSeqNum { // gapfill for catch-up
 		if err = state.generateSequenceReset(session, seqNum, nextSeqNum, inReplyTo); err != nil {
 			return err

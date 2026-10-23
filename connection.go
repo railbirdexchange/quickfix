@@ -15,30 +15,55 @@
 
 package quickfix
 
-import "io"
+import (
+	"context"
+	"errors"
+	"io"
+	"net"
+	"sync"
+	"syscall"
+)
 
-func writeLoop(connection io.Writer, messageOut chan []byte, log Log) {
+func connectionLifetime(conn net.Conn) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(context.Background())
+	var once sync.Once
+	return ctx, func() { once.Do(func() { cancel(); _ = conn.Close() }) }
+}
+func writeLoop(ctx context.Context, terminate context.CancelFunc, connection io.Writer, messageOut chan []byte, log Log) {
+	defer terminate()
 	for {
-		msg, ok := <-messageOut
-		if !ok {
+		select {
+		case <-ctx.Done():
 			return
-		}
-
-		if _, err := connection.Write(msg); err != nil {
-			log.OnEvent(err.Error())
+		case msg, ok := <-messageOut:
+			if !ok {
+				return
+			}
+			if ctx.Err() != nil {
+				return
+			}
+			if _, err := connection.Write(msg); err != nil {
+				log.OnEvent(err.Error())
+				if errors.Is(err, syscall.EPIPE) || errors.Is(err, syscall.ECONNRESET) || errors.Is(err, net.ErrClosed) {
+					return
+				}
+			}
 		}
 	}
 }
-
-func readLoop(parser *parser, msgIn chan fixIn, log Log) {
+func readLoop(ctx context.Context, terminate context.CancelFunc, parser *parser, msgIn chan fixIn, log Log) {
 	defer close(msgIn)
-
+	defer terminate()
 	for {
 		msg, err := parser.ReadMessage()
 		if err != nil {
 			log.OnEvent(err.Error())
 			return
 		}
-		msgIn <- fixIn{msg, parser.lastRead}
+		select {
+		case msgIn <- fixIn{msg, parser.lastRead}:
+		case <-ctx.Done():
+			return
+		}
 	}
 }

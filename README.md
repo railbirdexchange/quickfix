@@ -30,6 +30,33 @@ See v0.9.0 release notes [here](https://github.com/quickfixgo/quickfix/releases/
 <br>
 <img width="208" alt="Sponsored by Connamara" src="https://user-images.githubusercontent.com/3065126/282546730-16220337-4960-48ae-8c2f-760fbaedb135.png">
 
+## Interruptible replay
+
+Stores implementing `ContextMessageStore` opt into cancelable retrieval on one
+bounded worker per active replay. They must support retrieval concurrently with
+session metadata and persistence operations and release locks before invoking the
+iterator callback. The session loop retains FIX validation, application callbacks,
+sequence changes, and outbound replay processing. Memory storage implements this
+contract; legacy stores retain synchronous replay and cannot interrupt blocked
+reads or service Logout during those reads.
+
+Reader termination and wrapped `ECONNRESET`, `EPIPE`, or `net.ErrClosed` write
+errors cancel the connection and its replay. Other writer errors retain their
+existing handling. Accepted peer Logout and local Logout cancel only replay so
+the ordinary handshake can use the connection. No new socket deadline is added.
+
+Live messages and ordinary control responses retain their numbered FIFO order.
+They drain between replay ranges; queued original messages precede any replay of
+them. Additional ResendRequests coalesce into one covering pending range, which
+may include intervening sequences. Logout discards pending replay and completion
+gap fills; bytes already handed to the writer precede the response. Socket progress
+and application callback duration still limit responsiveness.
+
+`ResetSession` executes on the session loop and waits for completion. Call it
+outside application callbacks. Replay retrieval is joined before reset/refresh
+or disconnect cleanup, preventing old work from reaching a replacement connection.
+Channel admission remains distinct from successful socket delivery.
+
 ## Installation
 
 With [Go module](https://github.com/golang/go/wiki/Modules) support, simply add the following import

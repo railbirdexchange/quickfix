@@ -98,6 +98,7 @@ func (f sessionFactory) newSession(
 	sessionID SessionID, storeFactory MessageStoreFactory, settings *SessionSettings, logFactory LogFactory,
 	application Application) (s *session, err error) {
 	s = &session{
+		runDone:   make(chan struct{}),
 		sessionID: sessionID,
 		stopOnce:  sync.Once{},
 	}

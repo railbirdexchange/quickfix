@@ -17,6 +17,7 @@ package quickfix
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -28,7 +29,10 @@ import (
 
 // The Session is the primary FIX abstraction for message communication.
 type session struct {
-	store MessageStore
+	store             MessageStore
+	connectionContext context.Context
+	replay            *replayOperation
+	nextReplay        *replayRequest
 
 	log       Log
 	sessionID SessionID
@@ -54,6 +58,7 @@ type session struct {
 	peerTimer  *internal.EventTimer
 	sentReset  bool
 	stopOnce   sync.Once
+	runDone    chan struct{}
 
 	targetDefaultApplVerID string
 
@@ -77,14 +82,16 @@ func (s *session) TargetDefaultApplicationVersionID() string {
 }
 
 type connect struct {
+	ctx        context.Context
 	messageOut chan<- []byte
 	messageIn  <-chan fixIn
 	err        chan<- error
 }
 
-func (s *session) connect(msgIn <-chan fixIn, msgOut chan<- []byte) error {
+func (s *session) connectContext(ctx context.Context, msgIn <-chan fixIn, msgOut chan<- []byte) error {
 	rep := make(chan error)
 	s.admin <- connect{
+		ctx:        ctx,
 		messageOut: msgOut,
 		messageIn:  msgIn,
 		err:        rep,
@@ -94,6 +101,7 @@ func (s *session) connect(msgIn <-chan fixIn, msgOut chan<- []byte) error {
 }
 
 type stopReq struct{}
+type resetReq struct{ reply chan error }
 
 func (s *session) stop() {
 	// Stop once.
@@ -256,6 +264,7 @@ func (s *session) sendLogout(reason string) error {
 }
 
 func (s *session) sendLogoutInReplyTo(reason string, inReplyTo *Message) error {
+	s.stopReplay()
 	logout := s.buildLogout(reason)
 	return s.sendInReplyTo(logout, inReplyTo)
 }
@@ -332,13 +341,16 @@ func (s *session) sendInReplyTo(msg *Message, inReplyTo *Message) error {
 	}
 
 	s.toSend = append(s.toSend, msgBytes)
-	s.sendQueued(true)
+	if s.replay == nil {
+		s.sendQueued(true)
+	}
 
 	return nil
 }
 
 // dropAndReset will drop the send queue and reset the message store.
 func (s *session) dropAndReset() error {
+	s.stopReplay()
 	s.sendMutex.Lock()
 	defer s.sendMutex.Unlock()
 
@@ -351,6 +363,7 @@ func (s *session) dropAndSend(msg *Message) error {
 	return s.dropAndSendInReplyTo(msg, nil)
 }
 func (s *session) dropAndSendInReplyTo(msg *Message, inReplyTo *Message) error {
+	s.stopReplay()
 	s.sendMutex.Lock()
 	defer s.sendMutex.Unlock()
 
@@ -467,7 +480,11 @@ func (s *session) sendBytes(msg []byte, blockUntilSent bool) bool {
 
 	if blockUntilSent {
 		channelStartedAt := time.Now()
-		s.messageOut <- msg
+		select {
+		case s.messageOut <- msg:
+		case <-s.connectionDone():
+			return false
+		}
 		s.observeSendStage("outbound_channel_wait", fixMsgTypeFromRaw(msg), time.Since(channelStartedAt), true)
 		s.log.OnOutgoing(msg)
 		s.stateTimer.Reset(s.HeartBtInt)
@@ -563,6 +580,7 @@ func (s *session) handleLogon(msg *Message) error {
 		resetStore = s.ResetOnLogon
 
 		if s.RefreshOnLogon {
+			s.stopReplay()
 			if err := s.store.Refresh(); err != nil {
 				return err
 			}
@@ -587,6 +605,7 @@ func (s *session) handleLogon(msg *Message) error {
 	}
 
 	if resetStore {
+		s.stopReplay()
 		if err := s.store.Reset(); err != nil {
 			return err
 		}
@@ -896,6 +915,7 @@ func (s *session) onDisconnect() {
 	s.drainMessageIn()
 
 	s.messageIn = nil
+	s.connectionContext = nil
 }
 
 func (s *session) onAdmin(msg interface{}) {
@@ -924,12 +944,22 @@ func (s *session) onAdmin(msg interface{}) {
 			close(msg.err)
 		}
 
+		s.connectionContext = msg.ctx
 		s.messageIn = msg.messageIn
 		s.messageOut = msg.messageOut
 		s.sentReset = false
 
 		s.Connect(s)
 
+	case resetReq:
+		s.log.OnEvent("Session reset")
+		s.stopReplay()
+		s.State.ShutdownNow(s)
+		err := s.dropAndReset()
+		if err != nil {
+			s.logError(err)
+		}
+		msg.reply <- err
 	case stopReq:
 		s.Stop(s)
 
@@ -942,6 +972,9 @@ func (s *session) onAdmin(msg interface{}) {
 }
 
 func (s *session) run() {
+	if s.runDone != nil {
+		defer close(s.runDone)
+	}
 	s.Start(s)
 	var stopChan = make(chan struct{})
 	s.stateTimer = internal.NewEventTimer(func() {
@@ -977,7 +1010,21 @@ func (s *session) run() {
 	}()
 
 	for !s.Stopped() {
+		if s.connectionContext != nil && s.connectionContext.Err() != nil {
+			s.Disconnected(s)
+		}
+		replayIn, replayDone, replayOut, replayBytes := s.replayChannels()
 		select {
+		case <-s.connectionDone():
+			s.Disconnected(s)
+		case raw := <-replayIn:
+			s.replayMessage(raw)
+		case <-replayDone:
+			s.replayComplete()
+		case replayOut <- replayBytes:
+			s.replay.output = s.replay.output[1:]
+			s.log.OnOutgoing(replayBytes)
+			s.stateTimer.Reset(s.HeartBtInt)
 
 		case msg := <-s.admin:
 			s.onAdmin(msg)
@@ -1000,4 +1047,11 @@ func (s *session) run() {
 			s.CheckResetTime(s, now)
 		}
 	}
+}
+
+func (s *session) connectionDone() <-chan struct{} {
+	if s.connectionContext == nil {
+		return nil
+	}
+	return s.connectionContext.Done()
 }
