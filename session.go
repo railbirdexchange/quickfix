@@ -88,10 +88,6 @@ type connect struct {
 	err        chan<- error
 }
 
-func (s *session) connect(msgIn <-chan fixIn, msgOut chan<- []byte) error {
-	return s.connectContext(context.Background(), msgIn, msgOut)
-}
-
 func (s *session) connectContext(ctx context.Context, msgIn <-chan fixIn, msgOut chan<- []byte) error {
 	rep := make(chan error)
 	s.admin <- connect{
