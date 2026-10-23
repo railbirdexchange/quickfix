@@ -17,6 +17,7 @@ package quickfix
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
 )
@@ -31,7 +32,7 @@ func TestWriteLoop(t *testing.T) {
 		msgOut <- []byte("test msg 3")
 		close(msgOut)
 	}()
-	writeLoop(writer, msgOut, nullLog{})
+	writeLoop(context.Background(), func() {}, writer, msgOut, nullLog{})
 
 	expected := "test msg 1 test msg 2 test msg 3"
 
@@ -45,7 +46,7 @@ func TestReadLoop(t *testing.T) {
 	stream := "hello8=FIX.4.09=5blah10=103garbage8=FIX.4.09=4foo10=103"
 
 	parser := newParser(strings.NewReader(stream))
-	go readLoop(parser, msgIn, nullLog{})
+	go readLoop(context.Background(), func() {}, parser, msgIn, nullLog{})
 
 	var tests = []struct {
 		expectedMsg   string

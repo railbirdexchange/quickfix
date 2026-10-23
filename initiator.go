@@ -181,6 +181,8 @@ func (i *Initiator) handleConnection(session *session, tlsConfig *tls.Config, di
 		var msgIn chan fixIn
 		var msgOut chan []byte
 		var outboundBufferSize int
+		var connectionCtx context.Context
+		var terminate context.CancelFunc
 
 		address := session.SocketConnectAddress[connectionAttempt%len(session.SocketConnectAddress)]
 		session.log.OnEventf("Connecting to: %v", address)
@@ -214,15 +216,17 @@ func (i *Initiator) handleConnection(session *session, tlsConfig *tls.Config, di
 		}
 		msgIn = make(chan fixIn, session.InChanCapacity)
 		msgOut = make(chan []byte, outboundBufferSize)
-		if err := session.connect(msgIn, msgOut); err != nil {
+		connectionCtx, terminate = connectionLifetime(netConn)
+		if err := session.connectContext(connectionCtx, msgIn, msgOut); err != nil {
+			terminate()
 			session.log.OnEventf("Failed to initiate: %v", err)
 			goto reconnect
 		}
 
-		go readLoop(newParser(bufio.NewReader(netConn)), msgIn, session.log)
+		go readLoop(connectionCtx, terminate, newParser(bufio.NewReader(netConn)), msgIn, session.log)
 		disconnected = make(chan interface{})
 		go func() {
-			writeLoop(netConn, msgOut, session.log)
+			writeLoop(connectionCtx, terminate, netConn, msgOut, session.log)
 			if err := netConn.Close(); err != nil {
 				session.log.OnEvent(err.Error())
 			}

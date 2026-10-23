@@ -107,6 +107,9 @@ func (sm *stateMachine) fixMsgIn(session *session, m *Message) {
 }
 
 func (sm *stateMachine) SendAppMessages(session *session) {
+	if session.replay != nil {
+		return
+	}
 	sm.CheckSessionTime(session, time.Now())
 
 	lockStartedAt := time.Now()
@@ -205,6 +208,7 @@ func (sm *stateMachine) notifyInSessionTime() {
 }
 
 func (sm *stateMachine) handleDisconnectState(s *session) {
+	s.stopReplay()
 	doOnLogout := s.IsLoggedOn()
 
 	switch s.State.(type) {

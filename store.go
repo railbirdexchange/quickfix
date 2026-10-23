@@ -16,6 +16,7 @@
 package quickfix
 
 import (
+	"context"
 	"time"
 )
 
@@ -47,4 +48,12 @@ type MessageStore interface {
 // The MessageStoreFactory interface is used by session to create a session specific message store.
 type MessageStoreFactory interface {
 	Create(sessionID SessionID) (MessageStore, error)
+}
+
+// ContextMessageStore supports cancelable replay reads concurrent with session
+// sequence operations and message persistence. Callbacks run on a retrieval
+// worker, not the session loop. Implementations must release locks before calling
+// back and return when ctx is canceled, including before the first callback.
+type ContextMessageStore interface {
+	IterateMessagesContext(context.Context, int, int, func([]byte) error) error
 }
