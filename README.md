@@ -55,8 +55,8 @@ existing synchronous behavior. No worker or operator API is introduced.
 Other writer errors retain existing handling; no retry, short-write repair or new
 socket deadline is added. A reader blocked delivering `msgIn` cannot detect EOF
 until it can read again, unless another transport failure cancels the lifetime.
-Application callbacks and opaque legacy store operations must return before the
-session loop can continue. Channel admission does not confirm TCP delivery.
+Existing mutex waits, application callbacks and opaque legacy store operations
+must finish before the session loop can continue. Channel admission does not confirm TCP delivery.
 
 ## Installation
 
