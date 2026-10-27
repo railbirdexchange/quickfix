@@ -30,8 +30,7 @@ import (
 // The Session is the primary FIX abstraction for message communication.
 type session struct {
 	store MessageStore
-	// connectionContext belongs to the current physical connection. The session
-	// loop installs/clears it under sendMutex, which also guards outbound sends.
+	// Current TCP lifetime; writes are guarded by sendMutex.
 	connectionContext context.Context
 
 	log       Log
@@ -913,7 +912,7 @@ func (s *session) onAdmin(msg interface{}) {
 	switch msg := msg.(type) {
 
 	case connect:
-		// A replacement may win select immediately after the old transport dies.
+		// Retire a dead connection before accepting its replacement.
 		if s.connectionContext != nil && s.connectionContext.Err() != nil {
 			s.Disconnected(s)
 		}
@@ -1039,8 +1038,7 @@ func (s *session) replayContext() context.Context {
 	return s.connectionContext
 }
 
-// sendReplayBytes preserves queued original-message ordering, but never adds
-// replay bytes to toSend: an abandoned range must not survive this connection.
+// Replay bytes must not stay queued for a replacement connection.
 func (s *session) sendReplayBytes(ctx context.Context, msg []byte) error {
 	s.sendMutex.Lock()
 	defer s.sendMutex.Unlock()

@@ -212,7 +212,7 @@ func TestDisconnectCancelsSynchronousStoreRead(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("outbound not closed")
 	}
-	// Read metadata after onDisconnect has closed output, establishing synchronization.
+	// Output closure synchronizes the metadata reads.
 	require.Equal(t, 3, memory.NextSenderMsgSeqNum())
 	messages, err := memory.GetMessages(1, 2)
 	require.NoError(t, err)
@@ -260,7 +260,7 @@ func TestDisconnectReleasesReplayOutputWithoutLeakingIntoReconnect(t *testing.T)
 	require.False(t, live.Header.Has(tagPossDupFlag))
 }
 
-// Embedding MessageStore intentionally hides the optional context capability.
+// Hide the optional context interface.
 type legacyCancelStore struct {
 	MessageStore
 	cancel context.CancelFunc
@@ -281,7 +281,7 @@ func TestLegacyStoreCancellationDoesNotCompleteGapFill(t *testing.T) {
 	_, in, out, cancel := startReplaySession(t, store, app)
 	defer cancel()
 	store.cancel = cancel
-	// Only the stored admin Logon exists: a completed iteration would gapfill it.
+	// Completing this admin-only range would emit a gap fill.
 	sendReplayInbound(t, in, replayRequestMessage(2))
 	awaitReplaySignal(t, app.logout)
 	select {
@@ -300,7 +300,7 @@ func TestTerminalWriterUnwindsSynchronousReplay(t *testing.T) {
 	defer cancel()
 	require.NoError(t, s.queueForSend(starvationMessage(time.Now())))
 	receiveReplayWire(t, out)
-	ctx := s.connectionContext // Installed before connectContext returns; no failure yet.
+	ctx := s.connectionContext
 	writer := &replayErrorWriter{err: syscall.EPIPE, written: make(chan []byte, 2)}
 	done := make(chan struct{})
 	go func() { writeLoop(ctx, cancel, writer, out, nullLog{}); close(done) }()
