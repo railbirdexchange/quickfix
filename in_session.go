@@ -226,19 +226,26 @@ func (state inSession) handleResendRequest(session *session, msg *Message) (next
 }
 
 func (state inSession) resendMessages(session *session, beginSeqNo, endSeqNo int, inReplyTo Message) error {
+	ctx := session.replayContext()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if session.DisableMessagePersist {
 		return state.generateSequenceReset(session, beginSeqNo, endSeqNo+1, inReplyTo)
 	}
 
 	// resendMutex must always be locked before sendMutex to prevent a potential deadlock
-	// sendMutex is locked below in session.EnqueueBytesAndSend()
+	// sendMutex is locked below in session.sendReplayBytes()
 	session.resendMutex.Lock()
 	defer session.resendMutex.Unlock()
 
 	seqNum := beginSeqNo
 	nextSeqNum := seqNum
 	msg := NewMessage()
-	err := session.store.IterateMessages(beginSeqNo, endSeqNo, func(msgBytes []byte) error {
+	callback := func(msgBytes []byte) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		err := ParseMessageWithDataDictionary(msg, bytes.NewBuffer(msgBytes), session.transportDataDictionary, session.appDataDictionary)
 		if err != nil {
 			session.log.OnEventf("Resend Msg Parse Error: %v, %v", err.Error(), bytes.NewBuffer(msgBytes).String())
@@ -266,17 +273,29 @@ func (state inSession) resendMessages(session *session, beginSeqNo, endSeqNo int
 		session.log.OnEventf("Resending Message: %v", sentMessageSeqNum)
 		msgBytes = msg.buildWithBodyBytes(msg.bodyBytes) // workaround for maintaining repeating group field order
 		session.notifyMessageBuilt(msg, msgBytes)
-		session.EnqueueBytesAndSend(msgBytes)
+		if err := session.sendReplayBytes(ctx, msgBytes); err != nil {
+			return err
+		}
 
 		seqNum = sentMessageSeqNum + 1
 		nextSeqNum = seqNum
-		return nil
-	})
+		return ctx.Err()
+	}
+	var err error
+	if store, ok := session.store.(ContextMessageStore); ok {
+		err = store.IterateMessagesContext(ctx, beginSeqNo, endSeqNo, callback)
+	} else {
+		// Legacy stores can only observe cancellation when they call back.
+		err = session.store.IterateMessages(beginSeqNo, endSeqNo, callback)
+	}
 	if err != nil {
 		session.log.OnEventf("error retrieving messages from store: %s", err.Error())
 		return err
 	}
 
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if seqNum != nextSeqNum { // gapfill for catch-up
 		if err = state.generateSequenceReset(session, seqNum, nextSeqNum, inReplyTo); err != nil {
 			return err
@@ -412,7 +431,9 @@ func (state *inSession) generateSequenceReset(session *session, beginSeqNo int, 
 
 	msgBytes := sequenceReset.build()
 
-	session.EnqueueBytesAndSend(msgBytes)
+	if err := session.sendReplayBytes(session.replayContext(), msgBytes); err != nil {
+		return err
+	}
 	session.log.OnEventf("Sent SequenceReset TO: %v", endSeqNo)
 
 	return
