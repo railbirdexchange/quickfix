@@ -30,32 +30,33 @@ See v0.9.0 release notes [here](https://github.com/quickfixgo/quickfix/releases/
 <br>
 <img width="208" alt="Sponsored by Connamara" src="https://user-images.githubusercontent.com/3065126/282546730-16220337-4960-48ae-8c2f-760fbaedb135.png">
 
-## Interruptible replay
+## Replay cancellation on transport termination
 
-Stores implementing `ContextMessageStore` opt into cancelable retrieval on one
-bounded worker per active replay. They must support retrieval concurrently with
-session metadata and persistence operations and release locks before invoking the
-iterator callback. The session loop retains FIX validation, application callbacks,
-sequence changes, and outbound replay processing. Memory storage implements this
-contract; legacy stores retain synchronous replay and cannot interrupt blocked
-reads or service Logout during those reads.
+Replay stays synchronous on the session loop. Each physical connection owns a
+context shared by its reader, writer, replay reads and outbound channel waits.
+Every existing reader exit (including parser errors) cancels that lifetime.
+Wrapped `ECONNRESET`, `EPIPE` and `net.ErrClosed` writer errors cancel it and stop
+further writes, even when some bytes were written. Cancellation closes only the
+captured socket. Session cleanup retains ownership of the outbound channel.
 
-Reader termination and wrapped `ECONNRESET`, `EPIPE`, or `net.ErrClosed` write
-errors cancel the connection and its replay. Other writer errors retain their
-existing handling. Accepted peer Logout and local Logout cancel only replay so
-the ordinary handshake can use the connection. No new socket deadline is added.
+`ContextMessageStore` adds optional `IterateMessagesContext` support without
+changing `MessageStore`. Memory storage implements it, including sparse ranges.
+Other stores can implement it to interrupt blocking retrieval before the first
+callback; legacy stores can only observe cancellation at callback boundaries.
+Callbacks remain synchronous. Admitted persistence writes must not inherit
+replay cancellation.
 
-Live messages and ordinary control responses retain their numbered FIFO order.
-They drain between replay ranges; queued original messages precede any replay of
-them. Additional ResendRequests coalesce into one covering pending range, which
-may include intervening sequences. Logout discards pending replay and completion
-gap fills; bytes already handed to the writer precede the response. Socket progress
-and application callback duration still limit responsiveness.
+Abandoned replay bytes are not queued for a replacement connection, and no final
+gap fill marks an interrupted range complete. Reconnect uses normal Logon and
+sequence recovery; sequence resets still depend on existing configuration.
+Healthy replay, live-message ordering, Logout and ResetSession retain their
+existing synchronous behavior. No worker or operator API is introduced.
 
-`ResetSession` executes on the session loop and waits for completion. Call it
-outside application callbacks. Replay retrieval is joined before reset/refresh
-or disconnect cleanup, preventing old work from reaching a replacement connection.
-Channel admission remains distinct from successful socket delivery.
+Other writer errors retain existing handling; no retry, short-write repair or new
+socket deadline is added. A reader blocked delivering `msgIn` cannot detect EOF
+until it can read again, unless another transport failure cancels the lifetime.
+Application callbacks and opaque legacy store operations must return before the
+session loop can continue. Channel admission does not confirm TCP delivery.
 
 ## Installation
 

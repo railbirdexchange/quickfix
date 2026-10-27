@@ -16,16 +16,13 @@
 package quickfix
 
 import (
-	"bytes"
 	"context"
-	"sync"
 	"time"
 
 	"github.com/pkg/errors"
 )
 
 type memoryStore struct {
-	messageMu                        sync.RWMutex
 	senderMsgSeqNum, targetMsgSeqNum int
 	creationTime                     time.Time
 	messageMap                       map[int][]byte
@@ -70,9 +67,7 @@ func (store *memoryStore) Reset() error {
 	store.senderMsgSeqNum = 0
 	store.targetMsgSeqNum = 0
 	store.creationTime = time.Now()
-	store.messageMu.Lock()
 	store.messageMap = nil
-	store.messageMu.Unlock()
 	return nil
 }
 
@@ -87,8 +82,6 @@ func (store *memoryStore) Close() error {
 }
 
 func (store *memoryStore) SaveMessage(seqNum int, msg []byte) error {
-	store.messageMu.Lock()
-	defer store.messageMu.Unlock()
 	if store.messageMap == nil {
 		store.messageMap = make(map[int][]byte)
 	}
@@ -108,21 +101,18 @@ func (store *memoryStore) SaveMessageAndIncrNextSenderMsgSeqNum(seqNum int, msg 
 func (store *memoryStore) IterateMessages(beginSeqNum, endSeqNum int, cb func([]byte) error) error {
 	return store.IterateMessagesContext(context.Background(), beginSeqNum, endSeqNum, cb)
 }
+
 func (store *memoryStore) IterateMessagesContext(ctx context.Context, beginSeqNum, endSeqNum int, cb func([]byte) error) error {
-	for seq := beginSeqNum; seq <= endSeqNum; seq++ {
+	for seqNum := beginSeqNum; seqNum <= endSeqNum; seqNum++ {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		store.messageMu.RLock()
-		m, ok := store.messageMap[seq]
-		m = bytes.Clone(m)
-		store.messageMu.RUnlock()
-		if ok {
+		if m, ok := store.messageMap[seqNum]; ok {
 			if err := cb(m); err != nil {
 				return err
 			}
 		}
-		if seq == endSeqNum {
+		if seqNum == endSeqNum {
 			break
 		}
 	}

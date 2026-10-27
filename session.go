@@ -29,10 +29,10 @@ import (
 
 // The Session is the primary FIX abstraction for message communication.
 type session struct {
-	store             MessageStore
+	store MessageStore
+	// connectionContext belongs to the current physical connection. The session
+	// loop installs/clears it under sendMutex, which also guards outbound sends.
 	connectionContext context.Context
-	replay            *replayOperation
-	nextReplay        *replayRequest
 
 	log       Log
 	sessionID SessionID
@@ -58,7 +58,6 @@ type session struct {
 	peerTimer  *internal.EventTimer
 	sentReset  bool
 	stopOnce   sync.Once
-	runDone    chan struct{}
 
 	targetDefaultApplVerID string
 
@@ -101,7 +100,6 @@ func (s *session) connectContext(ctx context.Context, msgIn <-chan fixIn, msgOut
 }
 
 type stopReq struct{}
-type resetReq struct{ reply chan error }
 
 func (s *session) stop() {
 	// Stop once.
@@ -240,7 +238,9 @@ func (s *session) generateSequenceReset(beginSeqNo int, endSeqNo int, inReplyTo 
 
 	msgBytes := sequenceReset.build()
 
-	s.EnqueueBytesAndSend(msgBytes)
+	if err := s.sendReplayBytes(s.replayContext(), msgBytes); err != nil {
+		return err
+	}
 	s.log.OnEventf("Sent SequenceReset TO: %v", endSeqNo)
 
 	return
@@ -264,7 +264,6 @@ func (s *session) sendLogout(reason string) error {
 }
 
 func (s *session) sendLogoutInReplyTo(reason string, inReplyTo *Message) error {
-	s.stopReplay()
 	logout := s.buildLogout(reason)
 	return s.sendInReplyTo(logout, inReplyTo)
 }
@@ -341,16 +340,13 @@ func (s *session) sendInReplyTo(msg *Message, inReplyTo *Message) error {
 	}
 
 	s.toSend = append(s.toSend, msgBytes)
-	if s.replay == nil {
-		s.sendQueued(true)
-	}
+	s.sendQueued(true)
 
 	return nil
 }
 
 // dropAndReset will drop the send queue and reset the message store.
 func (s *session) dropAndReset() error {
-	s.stopReplay()
 	s.sendMutex.Lock()
 	defer s.sendMutex.Unlock()
 
@@ -363,7 +359,6 @@ func (s *session) dropAndSend(msg *Message) error {
 	return s.dropAndSendInReplyTo(msg, nil)
 }
 func (s *session) dropAndSendInReplyTo(msg *Message, inReplyTo *Message) error {
-	s.stopReplay()
 	s.sendMutex.Lock()
 	defer s.sendMutex.Unlock()
 
@@ -473,6 +468,9 @@ func (s *session) EnqueueBytesAndSend(msg []byte) {
 }
 
 func (s *session) sendBytes(msg []byte, blockUntilSent bool) bool {
+	if s.connectionContext != nil && s.connectionContext.Err() != nil {
+		return false
+	}
 	if s.messageOut == nil {
 		s.log.OnEventf("Failed to send: disconnected")
 		return false
@@ -580,7 +578,6 @@ func (s *session) handleLogon(msg *Message) error {
 		resetStore = s.ResetOnLogon
 
 		if s.RefreshOnLogon {
-			s.stopReplay()
 			if err := s.store.Refresh(); err != nil {
 				return err
 			}
@@ -605,7 +602,6 @@ func (s *session) handleLogon(msg *Message) error {
 	}
 
 	if resetStore {
-		s.stopReplay()
 		if err := s.store.Reset(); err != nil {
 			return err
 		}
@@ -906,22 +902,29 @@ func (s *session) onDisconnect() {
 		}
 	}
 
+	s.sendMutex.Lock()
 	if s.messageOut != nil {
 		close(s.messageOut)
 		s.messageOut = nil
 	}
 
+	s.connectionContext = nil
+	s.sendMutex.Unlock()
+
 	// s.messageIn is buffered so we need to drain it before disconnection
 	s.drainMessageIn()
 
 	s.messageIn = nil
-	s.connectionContext = nil
 }
 
 func (s *session) onAdmin(msg interface{}) {
 	switch msg := msg.(type) {
 
 	case connect:
+		// A replacement may win select immediately after the old transport dies.
+		if s.connectionContext != nil && s.connectionContext.Err() != nil {
+			s.Disconnected(s)
+		}
 
 		if s.IsConnected() {
 			if msg.err != nil {
@@ -944,22 +947,15 @@ func (s *session) onAdmin(msg interface{}) {
 			close(msg.err)
 		}
 
+		s.sendMutex.Lock()
 		s.connectionContext = msg.ctx
 		s.messageIn = msg.messageIn
 		s.messageOut = msg.messageOut
+		s.sendMutex.Unlock()
 		s.sentReset = false
 
 		s.Connect(s)
 
-	case resetReq:
-		s.log.OnEvent("Session reset")
-		s.stopReplay()
-		s.State.ShutdownNow(s)
-		err := s.dropAndReset()
-		if err != nil {
-			s.logError(err)
-		}
-		msg.reply <- err
 	case stopReq:
 		s.Stop(s)
 
@@ -972,9 +968,6 @@ func (s *session) onAdmin(msg interface{}) {
 }
 
 func (s *session) run() {
-	if s.runDone != nil {
-		defer close(s.runDone)
-	}
 	s.Start(s)
 	var stopChan = make(chan struct{})
 	s.stateTimer = internal.NewEventTimer(func() {
@@ -1013,18 +1006,9 @@ func (s *session) run() {
 		if s.connectionContext != nil && s.connectionContext.Err() != nil {
 			s.Disconnected(s)
 		}
-		replayIn, replayDone, replayOut, replayBytes := s.replayChannels()
 		select {
 		case <-s.connectionDone():
 			s.Disconnected(s)
-		case raw := <-replayIn:
-			s.replayMessage(raw)
-		case <-replayDone:
-			s.replayComplete()
-		case replayOut <- replayBytes:
-			s.replay.output = s.replay.output[1:]
-			s.log.OnOutgoing(replayBytes)
-			s.stateTimer.Reset(s.HeartBtInt)
 
 		case msg := <-s.admin:
 			s.onAdmin(msg)
@@ -1033,7 +1017,7 @@ func (s *session) run() {
 			s.SendAppMessages(s)
 
 		case fixIn, ok := <-s.messageIn:
-			if !ok {
+			if !ok || (s.connectionContext != nil && s.connectionContext.Err() != nil) {
 				s.Disconnected(s)
 			} else {
 				s.Incoming(s, fixIn)
@@ -1054,4 +1038,32 @@ func (s *session) connectionDone() <-chan struct{} {
 		return nil
 	}
 	return s.connectionContext.Done()
+}
+
+func (s *session) replayContext() context.Context {
+	if s.connectionContext == nil {
+		return context.Background()
+	}
+	return s.connectionContext
+}
+
+// sendReplayBytes preserves queued original-message ordering, but never adds
+// replay bytes to toSend: an abandoned range must not survive this connection.
+func (s *session) sendReplayBytes(ctx context.Context, msg []byte) error {
+	s.sendMutex.Lock()
+	defer s.sendMutex.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	s.sendQueued(true)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if !s.sendBytes(msg, true) {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		return errors.New("replay connection is disconnected")
+	}
+	return ctx.Err()
 }

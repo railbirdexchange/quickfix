@@ -50,10 +50,11 @@ type MessageStoreFactory interface {
 	Create(sessionID SessionID) (MessageStore, error)
 }
 
-// ContextMessageStore supports cancelable replay reads concurrent with session
-// sequence operations and message persistence. Callbacks run on a retrieval
-// worker, not the session loop. Implementations must release locks before calling
-// back and return when ctx is canceled, including before the first callback.
+// ContextMessageStore optionally supports cancelable synchronous replay reads.
+// IterateMessagesContext runs on the session loop; callbacks must finish before
+// it returns. Implementations should observe ctx during blocking reads, before
+// the first callback, and between callbacks. Cancellation must not cancel writes
+// already admitted to persistence. MessageStore remains the compatibility path.
 type ContextMessageStore interface {
 	IterateMessagesContext(context.Context, int, int, func([]byte) error) error
 }

@@ -64,26 +64,20 @@ func SendToTarget(m Messagable, sessionID SessionID) error {
 	return session.queueForSend(msg)
 }
 
-// ResetSession resets session's sequence numbers on its session loop.
-// Call it from outside application callbacks, as it waits for loop completion.
+// ResetSession resets session's sequence numbers.
 func ResetSession(sessionID SessionID) error {
 	session, ok := lookupSession(sessionID)
 	if !ok {
 		return errUnknownSession
 	}
-	reply := make(chan error, 1)
-	select {
-	case session.admin <- resetReq{reply: reply}:
-	case <-session.runDone:
-		return errors.New("session is stopped")
-	}
-	select {
-	case err := <-reply:
+	session.log.OnEvent("Session reset")
+	session.State.ShutdownNow(session)
+	if err := session.dropAndReset(); err != nil {
+		session.logError(err)
 		return err
-	case <-session.runDone:
-		return errors.New("session is stopped")
 	}
 
+	return nil
 }
 
 // UnregisterSession removes a session from the set of known sessions.
