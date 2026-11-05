@@ -24,6 +24,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -167,4 +168,48 @@ func TestTerminalWriterReleasesBlockedReader(t *testing.T) {
 	writeLoop(ctx, terminate, writer, out, nullLog{})
 	awaitReplaySignal(t, readerDone)
 	close(out) // Only the session closes out.
+}
+
+type countingCloseConn struct {
+	net.Conn
+	closes atomic.Int32
+}
+
+func (c *countingCloseConn) Close() error {
+	c.closes.Add(1)
+	return c.Conn.Close()
+}
+
+func TestSimultaneousReaderWriterTerminationClosesCapturedSocketOnce(t *testing.T) {
+	server, peer := net.Pipe()
+	defer peer.Close()
+	counted := &countingCloseConn{Conn: server}
+	ctx, terminate := connectionLifetime(counted)
+	defer terminate()
+	start := make(chan struct{})
+	done := make(chan struct{}, 2)
+	in, out := make(chan fixIn), make(chan []byte, 1)
+	out <- []byte("ordinary output")
+	writer := &replayErrorWriter{err: syscall.ECONNRESET, written: make(chan []byte, 1)}
+	go func() {
+		<-start
+		readLoop(ctx, terminate, newParser(strings.NewReader("")), in, nullLog{})
+		done <- struct{}{}
+	}()
+	go func() { <-start; writeLoop(ctx, terminate, writer, out, nullLog{}); done <- struct{}{} }()
+	close(start)
+	for i := 0; i < 2; i++ {
+		awaitReplaySignal(t, done)
+	}
+	require.ErrorIs(t, ctx.Err(), context.Canceled)
+	require.EqualValues(t, 1, counted.closes.Load())
+	_, open := <-in
+	require.False(t, open)
+	// A late signal on the old lifetime must not close a replacement socket.
+	replacement, newPeer := net.Pipe()
+	defer newPeer.Close()
+	newCtx, newTerminate := connectionLifetime(replacement)
+	defer newTerminate()
+	terminate()
+	require.NoError(t, newCtx.Err())
 }

@@ -147,6 +147,59 @@ func TestMemoryReplayCancellation(t *testing.T) {
 	}
 }
 
+// Count context probes instead of using a sleep to guess when sparse traversal
+// has started. Cancellation happens after empty sequence slots were visited.
+type sparseTraversalContext struct {
+	context.Context
+	probes int
+	cancel context.CancelFunc
+}
+
+func (c *sparseTraversalContext) Err() error {
+	c.probes++
+	if c.probes == 100 {
+		c.cancel()
+	}
+	return c.Context.Err()
+}
+
+func TestMemoryReplayCancellationDuringSparseTraversal(t *testing.T) {
+	store, err := NewMemoryStoreFactory().Create(SessionID{})
+	require.NoError(t, err)
+	require.NoError(t, store.SaveMessage(10000, []byte("must not reach callback")))
+	parent, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ctx := &sparseTraversalContext{Context: parent, cancel: cancel}
+	err = store.(ContextMessageStore).IterateMessagesContext(ctx, 1, 10000, func([]byte) error {
+		t.Fatal("sparse traversal continued after cancellation")
+		return nil
+	})
+	require.ErrorIs(t, err, context.Canceled)
+	require.Equal(t, 100, ctx.probes)
+}
+
+func TestTerminalWriterDisconnectsOrdinaryOutbound(t *testing.T) {
+	memory, err := NewMemoryStoreFactory().Create(SessionID{})
+	require.NoError(t, err)
+	app := &replayTestApp{logout: make(chan struct{}, 2)}
+	s, _, out, cancel := startReplaySession(t, memory, app)
+	defer cancel()
+	done := make(chan struct{})
+	writer := &replayErrorWriter{err: syscall.EPIPE, written: make(chan []byte, 2)}
+	go func() { writeLoop(s.connectionContext, cancel, writer, out, nullLog{}); close(done) }()
+	require.NoError(t, s.queueForSend(starvationMessage(time.Now())))
+	awaitReplaySignal(t, done)
+	awaitReplaySignal(t, app.logout)
+	select {
+	case _, open := <-out:
+		require.False(t, open)
+	case <-time.After(time.Second):
+		t.Fatal("ordinary outbound failure did not release the session")
+	}
+	require.Empty(t, app.logout, "duplicate cleanup")
+	require.Equal(t, 3, memory.NextSenderMsgSeqNum(), "accepted outbound history was discarded")
+}
+
 func awaitReplaySignal(t *testing.T, ch <-chan struct{}) {
 	t.Helper()
 	select {

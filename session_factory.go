@@ -70,6 +70,11 @@ func (f sessionFactory) createSession(
 	sessionID SessionID, storeFactory MessageStoreFactory, settings *SessionSettings,
 	logFactory LogFactory, application Application,
 ) (session *session, err error) {
+	// Do not create a second durable store while the registered session is
+	// active or flushing its final checkpoint during retirement.
+	if _, exists := lookupSession(sessionID); exists {
+		return nil, errDuplicateSessionID
+	}
 
 	if session, err = f.newSession(sessionID, storeFactory, settings, logFactory, application); err != nil {
 		return
