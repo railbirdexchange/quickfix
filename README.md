@@ -30,6 +30,34 @@ See v0.9.0 release notes [here](https://github.com/quickfixgo/quickfix/releases/
 <br>
 <img width="208" alt="Sponsored by Connamara" src="https://user-images.githubusercontent.com/3065126/282546730-16220337-4960-48ae-8c2f-760fbaedb135.png">
 
+## Replay cancellation on transport termination
+
+Replay stays synchronous on the session loop. Each physical connection owns a
+context shared by its reader, writer, replay reads and outbound channel waits.
+Every existing reader exit (including parser errors) cancels that lifetime.
+Wrapped `ECONNRESET`, `EPIPE` and `net.ErrClosed` writer errors cancel it and stop
+further writes, even when some bytes were written. Cancellation closes only the
+captured socket. Session cleanup retains ownership of the outbound channel.
+
+`ContextMessageStore` adds optional `IterateMessagesContext` support without
+changing `MessageStore`. Memory storage implements it, including sparse ranges.
+Other stores can implement it to interrupt blocking retrieval before the first
+callback; legacy stores can only observe cancellation at callback boundaries.
+Callbacks remain synchronous. Admitted persistence writes must not inherit
+replay cancellation.
+
+Abandoned replay bytes are not queued for a replacement connection, and no final
+gap fill marks an interrupted range complete. Reconnect uses normal Logon and
+sequence recovery; sequence resets still depend on existing configuration.
+Healthy replay, live-message ordering, Logout and ResetSession retain their
+existing synchronous behavior. No worker or operator API is introduced.
+
+Other writer errors retain existing handling; no retry, short-write repair or new
+socket deadline is added. A reader blocked delivering `msgIn` cannot detect EOF
+until it can read again, unless another transport failure cancels the lifetime.
+Existing mutex waits, application callbacks and opaque legacy store operations
+must finish before the session loop can continue. Channel admission does not confirm TCP delivery.
+
 ## Installation
 
 With [Go module](https://github.com/golang/go/wiki/Modules) support, simply add the following import

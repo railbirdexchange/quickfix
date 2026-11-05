@@ -367,17 +367,24 @@ func (a *Acceptor) handleConnection(netConn net.Conn) {
 	msgIn := make(chan fixIn, session.InChanCapacity)
 	msgOut := make(chan []byte, outboundBufferSize)
 
-	if err := session.connect(msgIn, msgOut); err != nil {
+	ctx, terminate := connectionLifetime(netConn)
+	defer terminate()
+	if err := session.connectContext(ctx, msgIn, msgOut); err != nil {
 		a.globalLog.OnEventf("Unable to accept session %v connection: %v", sessID, err.Error())
 		return
 	}
 
 	go func() {
-		msgIn <- fixIn{msgBytes, parser.lastRead}
-		readLoop(parser, msgIn, a.globalLog)
+		select {
+		case msgIn <- fixIn{msgBytes, parser.lastRead}:
+		case <-ctx.Done():
+			close(msgIn)
+			return
+		}
+		readLoop(ctx, terminate, parser, msgIn, a.globalLog)
 	}()
 
-	writeLoop(netConn, msgOut, a.globalLog)
+	writeLoop(ctx, terminate, netConn, msgOut, a.globalLog)
 }
 
 func (a *Acceptor) socketOutboundBufferSize(sessionID SessionID) (int, error) {
@@ -411,7 +418,7 @@ func nonNegativeIntSetting(settings *SessionSettings, key string) (int, error) {
 
 func (a *Acceptor) dynamicSessionsLoop() {
 	var id int
-	var sessions = map[int]*session{}
+	var activeSessions = map[int]*session{}
 	var complete = make(chan int)
 	defer close(complete)
 LOOP:
@@ -419,41 +426,47 @@ LOOP:
 		select {
 		case session, ok := <-a.dynamicSessionChan:
 			if !ok {
-				for _, oldSession := range sessions {
+				for _, oldSession := range activeSessions {
 					oldSession.stop()
 				}
 				break LOOP
 			}
 			id++
 			sessionID := id
-			sessions[sessionID] = session
+			activeSessions[sessionID] = session
 			go func() {
 				session.run()
-				err := UnregisterSession(session.sessionID)
-				if err != nil {
-					a.globalLog.OnEventf("Unregister dynamic session %v failed: %v", session.sessionID, err)
-					return
+				// Keep the identity reserved until the retired store has finished
+				// its final journal/checkpoint flush. Static sessions keep their
+				// stores across connections; a dynamic session will never run again.
+				if err := session.store.Close(); err != nil {
+					a.globalLog.OnEventf("Close dynamic session %v message store failed: %v", session.sessionID, err)
 				}
+				sessionsLock.Lock()
+				if sessionsCurrent := sessions[session.sessionID]; sessionsCurrent == session {
+					a.sessionAddr.Delete(session.sessionID)
+					delete(sessions, session.sessionID)
+				}
+				sessionsLock.Unlock()
 				complete <- sessionID
 			}()
 		case id := <-complete:
-			session, ok := sessions[id]
+			_, ok := activeSessions[id]
 			if ok {
-				a.sessionAddr.Delete(session.sessionID)
-				delete(sessions, id)
+				delete(activeSessions, id)
 			} else {
 				a.globalLog.OnEventf("Missing dynamic session %v!", id)
 			}
 		}
 	}
 
-	if len(sessions) == 0 {
+	if len(activeSessions) == 0 {
 		return
 	}
 
 	for id := range complete {
-		delete(sessions, id)
-		if len(sessions) == 0 {
+		delete(activeSessions, id)
+		if len(activeSessions) == 0 {
 			return
 		}
 	}

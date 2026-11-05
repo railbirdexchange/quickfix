@@ -17,6 +17,7 @@ package quickfix
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -29,6 +30,8 @@ import (
 // The Session is the primary FIX abstraction for message communication.
 type session struct {
 	store MessageStore
+	// Current TCP lifetime; writes are guarded by sendMutex.
+	connectionContext context.Context
 
 	log       Log
 	sessionID SessionID
@@ -77,14 +80,16 @@ func (s *session) TargetDefaultApplicationVersionID() string {
 }
 
 type connect struct {
+	ctx        context.Context
 	messageOut chan<- []byte
 	messageIn  <-chan fixIn
 	err        chan<- error
 }
 
-func (s *session) connect(msgIn <-chan fixIn, msgOut chan<- []byte) error {
+func (s *session) connectContext(ctx context.Context, msgIn <-chan fixIn, msgOut chan<- []byte) error {
 	rep := make(chan error)
 	s.admin <- connect{
+		ctx:        ctx,
 		messageOut: msgOut,
 		messageIn:  msgIn,
 		err:        rep,
@@ -232,7 +237,9 @@ func (s *session) generateSequenceReset(beginSeqNo int, endSeqNo int, inReplyTo 
 
 	msgBytes := sequenceReset.build()
 
-	s.EnqueueBytesAndSend(msgBytes)
+	if err := s.sendReplayBytes(s.replayContext(), msgBytes); err != nil {
+		return err
+	}
 	s.log.OnEventf("Sent SequenceReset TO: %v", endSeqNo)
 
 	return
@@ -451,15 +458,10 @@ func (s *session) dropQueued() {
 	s.toSend = s.toSend[:0]
 }
 
-func (s *session) EnqueueBytesAndSend(msg []byte) {
-	s.sendMutex.Lock()
-	defer s.sendMutex.Unlock()
-
-	s.toSend = append(s.toSend, msg)
-	s.sendQueued(true)
-}
-
 func (s *session) sendBytes(msg []byte, blockUntilSent bool) bool {
+	if s.connectionContext != nil && s.connectionContext.Err() != nil {
+		return false
+	}
 	if s.messageOut == nil {
 		s.log.OnEventf("Failed to send: disconnected")
 		return false
@@ -467,7 +469,11 @@ func (s *session) sendBytes(msg []byte, blockUntilSent bool) bool {
 
 	if blockUntilSent {
 		channelStartedAt := time.Now()
-		s.messageOut <- msg
+		select {
+		case s.messageOut <- msg:
+		case <-s.connectionDone():
+			return false
+		}
 		s.observeSendStage("outbound_channel_wait", fixMsgTypeFromRaw(msg), time.Since(channelStartedAt), true)
 		s.log.OnOutgoing(msg)
 		s.stateTimer.Reset(s.HeartBtInt)
@@ -887,10 +893,14 @@ func (s *session) onDisconnect() {
 		}
 	}
 
+	s.sendMutex.Lock()
 	if s.messageOut != nil {
 		close(s.messageOut)
 		s.messageOut = nil
 	}
+
+	s.connectionContext = nil
+	s.sendMutex.Unlock()
 
 	// s.messageIn is buffered so we need to drain it before disconnection
 	s.drainMessageIn()
@@ -902,6 +912,10 @@ func (s *session) onAdmin(msg interface{}) {
 	switch msg := msg.(type) {
 
 	case connect:
+		// Retire a dead connection before accepting its replacement.
+		if s.connectionContext != nil && s.connectionContext.Err() != nil {
+			s.Disconnected(s)
+		}
 
 		if s.IsConnected() {
 			if msg.err != nil {
@@ -924,8 +938,11 @@ func (s *session) onAdmin(msg interface{}) {
 			close(msg.err)
 		}
 
+		s.sendMutex.Lock()
+		s.connectionContext = msg.ctx
 		s.messageIn = msg.messageIn
 		s.messageOut = msg.messageOut
+		s.sendMutex.Unlock()
 		s.sentReset = false
 
 		s.Connect(s)
@@ -977,7 +994,12 @@ func (s *session) run() {
 	}()
 
 	for !s.Stopped() {
+		if s.connectionContext != nil && s.connectionContext.Err() != nil {
+			s.Disconnected(s)
+		}
 		select {
+		case <-s.connectionDone():
+			s.Disconnected(s)
 
 		case msg := <-s.admin:
 			s.onAdmin(msg)
@@ -986,7 +1008,7 @@ func (s *session) run() {
 			s.SendAppMessages(s)
 
 		case fixIn, ok := <-s.messageIn:
-			if !ok {
+			if !ok || (s.connectionContext != nil && s.connectionContext.Err() != nil) {
 				s.Disconnected(s)
 			} else {
 				s.Incoming(s, fixIn)
@@ -1000,4 +1022,38 @@ func (s *session) run() {
 			s.CheckResetTime(s, now)
 		}
 	}
+}
+
+func (s *session) connectionDone() <-chan struct{} {
+	if s.connectionContext == nil {
+		return nil
+	}
+	return s.connectionContext.Done()
+}
+
+func (s *session) replayContext() context.Context {
+	if s.connectionContext == nil {
+		return context.Background()
+	}
+	return s.connectionContext
+}
+
+// Replay bytes must not stay queued for a replacement connection.
+func (s *session) sendReplayBytes(ctx context.Context, msg []byte) error {
+	s.sendMutex.Lock()
+	defer s.sendMutex.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	s.sendQueued(true)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if !s.sendBytes(msg, true) {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		return errors.New("replay connection is disconnected")
+	}
+	return ctx.Err()
 }
