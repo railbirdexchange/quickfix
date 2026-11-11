@@ -208,7 +208,7 @@ func (state inSession) handleResendRequest(session *session, msg *Message) (next
 		endSeqNo = expectedSeqNum - 1
 	}
 
-	ctx := session.replayContext()
+	ctx := session.connectionContextOrBackground()
 	if err := state.resendMessages(session, int(beginSeqNo), endSeqNo, *msg); err != nil {
 		// The inbound request was received even if its outbound response could
 		// not finish. Account for it normally before draining later input. The
@@ -233,7 +233,7 @@ func (state inSession) handleResendRequest(session *session, msg *Message) (next
 }
 
 func (state inSession) resendMessages(session *session, beginSeqNo, endSeqNo int, inReplyTo Message) error {
-	ctx := session.replayContext()
+	ctx := session.connectionContextOrBackground()
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -438,7 +438,7 @@ func (state *inSession) generateSequenceReset(session *session, beginSeqNo int, 
 
 	msgBytes := sequenceReset.build()
 
-	if err := session.sendReplayBytes(session.replayContext(), msgBytes); err != nil {
+	if err := session.sendReplayBytes(session.connectionContextOrBackground(), msgBytes); err != nil {
 		return err
 	}
 	session.log.OnEventf("Sent SequenceReset TO: %v", endSeqNo)

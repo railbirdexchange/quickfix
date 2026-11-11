@@ -239,7 +239,7 @@ func (s *session) generateSequenceReset(beginSeqNo int, endSeqNo int, inReplyTo 
 
 	msgBytes := sequenceReset.build()
 
-	if err := s.sendReplayBytes(s.replayContext(), msgBytes); err != nil {
+	if err := s.sendReplayBytes(s.connectionContextOrBackground(), msgBytes); err != nil {
 		return err
 	}
 	s.log.OnEventf("Sent SequenceReset TO: %v", endSeqNo)
@@ -473,7 +473,7 @@ func (s *session) sendBytes(msg []byte, blockUntilSent bool) bool {
 		channelStartedAt := time.Now()
 		select {
 		case s.messageOut <- msg:
-		case <-s.connectionDone():
+		case <-s.connectionContextOrBackground().Done():
 			return false
 		}
 		s.observeSendStage("outbound_channel_wait", fixMsgTypeFromRaw(msg), time.Since(channelStartedAt), true)
@@ -1002,7 +1002,7 @@ func (s *session) run() {
 			continue
 		}
 		select {
-		case <-s.connectionDone():
+		case <-s.connectionContextOrBackground().Done():
 			s.drainTransportInput()
 
 		case msg := <-s.admin:
@@ -1028,14 +1028,7 @@ func (s *session) run() {
 	}
 }
 
-func (s *session) connectionDone() <-chan struct{} {
-	if s.connectionContext == nil {
-		return nil
-	}
-	return s.connectionContext.Done()
-}
-
-func (s *session) replayContext() context.Context {
+func (s *session) connectionContextOrBackground() context.Context {
 	if s.connectionContext == nil {
 		return context.Background()
 	}

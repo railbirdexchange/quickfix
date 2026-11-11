@@ -47,13 +47,7 @@ func (a *inboundDrainApp) OnLogout(SessionID) {
 	}
 }
 func inboundDrainMessage(kind string, seq int) *Message {
-	m := NewMessage()
-	m.Header.SetString(tagBeginString, "FIX.4.4")
-	m.Header.SetString(tagSenderCompID, "DEALER")
-	m.Header.SetString(tagTargetCompID, "VENUE")
-	m.Header.SetString(tagMsgType, kind)
-	m.Header.SetInt(tagMsgSeqNum, seq)
-	m.Header.SetField(tagSendingTime, FIXUTCTimestamp{Time: time.Now()})
+	m := replayWireMessage(kind, seq)
 	if kind == "A" {
 		m.Body.SetInt(tagEncryptMethod, 0)
 		m.Body.SetInt(tagHeartBtInt, 30)

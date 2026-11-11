@@ -227,9 +227,6 @@ func (i *Initiator) handleConnection(session *session, tlsConfig *tls.Config, di
 		disconnected = make(chan interface{})
 		go func() {
 			writeLoop(connectionCtx, terminate, netConn, msgOut, session.log)
-			if err := netConn.Close(); err != nil {
-				session.log.OnEvent(err.Error())
-			}
 			close(disconnected)
 		}()
 
