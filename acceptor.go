@@ -44,6 +44,8 @@ type Acceptor struct {
 	dynamicQualifier      bool
 	dynamicQualifierCount int
 	dynamicSessionChan    chan *session
+	dynamicSessionMu      sync.RWMutex
+	dynamicSessionStopped bool
 	sessionAddr           sync.Map
 	sessionHostPort       map[SessionID]int
 	listeners             map[string]net.Listener
@@ -126,7 +128,10 @@ func (a *Acceptor) Start() (err error) {
 		}(s)
 	}
 	if a.dynamicSessions {
+		a.dynamicSessionMu.Lock()
+		a.dynamicSessionStopped = false
 		a.dynamicSessionChan = make(chan *session)
+		a.dynamicSessionMu.Unlock()
 		a.sessionGroup.Add(1)
 		go func() {
 			a.dynamicSessionsLoop()
@@ -151,7 +156,15 @@ func (a *Acceptor) Stop() {
 	}
 	a.listenerShutdown.Wait()
 	if a.dynamicSessions {
-		close(a.dynamicSessionChan)
+		// Registration holds a read lock until the session is connected and
+		// its reader has started. Keep the consumer alive until those handoffs
+		// finish; waiting for whole connection handlers would deadlock shutdown.
+		a.dynamicSessionMu.Lock()
+		if !a.dynamicSessionStopped && a.dynamicSessionChan != nil {
+			close(a.dynamicSessionChan)
+		}
+		a.dynamicSessionStopped = true
+		a.dynamicSessionMu.Unlock()
 	}
 	for _, session := range a.sessions {
 		session.stop()
@@ -338,6 +351,21 @@ func (a *Acceptor) handleConnection(netConn net.Conn) {
 		}
 	}
 
+	// Only registration and initial connection setup participate in the
+	// shutdown barrier. Never hold it while serving the live connection.
+	registering := a.dynamicSessions
+	if registering {
+		a.dynamicSessionMu.RLock()
+		defer func() {
+			if registering {
+				a.dynamicSessionMu.RUnlock()
+			}
+		}()
+		if a.dynamicSessionStopped {
+			return
+		}
+	}
+
 	if a.dynamicQualifier {
 		a.dynamicQualifierCount++
 		sessID.Qualifier = strconv.Itoa(a.dynamicQualifierCount)
@@ -384,6 +412,10 @@ func (a *Acceptor) handleConnection(netConn net.Conn) {
 		readLoop(ctx, terminate, parser, msgIn, a.globalLog)
 	}()
 
+	if registering {
+		registering = false
+		a.dynamicSessionMu.RUnlock()
+	}
 	writeLoop(ctx, terminate, netConn, msgOut, a.globalLog)
 }
 
