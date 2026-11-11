@@ -98,10 +98,12 @@ func startReplaySession(t *testing.T, store MessageStore, app Application) (*ses
 	s, err := (sessionFactory{}).newSession(SessionID{BeginString: "FIX.4.4", SenderCompID: "VENUE", TargetCompID: "DEALER"}, replayStoreFactory{store}, NewSessionSettings(), NewNullLogFactory(), app)
 	require.NoError(t, err)
 	s.LogoutTimeout = time.Second
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, terminate := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { s.run(); close(done) }()
 	in := make(chan fixIn, 8)
+	var readerExit sync.Once
+	cancel := func() { terminate(); readerExit.Do(func() { close(in) }) }
 	out := make(chan []byte)
 	require.NoError(t, s.connectContext(ctx, in, out))
 	t.Cleanup(func() {
@@ -295,9 +297,10 @@ func TestDisconnectReleasesReplayOutputWithoutLeakingIntoReconnect(t *testing.T)
 	ctx2, cancel2 := context.WithCancel(context.Background())
 	defer cancel2()
 	in2 := make(chan fixIn, 8)
+	defer close(in2)
 	out2 := make(chan []byte)
 	require.NoError(t, s.connectContext(ctx2, in2, out2))
-	logon := replayWireMessage("A", 2) // Interrupted request has not advanced target sequence.
+	logon := replayWireMessage("A", 3) // Received request is consumed despite interrupted output.
 	logon.Body.SetInt(tagEncryptMethod, 0)
 	logon.Body.SetInt(tagHeartBtInt, 30)
 	sendReplayInbound(t, in2, logon)

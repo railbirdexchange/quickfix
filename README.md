@@ -49,6 +49,15 @@ replay cancellation.
 Abandoned replay bytes are not queued for a replacement connection, and no final
 gap fill marks an interrupted range complete. Reconnect uses normal Logon and
 sequence recovery; sequence resets still depend on existing configuration.
+On transport termination, the reader closes the inbound channel. The session
+processes admitted frames in FIFO order through normal FIX validation before
+logout cleanup; a Logout or fatal protocol error can still end processing.
+Transport cancellation stays active while draining, so no replay or outbound
+channel wait resumes. A validated, in-sequence ResendRequest advances the inbound
+sequence even if its outbound replay was interrupted. This does not acknowledge
+delivery of the replay: the peer recovers missing outbound sequences on reconnect.
+Sequence gaps are not skipped to process later queued orders.
+
 Healthy replay, live-message ordering, Logout and ResetSession retain their
 existing synchronous behavior. No worker or operator API is introduced.
 

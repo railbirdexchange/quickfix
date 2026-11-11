@@ -17,6 +17,7 @@ package quickfix
 
 import (
 	"bytes"
+	"errors"
 	"time"
 
 	"github.com/quickfixgo/quickfix/internal"
@@ -207,8 +208,14 @@ func (state inSession) handleResendRequest(session *session, msg *Message) (next
 		endSeqNo = expectedSeqNum - 1
 	}
 
+	ctx := session.replayContext()
 	if err := state.resendMessages(session, int(beginSeqNo), endSeqNo, *msg); err != nil {
-		return handleStateError(session, err)
+		// The inbound request was received even if its outbound response could
+		// not finish. Account for it normally before draining later input. The
+		// peer recovers missing outbound sequences on its next connection.
+		if ctx.Err() == nil || !errors.Is(err, ctx.Err()) {
+			return handleStateError(session, err)
+		}
 	}
 
 	if err := session.checkTargetTooLow(msg); err != nil {

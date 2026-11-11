@@ -110,7 +110,7 @@ func TestInitiatorDisconnectCancelsReplayAndReconnects(t *testing.T) {
 	seq, reject := response.Header.GetInt(tagMsgSeqNum)
 	require.Nil(t, reject)
 	require.Equal(t, 3, seq)
-	logon(second, 2)
+	logon(second, 3) // The received ResendRequest consumed inbound sequence 2.
 	require.NoError(t, SendToTarget(starvationMessage(time.Now()), id))
 	live := read(p2)
 	require.Equal(t, "B", messageKind(t, live))

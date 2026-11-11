@@ -86,6 +86,8 @@ type connect struct {
 	err        chan<- error
 }
 
+// The transport owns msgIn and must close it when its reader exits, including
+// after cancellation. Retirement waits for that closure to drain admitted input.
 func (s *session) connectContext(ctx context.Context, msgIn <-chan fixIn, msgOut chan<- []byte) error {
 	rep := make(chan error)
 	s.admin <- connect{
@@ -817,8 +819,8 @@ func (s *session) checkBeginString(msg *Message) MessageRejectError {
 	return nil
 }
 
-func (s *session) drainMessageIn() {
-	s.log.OnEventf("Draining %d messages from inbound channel...", len(s.messageIn))
+func (s *session) discardMessageIn() {
+	s.log.OnEventf("Discarding %d messages after protocol disconnection...", len(s.messageIn))
 	for {
 		select {
 		case _, ok := <-s.messageIn:
@@ -902,8 +904,9 @@ func (s *session) onDisconnect() {
 	s.connectionContext = nil
 	s.sendMutex.Unlock()
 
-	// s.messageIn is buffered so we need to drain it before disconnection
-	s.drainMessageIn()
+	// A protocol Logout or fatal error ends handling of any subsequent frames.
+	// Transport termination processes admitted input before reaching this point.
+	s.discardMessageIn()
 
 	s.messageIn = nil
 }
@@ -914,7 +917,7 @@ func (s *session) onAdmin(msg interface{}) {
 	case connect:
 		// Retire a dead connection before accepting its replacement.
 		if s.connectionContext != nil && s.connectionContext.Err() != nil {
-			s.Disconnected(s)
+			s.drainTransportInput()
 		}
 
 		if s.IsConnected() {
@@ -995,11 +998,12 @@ func (s *session) run() {
 
 	for !s.Stopped() {
 		if s.connectionContext != nil && s.connectionContext.Err() != nil {
-			s.Disconnected(s)
+			s.drainTransportInput()
+			continue
 		}
 		select {
 		case <-s.connectionDone():
-			s.Disconnected(s)
+			s.drainTransportInput()
 
 		case msg := <-s.admin:
 			s.onAdmin(msg)
@@ -1008,7 +1012,7 @@ func (s *session) run() {
 			s.SendAppMessages(s)
 
 		case fixIn, ok := <-s.messageIn:
-			if !ok || (s.connectionContext != nil && s.connectionContext.Err() != nil) {
+			if !ok {
 				s.Disconnected(s)
 			} else {
 				s.Incoming(s, fixIn)
@@ -1056,4 +1060,17 @@ func (s *session) sendReplayBytes(ctx context.Context, msg []byte) error {
 		return errors.New("replay connection is disconnected")
 	}
 	return ctx.Err()
+}
+
+// Transport cancellation stops replay/output, not protocol handling of frames
+// already admitted by the reader. Wait for its closed channel so a final enqueue
+// cannot race retirement. Logout or a protocol error may end the session early;
+// later frames then retain the ordinary disconnected-session behavior.
+func (s *session) drainTransportInput() {
+	if s.messageIn != nil {
+		for msg := range s.messageIn {
+			s.Incoming(s, msg)
+		}
+	}
+	s.Disconnected(s)
 }

@@ -55,6 +55,9 @@ func readLoop(ctx context.Context, terminate context.CancelFunc, parser *parser,
 	defer close(msgIn)
 	defer terminate()
 	for {
+		if ctx.Err() != nil {
+			return
+		}
 		msg, err := parser.ReadMessage()
 		if err != nil {
 			log.OnEvent(err.Error())
