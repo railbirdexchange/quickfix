@@ -9,8 +9,57 @@ import (
 	"testing"
 	"time"
 
+	"github.com/quickfixgo/quickfix/internal"
 	"github.com/stretchr/testify/require"
 )
+
+func TestBufferedLogonRecoveryCancellationPreservesInput(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		logonSeq int
+		wantApps []int
+		wantNext int
+	}{
+		{"in_sequence", 1, []int{2}, 3},
+		{"sequence_gap_is_not_skipped", 3, nil, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			app := &inboundDrainApp{logout: make(chan struct{}, 1)}
+			s, err := (sessionFactory{}).newSession(SessionID{BeginString: "FIX.4.4", SenderCompID: "VENUE", TargetCompID: "DEALER"}, NewMemoryStoreFactory(), NewSessionSettings(), NewNullLogFactory(), app)
+			require.NoError(t, err)
+			s.EnableNextExpectedMsgSeqNum = true
+			// The peer's Logon response and subsequent application message were
+			// admitted before EOF, while this initiator awaited its response.
+			s.InitiateLogon = true
+			s.State = logonState{}
+			require.NoError(t, s.store.SetNextSenderMsgSeqNum(5))
+			s.stateTimer = internal.NewEventTimer(func() {})
+			s.peerTimer = internal.NewEventTimer(func() {})
+			defer s.stateTimer.Stop()
+			defer s.peerTimer.Stop()
+			out := make(chan []byte, 8)
+			s.messageOut = out
+			in := make(chan fixIn, 2)
+			s.messageIn = in
+			logon := inboundDrainMessage("A", tc.logonSeq)
+			logon.Body.SetInt(tagNextExpectedMsgSeqNum, 3)
+			sendReplayInbound(t, in, logon)
+			sendReplayInbound(t, in, inboundDrainMessage("D", tc.logonSeq+1))
+			close(in)
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			s.connectionContext = ctx
+
+			s.drainTransportInput()
+
+			require.Equal(t, tc.wantApps, app.apps)
+			require.Equal(t, tc.wantNext, s.store.NextTargetMsgSeqNum())
+			require.False(t, s.IsConnected())
+			_, open := <-out
+			require.False(t, open, "canceled Logon recovery must not emit a gap fill")
+		})
+	}
+}
 
 type inboundDrainApp struct {
 	starvationApp

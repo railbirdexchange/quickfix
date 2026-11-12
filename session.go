@@ -630,9 +630,13 @@ func (s *session) handleLogon(msg *Message) error {
 		if getErr == nil {
 			if targetWantsNextSeqNumToBe != nextSenderMsgNumAtLogonReceived {
 				if !s.DisableMessagePersist {
+					ctx := s.connectionContextOrBackground()
 					seqResetErr := s.generateSequenceReset(targetWantsNextSeqNumToBe, nextSenderMsgNumAtLogonReceived+1, *msg)
 					if seqResetErr != nil {
-						return seqResetErr
+						// Finish processing received input after transport cancellation.
+						if ctx.Err() == nil || !errors.Is(seqResetErr, ctx.Err()) {
+							return seqResetErr
+						}
 					}
 				} else {
 					return targetTooHigh{ReceivedTarget: targetWantsNextSeqNumToBe, ExpectedTarget: nextSenderMsgNumAtLogonReceived}
