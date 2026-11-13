@@ -16,6 +16,7 @@
 package quickfix
 
 import (
+	"context"
 	"time"
 
 	"github.com/pkg/errors"
@@ -98,14 +99,24 @@ func (store *memoryStore) SaveMessageAndIncrNextSenderMsgSeqNum(seqNum int, msg 
 }
 
 func (store *memoryStore) IterateMessages(beginSeqNum, endSeqNum int, cb func([]byte) error) error {
+	return store.IterateMessagesContext(context.Background(), beginSeqNum, endSeqNum, cb)
+}
+
+func (store *memoryStore) IterateMessagesContext(ctx context.Context, beginSeqNum, endSeqNum int, cb func([]byte) error) error {
 	for seqNum := beginSeqNum; seqNum <= endSeqNum; seqNum++ {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if m, ok := store.messageMap[seqNum]; ok {
 			if err := cb(m); err != nil {
 				return err
 			}
 		}
+		if seqNum == endSeqNum {
+			break
+		}
 	}
-	return nil
+	return ctx.Err()
 }
 
 func (store *memoryStore) GetMessages(beginSeqNum, endSeqNum int) ([][]byte, error) {

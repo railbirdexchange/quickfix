@@ -17,6 +17,7 @@ package quickfix
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -29,6 +30,8 @@ import (
 // The Session is the primary FIX abstraction for message communication.
 type session struct {
 	store MessageStore
+	// Current TCP lifetime; writes are guarded by sendMutex.
+	connectionContext context.Context
 
 	log       Log
 	sessionID SessionID
@@ -77,14 +80,18 @@ func (s *session) TargetDefaultApplicationVersionID() string {
 }
 
 type connect struct {
+	ctx        context.Context
 	messageOut chan<- []byte
 	messageIn  <-chan fixIn
 	err        chan<- error
 }
 
-func (s *session) connect(msgIn <-chan fixIn, msgOut chan<- []byte) error {
+// The transport owns msgIn and must close it when its reader exits, including
+// after cancellation. Retirement waits for that closure to drain admitted input.
+func (s *session) connectContext(ctx context.Context, msgIn <-chan fixIn, msgOut chan<- []byte) error {
 	rep := make(chan error)
 	s.admin <- connect{
+		ctx:        ctx,
 		messageOut: msgOut,
 		messageIn:  msgIn,
 		err:        rep,
@@ -232,7 +239,9 @@ func (s *session) generateSequenceReset(beginSeqNo int, endSeqNo int, inReplyTo 
 
 	msgBytes := sequenceReset.build()
 
-	s.EnqueueBytesAndSend(msgBytes)
+	if err := s.sendReplayBytes(s.connectionContextOrBackground(), msgBytes); err != nil {
+		return err
+	}
 	s.log.OnEventf("Sent SequenceReset TO: %v", endSeqNo)
 
 	return
@@ -451,15 +460,10 @@ func (s *session) dropQueued() {
 	s.toSend = s.toSend[:0]
 }
 
-func (s *session) EnqueueBytesAndSend(msg []byte) {
-	s.sendMutex.Lock()
-	defer s.sendMutex.Unlock()
-
-	s.toSend = append(s.toSend, msg)
-	s.sendQueued(true)
-}
-
 func (s *session) sendBytes(msg []byte, blockUntilSent bool) bool {
+	if s.connectionContext != nil && s.connectionContext.Err() != nil {
+		return false
+	}
 	if s.messageOut == nil {
 		s.log.OnEventf("Failed to send: disconnected")
 		return false
@@ -467,7 +471,11 @@ func (s *session) sendBytes(msg []byte, blockUntilSent bool) bool {
 
 	if blockUntilSent {
 		channelStartedAt := time.Now()
-		s.messageOut <- msg
+		select {
+		case s.messageOut <- msg:
+		case <-s.connectionContextOrBackground().Done():
+			return false
+		}
 		s.observeSendStage("outbound_channel_wait", fixMsgTypeFromRaw(msg), time.Since(channelStartedAt), true)
 		s.log.OnOutgoing(msg)
 		s.stateTimer.Reset(s.HeartBtInt)
@@ -622,9 +630,13 @@ func (s *session) handleLogon(msg *Message) error {
 		if getErr == nil {
 			if targetWantsNextSeqNumToBe != nextSenderMsgNumAtLogonReceived {
 				if !s.DisableMessagePersist {
+					ctx := s.connectionContextOrBackground()
 					seqResetErr := s.generateSequenceReset(targetWantsNextSeqNumToBe, nextSenderMsgNumAtLogonReceived+1, *msg)
 					if seqResetErr != nil {
-						return seqResetErr
+						// Finish processing received input after transport cancellation.
+						if ctx.Err() == nil || !errors.Is(seqResetErr, ctx.Err()) {
+							return seqResetErr
+						}
 					}
 				} else {
 					return targetTooHigh{ReceivedTarget: targetWantsNextSeqNumToBe, ExpectedTarget: nextSenderMsgNumAtLogonReceived}
@@ -811,8 +823,8 @@ func (s *session) checkBeginString(msg *Message) MessageRejectError {
 	return nil
 }
 
-func (s *session) drainMessageIn() {
-	s.log.OnEventf("Draining %d messages from inbound channel...", len(s.messageIn))
+func (s *session) discardMessageIn() {
+	s.log.OnEventf("Discarding %d messages after protocol disconnection...", len(s.messageIn))
 	for {
 		select {
 		case _, ok := <-s.messageIn:
@@ -887,13 +899,18 @@ func (s *session) onDisconnect() {
 		}
 	}
 
+	s.sendMutex.Lock()
 	if s.messageOut != nil {
 		close(s.messageOut)
 		s.messageOut = nil
 	}
 
-	// s.messageIn is buffered so we need to drain it before disconnection
-	s.drainMessageIn()
+	s.connectionContext = nil
+	s.sendMutex.Unlock()
+
+	// A protocol Logout or fatal error ends handling of any subsequent frames.
+	// Transport termination processes admitted input before reaching this point.
+	s.discardMessageIn()
 
 	s.messageIn = nil
 }
@@ -902,6 +919,10 @@ func (s *session) onAdmin(msg interface{}) {
 	switch msg := msg.(type) {
 
 	case connect:
+		// Retire a dead connection before accepting its replacement.
+		if s.connectionContext != nil && s.connectionContext.Err() != nil {
+			s.drainTransportInput()
+		}
 
 		if s.IsConnected() {
 			if msg.err != nil {
@@ -924,8 +945,11 @@ func (s *session) onAdmin(msg interface{}) {
 			close(msg.err)
 		}
 
+		s.sendMutex.Lock()
+		s.connectionContext = msg.ctx
 		s.messageIn = msg.messageIn
 		s.messageOut = msg.messageOut
+		s.sendMutex.Unlock()
 		s.sentReset = false
 
 		s.Connect(s)
@@ -977,7 +1001,13 @@ func (s *session) run() {
 	}()
 
 	for !s.Stopped() {
+		if s.connectionContext != nil && s.connectionContext.Err() != nil {
+			s.drainTransportInput()
+			continue
+		}
 		select {
+		case <-s.connectionContextOrBackground().Done():
+			s.drainTransportInput()
 
 		case msg := <-s.admin:
 			s.onAdmin(msg)
@@ -1000,4 +1030,44 @@ func (s *session) run() {
 			s.CheckResetTime(s, now)
 		}
 	}
+}
+
+func (s *session) connectionContextOrBackground() context.Context {
+	if s.connectionContext == nil {
+		return context.Background()
+	}
+	return s.connectionContext
+}
+
+// Replay bytes must not stay queued for a replacement connection.
+func (s *session) sendReplayBytes(ctx context.Context, msg []byte) error {
+	s.sendMutex.Lock()
+	defer s.sendMutex.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	s.sendQueued(true)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if !s.sendBytes(msg, true) {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		return errors.New("replay connection is disconnected")
+	}
+	return ctx.Err()
+}
+
+// Transport cancellation stops replay/output, not protocol handling of frames
+// already admitted by the reader. Wait for its closed channel so a final enqueue
+// cannot race retirement. Logout or a protocol error may end the session early;
+// later frames then retain the ordinary disconnected-session behavior.
+func (s *session) drainTransportInput() {
+	if s.messageIn != nil {
+		for msg := range s.messageIn {
+			s.Incoming(s, msg)
+		}
+	}
+	s.Disconnected(s)
 }

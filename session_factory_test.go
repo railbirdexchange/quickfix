@@ -503,8 +503,9 @@ func (s closeTrackingStore) Close() error {
 }
 
 type closeTrackingStoreFactory struct {
-	inner  MessageStoreFactory
-	closed *int
+	inner   MessageStoreFactory
+	closed  *int
+	created func()
 }
 
 func (f closeTrackingStoreFactory) Create(sessionID SessionID) (MessageStore, error) {
@@ -512,15 +513,14 @@ func (f closeTrackingStoreFactory) Create(sessionID SessionID) (MessageStore, er
 	if err != nil {
 		return nil, err
 	}
+	if f.created != nil {
+		f.created()
+	}
 	return closeTrackingStore{MessageStore: store, closed: f.closed}, nil
 }
 
-// TestDuplicateSessionClosesStore is the RAIL-3056 regression guard: newSession
-// opens the message store before registerSession runs, so a duplicate SessionID
-// rejection must close the just-opened store or its resources (goroutines,
-// process-wide registrations for durable stores) leak. Confirms createSession
-// closes exactly the store it opened for the rejected attempt, and leaves the
-// surviving session's store open.
+// Preserve the RAIL-3056 close-on-error guard when registration races store
+// construction, while avoiding store construction for an already known ID.
 func (s *SessionFactorySuite) TestDuplicateSessionClosesStore() {
 	s.sessionFactory.BuildInitiators = true
 	s.SessionSettings.Set(config.HeartBtInt, "34")
@@ -539,12 +539,17 @@ func (s *SessionFactorySuite) TestDuplicateSessionClosesStore() {
 	s.Nil(err)
 	s.Equal(0, closeCount, "successful createSession must not close its store")
 
-	// Second create builds a new store, then fails at registerSession with a
-	// duplicate SessionID. That just-opened store must be closed on the way out.
+	// An already registered identity is rejected before opening another store.
 	_, err = s.createSession(s.SessionID, factory, s.SessionSettings, s.LogFactory, s.App)
 	s.NotNil(err)
 	s.Equal("Duplicate SessionID", err.Error())
-	s.Equal(1, closeCount, "duplicate-SessionID createSession must close the store it opened (RAIL-3056)")
+	s.Equal(0, closeCount)
+
+	UnregisterSession(s.SessionID)
+	factory.created = func() { s.NoError(registerSession(&session{sessionID: s.SessionID})) }
+	_, err = s.createSession(s.SessionID, factory, s.SessionSettings, s.LogFactory, s.App)
+	s.ErrorIs(err, errDuplicateSessionID)
+	s.Equal(1, closeCount, "registration race must close the store it opened (RAIL-3056)")
 
 	UnregisterSession(s.SessionID)
 }
