@@ -32,6 +32,10 @@ type session struct {
 	store MessageStore
 	// Current TCP lifetime; writes are guarded by sendMutex.
 	connectionContext context.Context
+	// Guarded by lifetimeMu rather than sendMutex so the connection can be
+	// closed while a send or resend is blocked.
+	lifetimeMu    sync.Mutex
+	connTerminate context.CancelFunc
 
 	log       Log
 	sessionID SessionID

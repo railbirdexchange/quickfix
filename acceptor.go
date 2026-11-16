@@ -343,6 +343,7 @@ func (a *Acceptor) handleConnection(netConn net.Conn) {
 		sessID.Qualifier = strconv.Itoa(a.dynamicQualifierCount)
 	}
 	session, ok := a.sessions[sessID]
+	dynamic := !ok
 	if !ok {
 		if !a.dynamicSessions {
 			a.globalLog.OnEventf("Session %v not found for incoming message: %s", sessID, msgBytes)
@@ -369,6 +370,11 @@ func (a *Acceptor) handleConnection(netConn net.Conn) {
 
 	ctx, terminate := connectionLifetime(netConn)
 	defer terminate()
+	if dynamic {
+		session.lifetimeMu.Lock()
+		session.connTerminate = terminate
+		session.lifetimeMu.Unlock()
+	}
 	if err := session.connectContext(ctx, msgIn, msgOut); err != nil {
 		a.globalLog.OnEventf("Unable to accept session %v connection: %v", sessID, err.Error())
 		return
