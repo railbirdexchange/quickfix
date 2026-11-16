@@ -59,13 +59,27 @@ delivery of the replay: the peer recovers missing outbound sequences on reconnec
 Sequence gaps are not skipped to process later queued orders.
 
 Healthy replay, live-message ordering, Logout and ResetSession retain their
-existing synchronous behavior. No worker or operator API is introduced.
+existing synchronous behavior. No worker is introduced. Applications can close a
+connection with [`LookupSessionConnection`](#closing-a-dynamic-sessions-connection).
 
 Other writer errors retain existing handling; no retry, short-write repair or new
 socket deadline is added. A reader blocked delivering `msgIn` cannot detect EOF
 until it can read again, unless another transport failure cancels the lifetime.
 Existing mutex waits, application callbacks and opaque legacy store operations
 must finish before the session loop can continue. Channel admission does not confirm TCP delivery.
+
+## Closing a dynamic session's connection
+
+`LookupSessionConnection(sessionID)` returns a handle to a dynamic acceptor
+session's current connection; it returns `ok=false` for unknown, static and
+initiator sessions. The lookup never takes the session's send or resend locks,
+so it works while a resend is running.
+
+- `Terminate()` closes that connection's socket and cancels its lifetime, as a
+  transport failure would. No Logout is sent. The session then runs `OnLogout`
+  and retires. It is idempotent and never affects a later connection.
+- `Registered()` reports whether the handle's session instance still holds its
+  registry slot, i.e. has not retired yet.
 
 ## Installation
 
