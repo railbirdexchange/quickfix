@@ -32,6 +32,9 @@ type session struct {
 	store MessageStore
 	// Current TCP lifetime; writes are guarded by sendMutex.
 	connectionContext context.Context
+	// Guarded by lifetimeMu, not sendMutex, so Terminate works while a resend holds sendMutex.
+	lifetimeMu    sync.Mutex
+	connTerminate context.CancelFunc
 
 	log       Log
 	sessionID SessionID
